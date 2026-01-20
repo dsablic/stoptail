@@ -16,5 +16,17 @@ services:
       timeout: 5s
       retries: 10
 
+  init-data:
+    image: curlimages/curl:latest
+    container_name: stoptail-init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/init-sample-data.sh"]
+    environment:
+      - ES_URL=http://elasticsearch:9200
+
 volumes:
   esdata:
