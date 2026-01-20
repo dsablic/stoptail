@@ -175,6 +175,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overview.SetSize(msg.Width, msg.Height-4)
 		m.workbench.SetSize(msg.Width, msg.Height-4)
 		m.nodes.SetSize(msg.Width, msg.Height-4)
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if msg.Y == 1 {
+				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
+				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
+
+				if msg.X < overviewWidth {
+					m.activeTab = TabOverview
+					m.workbench.Blur()
+				} else if msg.X < overviewWidth+workbenchWidth {
+					m.activeTab = TabWorkbench
+					m.workbench.Focus()
+				} else {
+					m.activeTab = TabNodes
+					m.workbench.Blur()
+					return m, m.fetchNodes()
+				}
+				return m, nil
+			}
+		}
 	}
 
 	// Delegate to active tab

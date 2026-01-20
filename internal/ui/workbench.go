@@ -189,6 +189,31 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.response, cmd = m.response.Update(msg)
 			cmds = append(cmds, cmd)
 		}
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			paneWidth := (m.width - 3) / 2
+
+			if msg.Y < 2 {
+				if msg.X < 10 {
+					m.path.Blur()
+					m.body.Blur()
+					m.focus = FocusMethod
+				} else {
+					m.body.Blur()
+					m.path.Focus()
+					m.focus = FocusPath
+				}
+			} else if msg.X < paneWidth+1 {
+				m.path.Blur()
+				m.body.Focus()
+				m.focus = FocusBody
+			} else {
+				m.path.Blur()
+				m.body.Blur()
+				m.focus = FocusResponse
+			}
+			return m, nil
+		}
 	}
 
 	return m, tea.Batch(cmds...)

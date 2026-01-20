@@ -69,7 +69,7 @@ func renderHelp(width, height int) string {
 		}
 	}
 
-	content += "\n" + lipgloss.NewStyle().Foreground(ColorGray).Render("Press ? to close")
+	content += "\n" + lipgloss.NewStyle().Foreground(ColorGray).Render("Mouse supported - Press ? to close")
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

@@ -102,6 +102,21 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				}
 			}
 		}
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			nodeColWidth := 15
+			indexColWidth := 20
+			headerRows := 6
+
+			if msg.Y >= headerRows && msg.X > nodeColWidth+2 {
+				colOffset := (msg.X - nodeColWidth - 2) / indexColWidth
+				clickedIndex := m.scrollX + colOffset
+				indices := m.filteredIndices()
+				if clickedIndex >= 0 && clickedIndex < len(indices) {
+					m.selectedIndex = clickedIndex
+				}
+			}
+		}
 	}
 	return m, nil
 }
