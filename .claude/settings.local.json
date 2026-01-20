@@ -40,7 +40,12 @@
       "Bash(git -C /Users/denis/Documents/labtiva/stoptail diff)",
       "Bash(git -C /Users/denis/Documents/labtiva/stoptail log --oneline -5)",
       "Bash(git -C /Users/denis/Documents/labtiva/stoptail add internal/es/cluster.go internal/es/cluster_test.go)",
-      "Bash(git -C /Users/denis/Documents/labtiva/stoptail commit -m \"$\\(cat <<''EOF''\nAdd node stats and fielddata data layer for TUI\n\nImplement Phase 1 data layer with NodeStats, FielddataInfo, \nFielddataByIndex, and NodesState types. Add fetch methods for \nnode statistics via _cat/nodes API, fielddata by field via \n_cat/fielddata API, and fielddata by index via _nodes/stats API.\nResults are aggregated across nodes and sorted by size with top 20.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C /Users/denis/Documents/labtiva/stoptail commit -m \"$\\(cat <<''EOF''\nAdd node stats and fielddata data layer for TUI\n\nImplement Phase 1 data layer with NodeStats, FielddataInfo, \nFielddataByIndex, and NodesState types. Add fetch methods for \nnode statistics via _cat/nodes API, fielddata by field via \n_cat/fielddata API, and fielddata by index via _nodes/stats API.\nResults are aggregated across nodes and sorted by size with top 20.\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh repo create:*)",
+      "Bash(gh repo view:*)",
+      "Bash(./stoptail:*)",
+      "Bash(make build:*)",
+      "Bash(ls:*)"
     ]
   }
 }

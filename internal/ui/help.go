@@ -39,7 +39,7 @@ func renderHelp(width, height int) string {
 			keys: [][]string{
 				{"Tab", "Cycle focus"},
 				{"Ctrl+M", "Cycle HTTP method"},
-				{"Ctrl+Enter", "Execute request"},
+				{"Ctrl+E", "Execute request"},
 				{"Ctrl+L", "Clear body"},
 				{"Ctrl+P", "Pretty-print JSON"},
 			},

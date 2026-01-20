@@ -278,60 +278,92 @@ func (m OverviewModel) renderGrid() string {
 	}
 
 	for _, node := range visibleNodes[:maxRows] {
-		// Node name
-		nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
-		b.WriteString(nodeStyle.Render(truncate(node.Name, nodeColWidth-2)))
-		b.WriteString("│ ")
+		var shardLines [][]string
+		maxLines := 1
 
-		// Shards for each index
 		for i, idx := range indices {
 			if i >= m.scrollX && i < m.scrollX+((m.width-nodeColWidth)/indexColWidth) {
 				shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
-				shardStr := m.renderShardBoxes(shards, indexColWidth)
-				b.WriteString(shardStr)
+				lines := m.renderShardBoxes(shards, indexColWidth)
+				shardLines = append(shardLines, lines)
+				if len(lines) > maxLines {
+					maxLines = len(lines)
+				}
 			}
 		}
-		b.WriteString("\n")
+
+		nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
+		emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
+
+		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
+			if lineIdx == 0 {
+				b.WriteString(nodeStyle.Render(truncate(node.Name, nodeColWidth-2)))
+				b.WriteString("│ ")
+			} else {
+				b.WriteString(nodeStyle.Render(""))
+				b.WriteString("│ ")
+			}
+
+			for colIdx := range shardLines {
+				if lineIdx < len(shardLines[colIdx]) {
+					b.WriteString(shardLines[colIdx][lineIdx])
+				} else {
+					b.WriteString(emptyCol)
+				}
+			}
+			b.WriteString("\n")
+		}
 	}
 
 	return b.String()
 }
 
-func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) string {
+func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []string {
 	if len(shards) == 0 {
-		return lipgloss.NewStyle().Width(width).Render("")
+		return []string{lipgloss.NewStyle().Width(width).Render("")}
 	}
 
-	var boxes []string
+	shardsPerLine := width / 3
+	if shardsPerLine < 1 {
+		shardsPerLine = 1
+	}
+
+	var lines []string
+	var currentLine []string
+
 	for _, sh := range shards {
-		var style lipgloss.Style
+		var color lipgloss.Color
 		if sh.Primary {
-			style = lipgloss.NewStyle().
-				Background(ColorGreen).
-				Foreground(ColorWhite).
-				Padding(0, 0).
-				Width(3)
+			color = ColorGreen
 		} else {
-			style = lipgloss.NewStyle().
-				Background(ColorBlue).
-				Foreground(ColorWhite).
-				Padding(0, 0).
-				Width(3)
+			color = ColorBlue
 		}
 
-		// Color by state
 		switch sh.State {
 		case "RELOCATING":
-			style = style.Background(ColorYellow)
+			color = ColorYellow
 		case "UNASSIGNED":
-			style = style.Background(ColorRed)
+			color = ColorRed
 		}
 
-		boxes = append(boxes, style.Render(sh.Shard))
+		style := lipgloss.NewStyle().Foreground(color)
+		currentLine = append(currentLine, style.Render("["+sh.Shard+"]"))
+
+		if len(currentLine) >= shardsPerLine {
+			lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
+			currentLine = nil
+		}
 	}
 
-	result := strings.Join(boxes, " ")
-	return lipgloss.NewStyle().Width(width).Render(result)
+	if len(currentLine) > 0 {
+		lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
+	}
+
+	if len(lines) == 0 {
+		lines = []string{lipgloss.NewStyle().Width(width).Render("")}
+	}
+
+	return lines
 }
 
 func truncate(s string, max int) string {

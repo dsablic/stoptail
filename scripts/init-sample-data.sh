@@ -11,6 +11,24 @@ echo "Elasticsearch is ready"
 
 echo "Creating sample indices..."
 
+# High-shard index for stress testing (64 primary, 0 replicas - single node)
+curl -s -X PUT "$ES_URL/events" -H 'Content-Type: application/json' -d '{
+  "settings": { "number_of_shards": 64, "number_of_replicas": 0 }
+}'
+
+# Moderate-shard indices
+curl -s -X PUT "$ES_URL/transactions" -H 'Content-Type: application/json' -d '{
+  "settings": { "number_of_shards": 16, "number_of_replicas": 0 }
+}'
+
+curl -s -X PUT "$ES_URL/sessions" -H 'Content-Type: application/json' -d '{
+  "settings": { "number_of_shards": 8, "number_of_replicas": 0 }
+}'
+
+curl -s -X PUT "$ES_URL/audit-logs" -H 'Content-Type: application/json' -d '{
+  "settings": { "number_of_shards": 12, "number_of_replicas": 0 }
+}'
+
 # Products index - 2 primary, 1 replica
 curl -s -X PUT "$ES_URL/products" -H 'Content-Type: application/json' -d '{
   "settings": { "number_of_shards": 2, "number_of_replicas": 1 },

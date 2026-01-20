@@ -141,7 +141,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "ctrl+m":
 			m.methodIdx = (m.methodIdx + 1) % len(methods)
 			return m, nil
-		case "ctrl+enter":
+		case "ctrl+enter", "ctrl+e":
 			if m.client != nil && !m.executing {
 				m.executing = true
 				return m, m.execute()
@@ -291,7 +291,7 @@ func (m WorkbenchModel) View() string {
 	statusBar := lipgloss.JoinHorizontal(lipgloss.Center,
 		validIndicator,
 		strings.Repeat(" ", m.width-50),
-		HelpStyle.Render("Ctrl+Enter: Execute  Ctrl+M: Method  Ctrl+P: Pretty"))
+		HelpStyle.Render("Ctrl+E: Execute  Ctrl+M: Method  Ctrl+P: Pretty"))
 
 	return lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes, statusBar)
 }
