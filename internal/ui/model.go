@@ -20,6 +20,7 @@ type Model struct {
 	cfg       *config.Config
 	cluster   *es.ClusterState
 	overview  OverviewModel
+	workbench WorkbenchModel
 	activeTab int
 	width     int
 	height    int
@@ -32,10 +33,14 @@ type connectedMsg struct{ state *es.ClusterState }
 type errMsg struct{ err error }
 
 func New(client *es.Client, cfg *config.Config) Model {
+	wb := NewWorkbench()
+	wb.SetClient(client)
+
 	return Model{
 		client:    client,
 		cfg:       cfg,
 		overview:  NewOverview(),
+		workbench: wb,
 		activeTab: TabOverview,
 	}
 }
@@ -70,34 +75,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		m.connected = false
+	case executeResultMsg:
+		m.workbench, cmd = m.workbench.Update(msg)
+		return m, cmd
 	case tea.KeyMsg:
+		// Global keys
 		switch msg.String() {
-		case "ctrl+c", "q":
-			if m.activeTab == TabOverview && m.overview.filterActive {
-				// Let overview handle it
-			} else {
+		case "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+		case "q":
+			// Only quit if not in a focused input
+			if m.activeTab == TabOverview && !m.overview.filterActive {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
 				m.quitting = true
 				return m, tea.Quit
 			}
 		case "tab":
+			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
-				m.activeTab = (m.activeTab + 1) % 2
+				m.activeTab = TabWorkbench
+				m.workbench.Focus()
+				return m, nil
+			}
+			if m.activeTab == TabWorkbench {
+				// Tab cycles through workbench components, not views
+			}
+		case "shift+tab":
+			// Switch back to overview
+			if m.activeTab == TabWorkbench {
+				m.activeTab = TabOverview
+				m.workbench.Blur()
 				return m, nil
 			}
 		case "r":
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				return m, m.connect()
 			}
+		case "enter":
+			// From overview, enter on index switches to workbench
+			if m.activeTab == TabOverview && !m.overview.filterActive {
+				if idx := m.overview.SelectedIndex(); idx != "" {
+					m.workbench.Prefill(idx)
+					m.activeTab = TabWorkbench
+					m.workbench.Focus()
+					return m, nil
+				}
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.overview.SetSize(msg.Width, msg.Height-4)
+		m.workbench.SetSize(msg.Width, msg.Height-4)
 	}
 
 	// Delegate to active tab
-	if m.activeTab == TabOverview && m.connected {
-		m.overview, cmd = m.overview.Update(msg)
+	if m.connected {
+		if m.activeTab == TabOverview {
+			m.overview, cmd = m.overview.Update(msg)
+		} else {
+			m.workbench, cmd = m.workbench.Update(msg)
+		}
 	}
 
 	return m, cmd
@@ -152,17 +194,15 @@ func (m Model) View() string {
 	} else if m.activeTab == TabOverview {
 		content = m.overview.View()
 	} else {
-		content = lipgloss.NewStyle().
-			Width(m.width).
-			Height(contentHeight).
-			Align(lipgloss.Center, lipgloss.Center).
-			Render("Workbench (coming soon)")
+		content = m.workbench.View()
 	}
 
 	// Status bar
 	statusText := "q: quit  Tab: switch view  r: refresh"
 	if m.activeTab == TabOverview {
-		statusText = "q: quit  Tab: switch  r: refresh  /: filter  ←→↑↓: scroll"
+		statusText = "q: quit  Tab: workbench  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
+	} else {
+		statusText = "Shift+Tab: overview  Tab: cycle focus  Ctrl+Enter: execute"
 	}
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
