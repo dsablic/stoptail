@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -226,7 +227,35 @@ func (m OverviewModel) View() string {
 			b.WriteString(" ")
 		}
 	}
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+
+	// Scroll indicators
+	indices := m.filteredIndices()
+	if len(indices) > 0 {
+		visibleCols := m.visibleColumns()
+		leftCount := m.scrollX
+		rightCount := len(indices) - m.scrollX - visibleCols
+		if rightCount < 0 {
+			rightCount = 0
+		}
+
+		indicatorStyle := lipgloss.NewStyle().Foreground(ColorGray)
+		if leftCount > 0 || rightCount > 0 {
+			var indicator string
+			if leftCount > 0 {
+				indicator += indicatorStyle.Render(fmt.Sprintf("<< %d more  ", leftCount))
+			}
+			if rightCount > 0 {
+				if leftCount > 0 {
+					indicator += indicatorStyle.Render(fmt.Sprintf(" | %d more >>", rightCount))
+				} else {
+					indicator += indicatorStyle.Render(fmt.Sprintf("%d more >>", rightCount))
+				}
+			}
+			b.WriteString(indicator)
+		}
+	}
+	b.WriteString("\n")
 
 	// Shard grid
 	b.WriteString(m.renderGrid())
