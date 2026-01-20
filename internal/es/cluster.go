@@ -138,6 +138,11 @@ func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
 	}
 	defer res.Body.Close()
 
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading indices response: %w", err)
@@ -161,6 +166,11 @@ func (c *Client) fetchNodes(ctx context.Context) ([]NodeInfo, error) {
 		return nil, fmt.Errorf("fetching nodes: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -186,6 +196,11 @@ func (c *Client) fetchShards(ctx context.Context) ([]ShardInfo, error) {
 	}
 	defer res.Body.Close()
 
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading shards response: %w", err)
@@ -209,6 +224,11 @@ func (c *Client) fetchAliases(ctx context.Context) ([]AliasInfo, error) {
 		return nil, fmt.Errorf("fetching aliases: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -272,6 +292,11 @@ func (c *Client) FetchNodeStats(ctx context.Context) ([]NodeStats, error) {
 	}
 	defer res.Body.Close()
 
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading node stats response: %w", err)
@@ -295,6 +320,11 @@ func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, er
 		return nil, fmt.Errorf("fetching fielddata: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -320,6 +350,11 @@ func (c *Client) FetchFielddataByIndex(ctx context.Context) ([]FielddataByIndex,
 		return nil, fmt.Errorf("fetching fielddata by index: %w", err)
 	}
 	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {

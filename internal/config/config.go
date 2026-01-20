@@ -39,19 +39,11 @@ func ParseURL(rawURL string) (*Config, error) {
 	return cfg, nil
 }
 
-func Load(flagURL string) (*Config, error) {
-	rawURL := flagURL
-	if rawURL == "" {
-		rawURL = os.Getenv("ES_URL")
-	}
-	if rawURL == "" {
-		rawURL = "http://localhost:9200"
-	}
-	return ParseURL(rawURL)
-}
-
 func (c *Config) MaskedURL() string {
-	u, _ := url.Parse(c.Host)
+	u, err := url.Parse(c.Host)
+	if err != nil || u == nil {
+		return c.Host
+	}
 	if c.Username != "" {
 		return fmt.Sprintf("%s:***@%s", c.Username, u.Host)
 	}
@@ -59,7 +51,10 @@ func (c *Config) MaskedURL() string {
 }
 
 func (c *Config) DisplayHost() string {
-	u, _ := url.Parse(c.Host)
+	u, err := url.Parse(c.Host)
+	if err != nil || u == nil {
+		return c.Host
+	}
 	return strings.TrimPrefix(u.Host, "www.")
 }
 

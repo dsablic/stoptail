@@ -15,8 +15,9 @@ import (
 )
 
 type Client struct {
-	es  *elasticsearch.Client
-	cfg *config.Config
+	es         *elasticsearch.Client
+	cfg        *config.Config
+	httpClient *http.Client
 }
 
 func NewClient(cfg *config.Config) (*Client, error) {
@@ -34,7 +35,11 @@ func NewClient(cfg *config.Config) (*Client, error) {
 		return nil, fmt.Errorf("creating ES client: %w", err)
 	}
 
-	return &Client{es: es, cfg: cfg}, nil
+	return &Client{
+		es:         es,
+		cfg:        cfg,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+	}, nil
 }
 
 func (c *Client) Ping(ctx context.Context) error {
@@ -78,8 +83,7 @@ func (c *Client) Request(ctx context.Context, method, path, body string) Request
 		req.SetBasicAuth(c.cfg.Username, c.cfg.Password)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return RequestResult{Error: err, Duration: time.Since(start)}
 	}

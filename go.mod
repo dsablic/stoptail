@@ -1,6 +1,6 @@
 module github.com/labtiva/stoptail
 
-go 1.25.5
+go 1.24.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.23.0
@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/elastic/go-elasticsearch/v8 v8.19.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -36,5 +37,4 @@ require (
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -65,18 +65,32 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		case "esc":
 			m.filter.SetValue("")
 			m.aliasFilters = make(map[string]bool)
+			m.selectedIndex = 0
 		case "up", "k":
 			if m.scrollY > 0 {
 				m.scrollY--
 			}
 		case "down", "j":
-			m.scrollY++
+			maxScrollY := m.maxScrollY()
+			if m.scrollY < maxScrollY {
+				m.scrollY++
+			}
 		case "left", "h":
-			if m.scrollX > 0 {
-				m.scrollX--
+			if m.selectedIndex > 0 {
+				m.selectedIndex--
+				if m.selectedIndex < m.scrollX {
+					m.scrollX = m.selectedIndex
+				}
 			}
 		case "right", "l":
-			m.scrollX++
+			indices := m.filteredIndices()
+			if m.selectedIndex < len(indices)-1 {
+				m.selectedIndex++
+				visibleCols := m.visibleColumns()
+				if m.selectedIndex >= m.scrollX+visibleCols {
+					m.scrollX = m.selectedIndex - visibleCols + 1
+				}
+			}
 		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			if m.cluster != nil {
 				aliases := m.cluster.UniqueAliases()
@@ -153,6 +167,28 @@ func (m OverviewModel) SelectedIndex() string {
 		return indices[m.selectedIndex].Name
 	}
 	return ""
+}
+
+func (m OverviewModel) visibleColumns() int {
+	nodeColWidth := 15
+	indexColWidth := 20
+	cols := (m.width - nodeColWidth) / indexColWidth
+	if cols < 1 {
+		cols = 1
+	}
+	return cols
+}
+
+func (m OverviewModel) maxScrollY() int {
+	if m.cluster == nil {
+		return 0
+	}
+	maxRows := (m.height - 8) / 2
+	maxScroll := len(m.cluster.Nodes) - maxRows
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
 }
 
 func (m OverviewModel) View() string {
@@ -367,11 +403,12 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 }
 
 func truncate(s string, max int) string {
-	if len(s) <= max {
+	r := []rune(s)
+	if len(r) <= max {
 		return s
 	}
 	if max <= 3 {
-		return s[:max]
+		return string(r[:max])
 	}
-	return s[:max-3] + "..."
+	return string(r[:max-3]) + "..."
 }

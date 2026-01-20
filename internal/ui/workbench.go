@@ -288,9 +288,13 @@ func (m WorkbenchModel) View() string {
 	if !m.isValidJSON() {
 		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render("✗ Invalid JSON")
 	}
+	padding := m.width - 50
+	if padding < 0 {
+		padding = 0
+	}
 	statusBar := lipgloss.JoinHorizontal(lipgloss.Center,
 		validIndicator,
-		strings.Repeat(" ", m.width-50),
+		strings.Repeat(" ", padding),
 		HelpStyle.Render("Ctrl+E: Execute  Ctrl+M: Method  Ctrl+P: Pretty"))
 
 	return lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes, statusBar)

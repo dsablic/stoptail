@@ -363,17 +363,19 @@ func (m NodesModel) heapPercentStyle(heapPct string) lipgloss.Style {
 }
 
 func (m NodesModel) leftAlign(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	r := []rune(s)
+	if len(r) >= width {
+		return string(r[:width])
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-len(r))
 }
 
 func (m NodesModel) rightAlign(s string, width int) string {
-	if len(s) >= width {
-		return s[:width]
+	r := []rune(s)
+	if len(r) >= width {
+		return string(r[:width])
 	}
-	return strings.Repeat(" ", width-len(s)) + s
+	return strings.Repeat(" ", width-len(r)) + s
 }
 
 func formatBytes(bytes int64) string {

@@ -32,7 +32,11 @@ func main() {
 	if *versionFlag {
 		fmt.Printf("stoptail %s", version)
 		if commit != "none" {
-			fmt.Printf(" (%s)", commit[:7])
+			if len(commit) >= 7 {
+				fmt.Printf(" (%s)", commit[:7])
+			} else {
+				fmt.Printf(" (%s)", commit)
+			}
 		}
 		if date != "unknown" {
 			fmt.Printf(" built %s", date)
