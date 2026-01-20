@@ -24,10 +24,13 @@ var (
 
 func main() {
 	versionFlag := flag.Bool("version", false, "Print version and exit")
+	themeFlag := flag.String("theme", "auto", "Color theme: auto, dark, light")
 	renderFlag := flag.String("render", "", "Render a tab and exit (overview, nodes)")
 	widthFlag := flag.Int("width", 120, "Terminal width for --render")
 	heightFlag := flag.Int("height", 40, "Terminal height for --render")
 	flag.Parse()
+
+	ui.SetTheme(*themeFlag)
 
 	if *versionFlag {
 		fmt.Printf("stoptail %s", version)

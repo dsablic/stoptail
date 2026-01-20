@@ -2,8 +2,6 @@ package ui
 
 import "github.com/charmbracelet/lipgloss"
 
-var isDark = lipgloss.HasDarkBackground()
-
 var (
 	// Colors - adapt based on terminal background
 	ColorGreen  lipgloss.Color
@@ -27,6 +25,19 @@ var (
 )
 
 func init() {
+	SetTheme("auto")
+}
+
+func SetTheme(theme string) {
+	isDark := lipgloss.HasDarkBackground()
+
+	switch theme {
+	case "dark":
+		isDark = true
+	case "light":
+		isDark = false
+	}
+
 	if isDark {
 		ColorGreen = lipgloss.Color("#22c55e")
 		ColorYellow = lipgloss.Color("#eab308")
