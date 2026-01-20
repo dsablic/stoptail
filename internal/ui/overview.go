@@ -186,7 +186,7 @@ func (m OverviewModel) View() string {
 			} else {
 				style = style.Foreground(ColorGray)
 			}
-			b.WriteString(style.Render(string('1'+i) + ":" + alias))
+			b.WriteString(style.Render(string(rune('1'+i)) + ":" + alias))
 			b.WriteString(" ")
 		}
 	}
