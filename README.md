@@ -13,26 +13,26 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Support for GET, POST, PUT, DELETE, HEAD methods
   - JSON syntax highlighting in responses
   - Real-time JSON validation
+- **Nodes Tab**: Node statistics with 4 switchable views
+  - Memory: heap%, GC stats, fielddata, query cache, segments
+  - Disk: disk usage, shard counts, versions
+  - Fielddata by Index: top 20 indices by fielddata memory
+  - Fielddata by Field: field-level fielddata breakdown
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
+- **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail.yaml`
 - **Help Overlay**: Press `?` for keybindings
 
 ## Installation
 
-### Homebrew (macOS/Linux)
+### From Releases
 
-```bash
-brew install labtiva/tap/stoptail
-```
+Download the latest binary from [GitHub Releases](https://github.com/dsablic/stoptail/releases).
 
 ### Go Install
 
 ```bash
-go install github.com/labtiva/stoptail@latest
+go install github.com/dsablic/stoptail@latest
 ```
-
-### From Releases
-
-Download the latest binary from [GitHub Releases](https://github.com/labtiva/stoptail/releases).
 
 ## Usage
 
@@ -41,31 +41,57 @@ Download the latest binary from [GitHub Releases](https://github.com/labtiva/sto
 stoptail
 
 # Connect with URL
-stoptail --url https://user:pass@localhost:9200
+stoptail https://user:pass@localhost:9200
+
+# Connect to a named cluster from ~/.stoptail.yaml
+stoptail production
 
 # Or use environment variable
 export ES_URL=https://user:pass@localhost:9200
 stoptail
+
+# Show version
+stoptail --version
 ```
 
 ### Configuration Priority
 
-1. `--url` flag (highest priority)
-2. `ES_URL` environment variable
-3. Default: `http://localhost:9200`
+1. URL argument (highest priority)
+2. Named cluster from `~/.stoptail.yaml`
+3. `ES_URL` environment variable
+4. Default: `http://localhost:9200`
 
-### URL Format
+### Multi-cluster Configuration
 
-Include credentials in the URL:
+Create `~/.stoptail.yaml` to configure multiple clusters:
+
+```yaml
+clusters:
+  production:
+    url: https://user:pass@es-prod.example.com:9200
+  staging:
+    url: https://user:pass@es-staging.example.com:9200
+  local:
+    url: http://localhost:9200
+  # Dynamic URL from command (useful for secrets managers)
+  vault-cluster:
+    url_command: "vault read -field=url secret/elasticsearch"
 ```
-https://username:password@hostname:9200
+
+Then connect by name:
+```bash
+stoptail production
 ```
+
+If no argument is provided and multiple clusters are configured, you'll be prompted to select one.
 
 ## Keybindings
 
+### Global
+
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch between Overview and Workbench |
+| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Nodes) |
 | `r` | Refresh data |
 | `?` | Toggle help overlay |
 | `q` / `Ctrl+C` | Quit |
@@ -75,27 +101,41 @@ https://username:password@hostname:9200
 | Key | Action |
 |-----|--------|
 | `/` | Focus filter input |
-| `1-9` | Toggle alias filter buttons |
 | `Esc` | Clear filter / unfocus |
+| `Left/Right` | Select index (column) |
+| `Up/Down` | Scroll nodes (rows) |
+| `1-9` | Toggle alias filter buttons |
+| `Enter` | Open selected index in Workbench |
 
 ### Workbench Tab
 
 | Key | Action |
 |-----|--------|
-| `m` | Cycle request method |
-| `p` | Focus path input |
-| `Enter` | Execute request |
-| `Esc` | Unfocus inputs |
+| `Tab` | Cycle focus (method, path, body, response) |
+| `Ctrl+M` | Cycle request method |
+| `Ctrl+E` | Execute request |
+| `Ctrl+L` | Clear body |
+| `Ctrl+P` | Pretty-print JSON body |
+
+### Nodes Tab
+
+| Key | Action |
+|-----|--------|
+| `1` | Memory view |
+| `2` | Disk view |
+| `3` | Fielddata by Index view |
+| `4` | Fielddata by Field view |
+| `Up/Down` | Scroll |
 
 ## Requirements
 
-- Elasticsearch 8.x or 9.x
+- Elasticsearch 7.x, 8.x, or 9.x
 
 ## Development
 
 ```bash
 # Clone
-git clone https://github.com/labtiva/stoptail.git
+git clone https://github.com/dsablic/stoptail.git
 cd stoptail
 
 # Start local Elasticsearch with sample data
@@ -106,20 +146,27 @@ go run .
 
 # Test
 go test ./...
+
+# Build with version info
+go build -ldflags "-X main.version=dev -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%d)" .
 ```
 
 ### Sample Data
 
-The docker-compose setup automatically seeds Elasticsearch with sample data:
+The docker-compose setup automatically seeds Elasticsearch with sample indices:
 
-| Index | Documents | Description |
-|-------|-----------|-------------|
-| products | 12 | Electronics inventory |
-| orders | 10 | Customer orders |
-| users | 8 | Customer accounts |
-| logs-2026.* | 35 | Application logs |
-| metrics-cpu | 10 | CPU metrics |
-| metrics-memory | 10 | Memory metrics |
+| Index | Shards | Description |
+|-------|--------|-------------|
+| products | 2 | Electronics inventory |
+| orders | 2 | Customer orders |
+| users | 2 | Customer accounts |
+| logs-2026.* | 2 | Application logs (3 indices) |
+| metrics-cpu | 2 | CPU metrics |
+| metrics-memory | 2 | Memory metrics |
+| high-shard-index | 64 | Test index with many shards |
+| medium-shard-index | 16 | Test index with moderate shards |
+| analytics-events | 12 | Analytics events |
+| search-content | 8 | Search content |
 
 **Aliases:** `ecommerce`, `logs`, `logs-current`, `metrics`
 
