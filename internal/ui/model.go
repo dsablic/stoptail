@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/config"
 	"github.com/labtiva/stoptail/internal/es"
@@ -19,6 +19,7 @@ type Model struct {
 	client    *es.Client
 	cfg       *config.Config
 	cluster   *es.ClusterState
+	overview  OverviewModel
 	activeTab int
 	width     int
 	height    int
@@ -34,6 +35,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 	return Model{
 		client:    client,
 		cfg:       cfg,
+		overview:  NewOverview(),
 		activeTab: TabOverview,
 	}
 }
@@ -57,10 +59,13 @@ func (m Model) connect() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case connectedMsg:
 		m.connected = true
 		m.cluster = msg.state
+		m.overview.SetCluster(msg.state)
 		m.err = nil
 	case errMsg:
 		m.err = msg.err
@@ -68,18 +73,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			m.quitting = true
-			return m, tea.Quit
+			if m.activeTab == TabOverview && m.overview.filterActive {
+				// Let overview handle it
+			} else {
+				m.quitting = true
+				return m, tea.Quit
+			}
 		case "tab":
-			m.activeTab = (m.activeTab + 1) % 2
+			if m.activeTab == TabOverview && !m.overview.filterActive {
+				m.activeTab = (m.activeTab + 1) % 2
+				return m, nil
+			}
 		case "r":
-			return m, m.connect()
+			if m.activeTab == TabOverview && !m.overview.filterActive {
+				return m, m.connect()
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.overview.SetSize(msg.Width, msg.Height-4)
 	}
-	return m, nil
+
+	// Delegate to active tab
+	if m.activeTab == TabOverview && m.connected {
+		m.overview, cmd = m.overview.Update(msg)
+	}
+
+	return m, cmd
 }
 
 func (m Model) View() string {
@@ -128,22 +149,22 @@ func (m Model) View() string {
 			Height(contentHeight).
 			Align(lipgloss.Center, lipgloss.Center).
 			Render("Connecting...")
+	} else if m.activeTab == TabOverview {
+		content = m.overview.View()
 	} else {
-		info := fmt.Sprintf("Connected!\n\nIndices: %d\nNodes: %d\nShards: %d\nAliases: %d",
-			len(m.cluster.Indices),
-			len(m.cluster.Nodes),
-			len(m.cluster.Shards),
-			len(m.cluster.Aliases))
 		content = lipgloss.NewStyle().
 			Width(m.width).
 			Height(contentHeight).
 			Align(lipgloss.Center, lipgloss.Center).
-			Render(info)
+			Render("Workbench (coming soon)")
 	}
 
 	// Status bar
-	status = "q: quit  Tab: switch view  r: refresh"
-	statusBar := StatusBarStyle.Width(m.width).Render(status)
+	statusText := "q: quit  Tab: switch view  r: refresh"
+	if m.activeTab == TabOverview {
+		statusText = "q: quit  Tab: switch  r: refresh  /: filter  ←→↑↓: scroll"
+	}
+	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, tabs, content, statusBar)
 }
