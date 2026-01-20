@@ -44,6 +44,14 @@ func renderHelp(width, height int) string {
 				{"Ctrl+P", "Pretty-print JSON"},
 			},
 		},
+		{
+			header: "Nodes",
+			keys: [][]string{
+				{"1/2/3/4", "Switch view (Mem/Disk/Idx/Field)"},
+				{"up/down", "Scroll"},
+				{"r", "Refresh"},
+			},
+		},
 	}
 
 	keyStyle := lipgloss.NewStyle().Foreground(ColorBlue).Width(20)
