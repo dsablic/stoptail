@@ -21,16 +21,24 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_
       {{- if eq .Arch "amd64" }}x86_64
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
-    format_overrides:
-      - goos: windows
-        format: zip
+  - formats:
+      - zip
+    builds_filter:
+      goos: windows
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
 
 checksum:
   name_template: 'checksums.txt'
@@ -46,22 +54,11 @@ changelog:
       - '^test:'
       - '^chore:'
 
-brews:
-  - name: stoptail
-    repository:
-      owner: labtiva
-      name: homebrew-tap
-    directory: Formula
-    homepage: "https://github.com/labtiva/stoptail"
-    description: "Elasticsearch TUI - like elasticsearch-head but for your terminal"
-    license: "MIT"
-    skip_upload: auto
-
 nfpms:
   - package_name: stoptail
-    homepage: "https://github.com/labtiva/stoptail"
+    homepage: "https://github.com/dsablic/stoptail"
     description: "Elasticsearch TUI - like elasticsearch-head but for your terminal"
-    maintainer: "Labtiva"
+    maintainer: "Denis Sablic"
     license: MIT
     formats:
       - deb
