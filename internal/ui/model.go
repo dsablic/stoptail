@@ -27,6 +27,7 @@ type Model struct {
 	connected bool
 	err       error
 	quitting  bool
+	showHelp  bool
 }
 
 type connectedMsg struct{ state *es.ClusterState }
@@ -81,6 +82,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		// Global keys
 		switch msg.String() {
+		case "?":
+			m.showHelp = !m.showHelp
+			return m, nil
 		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
@@ -148,6 +152,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	if m.quitting {
 		return ""
+	}
+
+	if m.showHelp {
+		return renderHelp(m.width, m.height)
 	}
 
 	// Header
