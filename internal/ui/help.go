@@ -42,6 +42,7 @@ func renderHelp(width, height int) string {
 				{"Ctrl+E", "Execute request"},
 				{"Ctrl+L", "Clear body"},
 				{"Ctrl+P", "Pretty-print JSON"},
+				{"Ctrl+Up/Down", "Browse history"},
 			},
 		},
 		{

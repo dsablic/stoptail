@@ -73,13 +73,21 @@ func LoadClustersConfig() (*ClustersConfig, error) {
 		return nil, err
 	}
 
-	path := filepath.Join(home, ".stoptail.yaml")
+	path := filepath.Join(home, ".stoptail", "config.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			path = filepath.Join(home, ".stoptail.yaml")
+			data, err = os.ReadFile(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil, nil
+				}
+				return nil, err
+			}
+		} else {
+			return nil, err
 		}
-		return nil, err
 	}
 
 	var cfg ClustersConfig

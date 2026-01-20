@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/es"
+	"github.com/labtiva/stoptail/internal/storage"
 )
 
 type WorkbenchFocus int
@@ -41,6 +42,8 @@ type WorkbenchModel struct {
 	height       int
 	executing    bool
 	err          error
+	history      *storage.History
+	historyIdx   int
 }
 
 type executeResultMsg struct {
@@ -64,12 +67,16 @@ func NewWorkbench() WorkbenchModel {
 
 	vp := viewport.New(40, 10)
 
+	history, _ := storage.LoadHistory()
+
 	return WorkbenchModel{
-		methodIdx: 0,
-		path:      path,
-		body:      body,
-		response:  vp,
-		focus:     FocusPath,
+		methodIdx:  0,
+		path:       path,
+		body:       body,
+		response:   vp,
+		focus:      FocusPath,
+		history:    history,
+		historyIdx: -1,
 	}
 }
 
@@ -131,6 +138,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.statusCode = msg.result.StatusCode
 			m.duration = msg.result.Duration.String()
 			m.responseText = highlightJSON(msg.result.Body)
+			if msg.result.StatusCode < 400 {
+				m.addToHistory()
+			}
 		}
 		m.response.SetContent(m.responseText)
 		m.response.GotoTop()
@@ -151,6 +161,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			return m, nil
 		case "ctrl+p":
 			m.prettyPrintBody()
+			return m, nil
+		case "ctrl+up":
+			m.historyPrev()
+			return m, nil
+		case "ctrl+down":
+			m.historyNext()
 			return m, nil
 		case "tab":
 			m.cycleFocus()
@@ -204,6 +220,62 @@ func (m *WorkbenchModel) prettyPrintBody() {
 	if err := json.Indent(&pretty, []byte(val), "", "  "); err == nil {
 		m.body.SetValue(pretty.String())
 	}
+}
+
+func (m *WorkbenchModel) addToHistory() {
+	entry := storage.HistoryEntry{
+		Method: methods[m.methodIdx],
+		Path:   m.path.Value(),
+		Body:   m.body.Value(),
+	}
+
+	if m.history.Add(entry) {
+		_ = storage.SaveHistory(m.history)
+	}
+	m.historyIdx = -1
+}
+
+func (m *WorkbenchModel) historyPrev() {
+	if m.history == nil || len(m.history.Entries) == 0 {
+		return
+	}
+
+	if m.historyIdx == -1 {
+		m.historyIdx = len(m.history.Entries) - 1
+	} else if m.historyIdx > 0 {
+		m.historyIdx--
+	}
+
+	m.loadHistoryEntry()
+}
+
+func (m *WorkbenchModel) historyNext() {
+	if m.history == nil || len(m.history.Entries) == 0 || m.historyIdx == -1 {
+		return
+	}
+
+	if m.historyIdx < len(m.history.Entries)-1 {
+		m.historyIdx++
+		m.loadHistoryEntry()
+	} else {
+		m.historyIdx = -1
+	}
+}
+
+func (m *WorkbenchModel) loadHistoryEntry() {
+	if m.history == nil || m.historyIdx < 0 || m.historyIdx >= len(m.history.Entries) {
+		return
+	}
+
+	entry := m.history.Entries[m.historyIdx]
+	for i, method := range methods {
+		if method == entry.Method {
+			m.methodIdx = i
+			break
+		}
+	}
+	m.path.SetValue(entry.Path)
+	m.body.SetValue(entry.Body)
 }
 
 func (m WorkbenchModel) execute() tea.Cmd {
