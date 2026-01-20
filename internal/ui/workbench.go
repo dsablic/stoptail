@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -44,6 +45,7 @@ type WorkbenchModel struct {
 	err          error
 	history      *storage.History
 	historyIdx   int
+	spinner      spinner.Model
 }
 
 type executeResultMsg struct {
@@ -69,6 +71,10 @@ func NewWorkbench() WorkbenchModel {
 
 	history, _ := storage.LoadHistory()
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
+
 	return WorkbenchModel{
 		methodIdx:  0,
 		path:       path,
@@ -77,6 +83,7 @@ func NewWorkbench() WorkbenchModel {
 		focus:      FocusPath,
 		history:    history,
 		historyIdx: -1,
+		spinner:    s,
 	}
 }
 
@@ -128,6 +135,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.executing {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
 	case executeResultMsg:
 		m.executing = false
 		if msg.result.Error != nil {
@@ -154,7 +166,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "ctrl+enter", "ctrl+e":
 			if m.client != nil && !m.executing {
 				m.executing = true
-				return m, m.execute()
+				return m, tea.Batch(m.spinner.Tick, m.execute())
 			}
 		case "ctrl+l":
 			m.body.SetValue("")
@@ -366,7 +378,7 @@ func (m WorkbenchModel) View() string {
 			lipgloss.NewStyle().Foreground(ColorGray).Render(m.duration))
 	}
 	if m.executing {
-		responseHeader = "Executing..."
+		responseHeader = m.spinner.View() + " Executing..."
 	}
 
 	responsePane := lipgloss.NewStyle().

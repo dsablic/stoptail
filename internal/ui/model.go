@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/config"
@@ -23,10 +24,12 @@ type Model struct {
 	overview  OverviewModel
 	workbench WorkbenchModel
 	nodes     NodesModel
+	spinner   spinner.Model
 	activeTab int
 	width     int
 	height    int
 	connected bool
+	loading   bool
 	err       error
 	quitting  bool
 	showHelp  bool
@@ -40,18 +43,24 @@ func New(client *es.Client, cfg *config.Config) Model {
 	wb := NewWorkbench()
 	wb.SetClient(client)
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
+
 	return Model{
 		client:    client,
 		cfg:       cfg,
 		overview:  NewOverview(),
 		workbench: wb,
 		nodes:     NewNodes(),
+		spinner:   s,
 		activeTab: TabOverview,
+		loading:   true,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.connect()
+	return tea.Batch(m.spinner.Tick, m.connect())
 }
 
 func (m Model) connect() tea.Cmd {
@@ -83,15 +92,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	case connectedMsg:
 		m.connected = true
+		m.loading = false
 		m.cluster = msg.state
 		m.overview.SetCluster(msg.state)
 		m.err = nil
 	case nodesStateMsg:
+		m.loading = false
 		m.nodes.SetState(msg.state)
 	case errMsg:
 		m.err = msg.err
+		m.loading = false
 		m.connected = false
 	case executeResultMsg:
 		m.workbench, cmd = m.workbench.Update(msg)
@@ -129,7 +144,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
 				m.activeTab = TabNodes
 				m.workbench.Blur()
-				return m, m.fetchNodes()
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
 				m.activeTab = TabOverview
@@ -144,7 +160,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				m.activeTab = TabNodes
-				return m, m.fetchNodes()
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
 				m.activeTab = TabWorkbench
@@ -153,10 +170,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "r":
 			if m.activeTab == TabOverview && !m.overview.filterActive {
-				return m, m.connect()
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.connect())
 			}
 			if m.activeTab == TabNodes {
-				return m, m.fetchNodes()
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
 		case "enter":
 			// From overview, enter on index switches to workbench
@@ -190,7 +209,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					m.activeTab = TabNodes
 					m.workbench.Blur()
-					return m, m.fetchNodes()
+					m.loading = true
+					return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 				}
 				return m, nil
 			}
@@ -229,6 +249,9 @@ func (m Model) View() string {
 	if m.err != nil {
 		status = "error"
 	}
+	if m.loading {
+		status = m.spinner.View() + " loading"
+	}
 	headerText := fmt.Sprintf("stoptail · %s [%s]", m.cfg.MaskedURL(), status)
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
@@ -261,7 +284,7 @@ func (m Model) View() string {
 			Width(m.width).
 			Height(contentHeight).
 			Align(lipgloss.Center, lipgloss.Center).
-			Render("Connecting...")
+			Render(m.spinner.View() + " Connecting...")
 	} else {
 		switch m.activeTab {
 		case TabOverview:
