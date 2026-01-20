@@ -59,6 +59,8 @@ go test -v ./...
 - Use `fmt.Errorf("context: %w", err)` for error wrapping
 - Keep functions focused and small
 - Use table-driven tests where appropriate
+- **No emojis** - Do not use emojis in code, comments, commit messages, or documentation
+- **Minimal comments** - Write self-documenting code; only add comments when the logic is not obvious from the code itself
 
 ## Important Guidelines
 
