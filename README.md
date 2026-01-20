@@ -98,7 +98,7 @@ https://username:password@hostname:9200
 git clone https://github.com/labtiva/stoptail.git
 cd stoptail
 
-# Start local Elasticsearch
+# Start local Elasticsearch with sample data
 docker compose up -d
 
 # Run
@@ -106,6 +106,26 @@ go run .
 
 # Test
 go test ./...
+```
+
+### Sample Data
+
+The docker-compose setup automatically seeds Elasticsearch with sample data:
+
+| Index | Documents | Description |
+|-------|-----------|-------------|
+| products | 12 | Electronics inventory |
+| orders | 10 | Customer orders |
+| users | 8 | Customer accounts |
+| logs-2026.* | 35 | Application logs |
+| metrics-cpu | 10 | CPU metrics |
+| metrics-memory | 10 | Memory metrics |
+
+**Aliases:** `ecommerce`, `logs`, `logs-current`, `metrics`
+
+To reset data:
+```bash
+docker compose down -v && docker compose up -d
 ```
 
 ## License
