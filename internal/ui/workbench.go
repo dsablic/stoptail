@@ -57,6 +57,8 @@ func NewWorkbench() WorkbenchModel {
 	path.Placeholder = "/_search"
 	path.CharLimit = 200
 	path.Width = 40
+	path.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
+	path.Cursor.TextStyle = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
 
 	body := textarea.New()
 	body.Placeholder = `{
@@ -66,6 +68,8 @@ func NewWorkbench() WorkbenchModel {
 }`
 	body.CharLimit = 50000
 	body.ShowLineNumbers = false
+	body.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
+	body.Cursor.TextStyle = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
 
 	vp := viewport.New(40, 10)
 
