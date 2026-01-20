@@ -13,6 +13,7 @@ import (
 const (
 	TabOverview = iota
 	TabWorkbench
+	TabNodes
 )
 
 type Model struct {
@@ -21,6 +22,7 @@ type Model struct {
 	cluster   *es.ClusterState
 	overview  OverviewModel
 	workbench WorkbenchModel
+	nodes     NodesModel
 	activeTab int
 	width     int
 	height    int
@@ -31,6 +33,7 @@ type Model struct {
 }
 
 type connectedMsg struct{ state *es.ClusterState }
+type nodesStateMsg struct{ state *es.NodesState }
 type errMsg struct{ err error }
 
 func New(client *es.Client, cfg *config.Config) Model {
@@ -42,6 +45,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		cfg:       cfg,
 		overview:  NewOverview(),
 		workbench: wb,
+		nodes:     NewNodes(),
 		activeTab: TabOverview,
 	}
 }
@@ -64,6 +68,17 @@ func (m Model) connect() tea.Cmd {
 	}
 }
 
+func (m Model) fetchNodes() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		state, err := m.client.FetchNodesState(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return nodesStateMsg{state}
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -73,6 +88,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cluster = msg.state
 		m.overview.SetCluster(msg.state)
 		m.err = nil
+	case nodesStateMsg:
+		m.nodes.SetState(msg.state)
 	case errMsg:
 		m.err = msg.err
 		m.connected = false
@@ -98,6 +115,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
+			if m.activeTab == TabNodes {
+				m.quitting = true
+				return m, tea.Quit
+			}
 		case "tab":
 			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
@@ -105,19 +126,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.workbench.Focus()
 				return m, nil
 			}
-			if m.activeTab == TabWorkbench {
-				// Tab cycles through workbench components, not views
+			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
+				m.activeTab = TabNodes
+				m.workbench.Blur()
+				return m, m.fetchNodes()
+			}
+			if m.activeTab == TabNodes {
+				m.activeTab = TabOverview
+				return m, nil
 			}
 		case "shift+tab":
-			// Switch back to overview
+			// Switch backward through tabs
 			if m.activeTab == TabWorkbench {
 				m.activeTab = TabOverview
 				m.workbench.Blur()
 				return m, nil
 			}
+			if m.activeTab == TabOverview && !m.overview.filterActive {
+				m.activeTab = TabNodes
+				return m, m.fetchNodes()
+			}
+			if m.activeTab == TabNodes {
+				m.activeTab = TabWorkbench
+				m.workbench.Focus()
+				return m, nil
+			}
 		case "r":
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				return m, m.connect()
+			}
+			if m.activeTab == TabNodes {
+				return m, m.fetchNodes()
 			}
 		case "enter":
 			// From overview, enter on index switches to workbench
@@ -135,14 +174,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.overview.SetSize(msg.Width, msg.Height-4)
 		m.workbench.SetSize(msg.Width, msg.Height-4)
+		m.nodes.SetSize(msg.Width, msg.Height-4)
 	}
 
 	// Delegate to active tab
 	if m.connected {
-		if m.activeTab == TabOverview {
+		switch m.activeTab {
+		case TabOverview:
 			m.overview, cmd = m.overview.Update(msg)
-		} else {
+		case TabWorkbench:
 			m.workbench, cmd = m.workbench.Update(msg)
+		case TabNodes:
+			m.nodes, cmd = m.nodes.Update(msg)
 		}
 	}
 
@@ -170,18 +213,18 @@ func (m Model) View() string {
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
 	// Tabs
-	var tabs string
-	if m.activeTab == TabOverview {
-		tabs = lipgloss.JoinHorizontal(lipgloss.Top,
-			ActiveTabStyle.Render("Overview"),
-			InactiveTabStyle.Render("Workbench"),
-		)
-	} else {
-		tabs = lipgloss.JoinHorizontal(lipgloss.Top,
-			InactiveTabStyle.Render("Overview"),
-			ActiveTabStyle.Render("Workbench"),
-		)
+	overviewTab := InactiveTabStyle.Render("Overview")
+	workbenchTab := InactiveTabStyle.Render("Workbench")
+	nodesTab := InactiveTabStyle.Render("Nodes")
+	switch m.activeTab {
+	case TabOverview:
+		overviewTab = ActiveTabStyle.Render("Overview")
+	case TabWorkbench:
+		workbenchTab = ActiveTabStyle.Render("Workbench")
+	case TabNodes:
+		nodesTab = ActiveTabStyle.Render("Nodes")
 	}
+	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, nodesTab)
 
 	// Content
 	contentHeight := m.height - 4
@@ -199,18 +242,26 @@ func (m Model) View() string {
 			Height(contentHeight).
 			Align(lipgloss.Center, lipgloss.Center).
 			Render("Connecting...")
-	} else if m.activeTab == TabOverview {
-		content = m.overview.View()
 	} else {
-		content = m.workbench.View()
+		switch m.activeTab {
+		case TabOverview:
+			content = m.overview.View()
+		case TabWorkbench:
+			content = m.workbench.View()
+		case TabNodes:
+			content = m.nodes.View()
+		}
 	}
 
 	// Status bar
-	statusText := "q: quit  Tab: switch view  r: refresh"
-	if m.activeTab == TabOverview {
-		statusText = "q: quit  Tab: workbench  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
-	} else {
+	var statusText string
+	switch m.activeTab {
+	case TabOverview:
+		statusText = "q: quit  Tab: workbench  Shift+Tab: nodes  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
+	case TabWorkbench:
 		statusText = "Shift+Tab: overview  Tab: cycle focus  Ctrl+Enter: execute"
+	case TabNodes:
+		statusText = "q: quit  Tab: overview  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
 	}
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
