@@ -73,3 +73,247 @@ func TestParseShardsResponse(t *testing.T) {
 		t.Error("shards[1] should be replica")
 	}
 }
+
+func TestParseNodeStatsResponse(t *testing.T) {
+	raw := `[
+		{
+			"name": "node-1",
+			"version": "8.12.0",
+			"heap.percent": "45",
+			"heap.current": "2.3gb",
+			"heap.max": "5gb",
+			"gc.young.count": "1234",
+			"gc.young.time": "10s",
+			"gc.old.count": "5",
+			"gc.old.time": "1s",
+			"fielddata.memory_size": "100mb",
+			"query_cache.memory_size": "50mb",
+			"segments.count": "500",
+			"disk.used_percent": "60",
+			"disk.avail": "400gb",
+			"disk.total": "1tb",
+			"disk.used": "600gb",
+			"disk.indices": "500gb",
+			"shards": "100",
+			"pri": "50",
+			"rep": "50"
+		},
+		{
+			"name": "node-2",
+			"version": "8.12.0",
+			"heap.percent": "55",
+			"heap.current": "2.8gb",
+			"heap.max": "5gb",
+			"gc.young.count": "2000",
+			"gc.young.time": "15s",
+			"gc.old.count": "10",
+			"gc.old.time": "2s",
+			"fielddata.memory_size": "200mb",
+			"query_cache.memory_size": "75mb",
+			"segments.count": "750",
+			"disk.used_percent": "70",
+			"disk.avail": "300gb",
+			"disk.total": "1tb",
+			"disk.used": "700gb",
+			"disk.indices": "650gb",
+			"shards": "120",
+			"pri": "60",
+			"rep": "60"
+		}
+	]`
+
+	var nodes []NodeStats
+	if err := json.Unmarshal([]byte(raw), &nodes); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if len(nodes) != 2 {
+		t.Fatalf("got %d nodes, want 2", len(nodes))
+	}
+
+	if nodes[0].Name != "node-1" {
+		t.Errorf("nodes[0].Name = %q, want %q", nodes[0].Name, "node-1")
+	}
+	if nodes[0].Version != "8.12.0" {
+		t.Errorf("nodes[0].Version = %q, want %q", nodes[0].Version, "8.12.0")
+	}
+	if nodes[0].HeapPercent != "45" {
+		t.Errorf("nodes[0].HeapPercent = %q, want %q", nodes[0].HeapPercent, "45")
+	}
+	if nodes[0].HeapCurrent != "2.3gb" {
+		t.Errorf("nodes[0].HeapCurrent = %q, want %q", nodes[0].HeapCurrent, "2.3gb")
+	}
+	if nodes[0].HeapMax != "5gb" {
+		t.Errorf("nodes[0].HeapMax = %q, want %q", nodes[0].HeapMax, "5gb")
+	}
+	if nodes[0].GCYoungCount != "1234" {
+		t.Errorf("nodes[0].GCYoungCount = %q, want %q", nodes[0].GCYoungCount, "1234")
+	}
+	if nodes[0].GCYoungTime != "10s" {
+		t.Errorf("nodes[0].GCYoungTime = %q, want %q", nodes[0].GCYoungTime, "10s")
+	}
+	if nodes[0].GCOldCount != "5" {
+		t.Errorf("nodes[0].GCOldCount = %q, want %q", nodes[0].GCOldCount, "5")
+	}
+	if nodes[0].GCOldTime != "1s" {
+		t.Errorf("nodes[0].GCOldTime = %q, want %q", nodes[0].GCOldTime, "1s")
+	}
+	if nodes[0].FielddataSize != "100mb" {
+		t.Errorf("nodes[0].FielddataSize = %q, want %q", nodes[0].FielddataSize, "100mb")
+	}
+	if nodes[0].QueryCacheSize != "50mb" {
+		t.Errorf("nodes[0].QueryCacheSize = %q, want %q", nodes[0].QueryCacheSize, "50mb")
+	}
+	if nodes[0].SegmentsCount != "500" {
+		t.Errorf("nodes[0].SegmentsCount = %q, want %q", nodes[0].SegmentsCount, "500")
+	}
+	if nodes[0].DiskPercent != "60" {
+		t.Errorf("nodes[0].DiskPercent = %q, want %q", nodes[0].DiskPercent, "60")
+	}
+	if nodes[0].DiskAvail != "400gb" {
+		t.Errorf("nodes[0].DiskAvail = %q, want %q", nodes[0].DiskAvail, "400gb")
+	}
+	if nodes[0].DiskTotal != "1tb" {
+		t.Errorf("nodes[0].DiskTotal = %q, want %q", nodes[0].DiskTotal, "1tb")
+	}
+	if nodes[0].DiskUsed != "600gb" {
+		t.Errorf("nodes[0].DiskUsed = %q, want %q", nodes[0].DiskUsed, "600gb")
+	}
+	if nodes[0].DiskIndices != "500gb" {
+		t.Errorf("nodes[0].DiskIndices = %q, want %q", nodes[0].DiskIndices, "500gb")
+	}
+	if nodes[0].Shards != "100" {
+		t.Errorf("nodes[0].Shards = %q, want %q", nodes[0].Shards, "100")
+	}
+	if nodes[0].PrimaryShards != "50" {
+		t.Errorf("nodes[0].PrimaryShards = %q, want %q", nodes[0].PrimaryShards, "50")
+	}
+	if nodes[0].ReplicaShards != "50" {
+		t.Errorf("nodes[0].ReplicaShards = %q, want %q", nodes[0].ReplicaShards, "50")
+	}
+
+	if nodes[1].Name != "node-2" {
+		t.Errorf("nodes[1].Name = %q, want %q", nodes[1].Name, "node-2")
+	}
+	if nodes[1].HeapPercent != "55" {
+		t.Errorf("nodes[1].HeapPercent = %q, want %q", nodes[1].HeapPercent, "55")
+	}
+}
+
+func TestParseFielddataInfoResponse(t *testing.T) {
+	raw := `[
+		{"field": "user.name", "size": "100mb"},
+		{"field": "timestamp", "size": "50mb"},
+		{"field": "message.keyword", "size": "25mb"}
+	]`
+
+	var fielddata []FielddataInfo
+	if err := json.Unmarshal([]byte(raw), &fielddata); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if len(fielddata) != 3 {
+		t.Fatalf("got %d fielddata entries, want 3", len(fielddata))
+	}
+
+	if fielddata[0].Field != "user.name" {
+		t.Errorf("fielddata[0].Field = %q, want %q", fielddata[0].Field, "user.name")
+	}
+	if fielddata[0].Size != "100mb" {
+		t.Errorf("fielddata[0].Size = %q, want %q", fielddata[0].Size, "100mb")
+	}
+
+	if fielddata[1].Field != "timestamp" {
+		t.Errorf("fielddata[1].Field = %q, want %q", fielddata[1].Field, "timestamp")
+	}
+	if fielddata[1].Size != "50mb" {
+		t.Errorf("fielddata[1].Size = %q, want %q", fielddata[1].Size, "50mb")
+	}
+
+	if fielddata[2].Field != "message.keyword" {
+		t.Errorf("fielddata[2].Field = %q, want %q", fielddata[2].Field, "message.keyword")
+	}
+	if fielddata[2].Size != "25mb" {
+		t.Errorf("fielddata[2].Size = %q, want %q", fielddata[2].Size, "25mb")
+	}
+}
+
+func TestParseNodesStatsFielddataByIndexResponse(t *testing.T) {
+	raw := `{
+		"nodes": {
+			"node-id-1": {
+				"indices": {
+					"indices": {
+						"logs-2024-01": {
+							"fielddata": {
+								"memory_size_in_bytes": 1048576
+							}
+						},
+						"logs-2024-02": {
+							"fielddata": {
+								"memory_size_in_bytes": 2097152
+							}
+						}
+					}
+				}
+			},
+			"node-id-2": {
+				"indices": {
+					"indices": {
+						"logs-2024-01": {
+							"fielddata": {
+								"memory_size_in_bytes": 524288
+							}
+						},
+						"logs-2024-03": {
+							"fielddata": {
+								"memory_size_in_bytes": 3145728
+							}
+						}
+					}
+				}
+			}
+		}
+	}`
+
+	var response struct {
+		Nodes map[string]struct {
+			Indices struct {
+				Indices map[string]struct {
+					Fielddata struct {
+						MemorySizeInBytes int64 `json:"memory_size_in_bytes"`
+					} `json:"fielddata"`
+				} `json:"indices"`
+			} `json:"indices"`
+		} `json:"nodes"`
+	}
+
+	if err := json.Unmarshal([]byte(raw), &response); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if len(response.Nodes) != 2 {
+		t.Fatalf("got %d nodes, want 2", len(response.Nodes))
+	}
+
+	indexSizes := make(map[string]int64)
+	for _, node := range response.Nodes {
+		for indexName, indexData := range node.Indices.Indices {
+			indexSizes[indexName] += indexData.Fielddata.MemorySizeInBytes
+		}
+	}
+
+	if len(indexSizes) != 3 {
+		t.Fatalf("got %d unique indices, want 3", len(indexSizes))
+	}
+
+	if indexSizes["logs-2024-01"] != 1572864 {
+		t.Errorf("logs-2024-01 size = %d, want %d", indexSizes["logs-2024-01"], 1572864)
+	}
+	if indexSizes["logs-2024-02"] != 2097152 {
+		t.Errorf("logs-2024-02 size = %d, want %d", indexSizes["logs-2024-02"], 2097152)
+	}
+	if indexSizes["logs-2024-03"] != 3145728 {
+		t.Errorf("logs-2024-03 size = %d, want %d", indexSizes["logs-2024-03"], 3145728)
+	}
+}
