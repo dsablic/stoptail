@@ -2,6 +2,7 @@
 .worktrees/
 
 # Go
+stoptail
 bin/
 *.exe
 *.exe~
