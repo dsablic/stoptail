@@ -590,9 +590,14 @@ func (m WorkbenchModel) View() string {
 	if m.focus == FocusBody {
 		bodyBorderColor = ColorBlue
 	}
+	bodyContent := m.body.View()
+	if m.completion.Active {
+		dropdown := m.renderCompletionDropdown()
+		bodyContent = lipgloss.JoinVertical(lipgloss.Left, bodyContent, dropdown)
+	}
 	bodyPaneContent := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render("Body"),
-		m.body.View())
+		bodyContent)
 	bodyPane := lipgloss.NewStyle().
 		Border(bodyBorder).
 		BorderForeground(bodyBorderColor).
@@ -780,7 +785,12 @@ func (m *WorkbenchModel) acceptCompletion() {
 	}
 
 	query := m.getCompletionQuery()
+	if len(query) > len(selected.Text) {
+		m.completion.Close()
+		return
+	}
 	insertion := selected.Text[len(query):]
+	suffix := `": `
 
 	lines := strings.Split(m.body.Value(), "\n")
 	row := m.body.Line()
@@ -789,12 +799,12 @@ func (m *WorkbenchModel) acceptCompletion() {
 	if row < len(lines) {
 		line := lines[row]
 		if col <= len(line) {
-			lines[row] = line[:col] + insertion + `": ` + line[col:]
+			lines[row] = line[:col] + insertion + suffix + line[col:]
 		}
 	}
 
 	m.body.SetValue(strings.Join(lines, "\n"))
-	newCol := col + len(insertion) + 3
+	newCol := col + len(insertion) + len(suffix)
 	m.body.SetCursor(newCol)
 
 	m.completion.Close()
@@ -809,6 +819,39 @@ func (m *WorkbenchModel) extractIndexFromPath() string {
 		}
 	}
 	return ""
+}
+
+func (m WorkbenchModel) renderCompletionDropdown() string {
+	if !m.completion.Active || len(m.completion.Filtered) == 0 {
+		return ""
+	}
+
+	maxVisible := 8
+	items := m.completion.Filtered
+	if len(items) > maxVisible {
+		items = items[:maxVisible]
+	}
+
+	var lines []string
+	for i, item := range items {
+		text := fmt.Sprintf(" %s ", item.Text)
+		if item.Kind != "" {
+			text = fmt.Sprintf(" %s (%s) ", item.Text, item.Kind)
+		}
+
+		style := lipgloss.NewStyle().Background(ActiveBg)
+		if i == m.completion.SelectedIdx {
+			style = style.Background(ColorBlue).Foreground(ColorOnAccent)
+		}
+		lines = append(lines, style.Render(text))
+	}
+
+	dropdown := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Render(strings.Join(lines, "\n"))
+
+	return dropdown
 }
 
 func highlightJSON(input string) string {
