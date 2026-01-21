@@ -106,6 +106,65 @@ var dslKeywords = map[string][]CompletionItem{
 	},
 }
 
+func ParseJSONContext(text string) JSONContext {
+	ctx := JSONContext{}
+	var path []string
+	var currentKey string
+	var inString bool
+	var afterColon bool
+	var depth int
+
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+
+		if inString {
+			if c == '"' && (i == 0 || text[i-1] != '\\') {
+				inString = false
+				if afterColon {
+					afterColon = false
+				}
+			} else {
+				currentKey += string(c)
+			}
+			continue
+		}
+
+		switch c {
+		case '"':
+			inString = true
+			currentKey = ""
+		case ':':
+			if currentKey != "" {
+				path = append(path, currentKey)
+			}
+			afterColon = true
+			currentKey = ""
+		case '{':
+			depth++
+			afterColon = false
+		case '}':
+			depth--
+			if len(path) > 0 {
+				path = path[:len(path)-1]
+			}
+			afterColon = false
+		case '[':
+			afterColon = false
+		case ']':
+			afterColon = false
+		case ',':
+			afterColon = false
+			currentKey = ""
+		}
+	}
+
+	ctx.Path = path
+	ctx.InKey = !afterColon && (inString || depth > 0)
+	ctx.InValue = afterColon
+
+	return ctx
+}
+
 func GetKeywordsForContext(path []string) []CompletionItem {
 	if len(path) == 0 {
 		return dslKeywords[""]
