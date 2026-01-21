@@ -140,10 +140,7 @@ stoptail stores data in `~/.stoptail/`:
 | Key | Action |
 |-----|--------|
 | `Tab` | Cycle focus (method, path, body, response) |
-| `Ctrl+M` | Cycle request method |
-| `Ctrl+E` | Execute request |
-| `Ctrl+L` | Clear body |
-| `Ctrl+P` | Pretty-print JSON body |
+| `Ctrl+Enter` | Execute request |
 | `"` or `:` | Trigger autocomplete |
 | `Up/Down` | Navigate completions (when open) |
 | `Enter/Tab` | Accept completion |

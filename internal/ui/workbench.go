@@ -258,26 +258,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.searchIdx = 0
 				return m, textinput.Blink
 			}
-		case "ctrl+m":
-			m.methodIdx = (m.methodIdx + 1) % len(methods)
-			return m, nil
-		case "ctrl+enter", "ctrl+e":
+		case "ctrl+enter":
 			if m.client != nil && !m.executing {
 				m.executing = true
 				return m, tea.Batch(m.spinner.Tick, m.execute())
 			}
-		case "ctrl+l":
-			m.body.SetValue("")
-			return m, nil
-		case "ctrl+p":
-			m.prettyPrintBody()
-			return m, nil
-		case "ctrl+up":
-			m.historyPrev()
-			return m, nil
-		case "ctrl+down":
-			m.historyNext()
-			return m, nil
 		case "tab":
 			if m.completion.Active {
 				m.acceptCompletion()
@@ -741,7 +726,7 @@ func (m WorkbenchModel) View() string {
 		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render("✗ Invalid JSON")
 	}
 
-	helpText := "Ctrl+E: Execute  Ctrl+M: Method  Ctrl+P: Pretty  Ctrl+F: Search"
+	helpText := "Ctrl+Enter: Execute  Ctrl+F: Search"
 	if m.searchActive {
 		helpText = "n/N: Next/Prev match  Enter/Esc: Close search"
 	} else if m.focus == FocusResponse {
