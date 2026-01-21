@@ -9,10 +9,12 @@ Set Height 700
 Set Theme "Dracula"
 Set TypingSpeed 75ms
 
-# Start stoptail
-Type "stoptail"
+# Hide shell prompt, start stoptail, then show
+Hide
+Type "stoptail http://localhost:9200"
 Enter
-Sleep 3s
+Sleep 2s
+Show
 
 # Overview tab - scroll through indices
 Type "l"
@@ -42,7 +44,7 @@ Sleep 1s
 Tab
 Sleep 1s
 
-# Type a search query
+# Focus path input
 Tab
 Sleep 300ms
 Type "/products/_search"
@@ -70,7 +72,7 @@ Sleep 1.5s
 Type "4"
 Sleep 1.5s
 Type "1"
-Sleep 1.5s
+Sleep 1s
 
 # Show help
 Type "?"
@@ -78,6 +80,7 @@ Sleep 2s
 Type "?"
 Sleep 500ms
 
-# Quit
+# Quit - hide the exit
+Hide
 Type "q"
 Sleep 500ms
