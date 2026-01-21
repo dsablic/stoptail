@@ -1,16 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
-	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/config"
 	"github.com/labtiva/stoptail/internal/es"
 	"github.com/labtiva/stoptail/internal/ui"
@@ -25,7 +24,7 @@ var (
 func main() {
 	versionFlag := flag.Bool("version", false, "Print version and exit")
 	themeFlag := flag.String("theme", "auto", "Color theme: auto, dark, light")
-	renderFlag := flag.String("render", "", "Render a tab and exit (overview, nodes)")
+	renderFlag := flag.String("render", "", "Render a tab and exit (overview, nodes, workbench)")
 	widthFlag := flag.Int("width", 120, "Terminal width for --render")
 	heightFlag := flag.Int("height", 40, "Terminal height for --render")
 	flag.Parse()
@@ -92,7 +91,7 @@ func resolveESURL(args []string) (string, error) {
 		if clusters != nil {
 			return clusters.ResolveURL(arg)
 		}
-		return "", fmt.Errorf("cluster %q not found (no ~/.stoptail.yaml)", arg)
+		return "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
 
 	if envURL := os.Getenv("ES_URL"); envURL != "" {
@@ -110,25 +109,87 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	names := clusters.ClusterNames()
 	sort.Strings(names)
 
-	fmt.Println("Select a cluster:")
-	for i, name := range names {
-		fmt.Printf("  %d. %s\n", i+1, name)
+	if len(names) == 1 {
+		return clusters.ResolveURL(names[0])
 	}
-	fmt.Print("Enter number: ")
 
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
+	picker := newClusterPicker(names)
+	p := tea.NewProgram(picker)
+	result, err := p.Run()
 	if err != nil {
 		return "", err
 	}
 
-	input = strings.TrimSpace(input)
-	num, err := strconv.Atoi(input)
-	if err != nil || num < 1 || num > len(names) {
-		return "", fmt.Errorf("invalid selection: %s", input)
+	m := result.(clusterPickerModel)
+	if m.cancelled {
+		return "", fmt.Errorf("cancelled")
 	}
 
-	return clusters.ResolveURL(names[num-1])
+	return clusters.ResolveURL(names[m.selected])
+}
+
+type clusterPickerModel struct {
+	names     []string
+	selected  int
+	cancelled bool
+}
+
+func newClusterPicker(names []string) clusterPickerModel {
+	return clusterPickerModel{names: names}
+}
+
+func (m clusterPickerModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m clusterPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.selected > 0 {
+				m.selected--
+			}
+		case "down", "j":
+			if m.selected < len(m.names)-1 {
+				m.selected++
+			}
+		case "enter":
+			return m, tea.Quit
+		case "q", "esc", "ctrl+c":
+			m.cancelled = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m clusterPickerModel) View() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render("Select a cluster:"))
+	b.WriteString("\n\n")
+
+	for i, name := range m.names {
+		if i == m.selected {
+			b.WriteString(cursorStyle.Render("  > "))
+			b.WriteString(selectedStyle.Render(name))
+		} else {
+			b.WriteString("    ")
+			b.WriteString(normalStyle.Render(name))
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("↑/↓: navigate  Enter: select  q: quit"))
+	b.WriteString("\n")
+	return b.String()
 }
 
 func renderAndExit(client *es.Client, tab string, width, height int) {
@@ -157,8 +218,14 @@ func renderAndExit(client *es.Client, tab string, width, height int) {
 		nodes.SetState(state)
 		fmt.Println(nodes.View())
 
+	case "workbench":
+		workbench := ui.NewWorkbench()
+		workbench.SetClient(client)
+		workbench.SetSize(width, height)
+		fmt.Println(workbench.View())
+
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown tab: %s (use: overview, nodes)\n", tab)
+		fmt.Fprintf(os.Stderr, "Unknown tab: %s (use: overview, nodes, workbench)\n", tab)
 		os.Exit(1)
 	}
 }

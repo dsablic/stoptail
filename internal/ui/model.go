@@ -219,13 +219,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Delegate to active tab
 	if m.connected {
+		delegateMsg := msg
+		if mouseMsg, ok := msg.(tea.MouseMsg); ok {
+			mouseMsg.Y -= 2
+			delegateMsg = mouseMsg
+		}
 		switch m.activeTab {
 		case TabOverview:
-			m.overview, cmd = m.overview.Update(msg)
+			m.overview, cmd = m.overview.Update(delegateMsg)
 		case TabWorkbench:
-			m.workbench, cmd = m.workbench.Update(msg)
+			m.workbench, cmd = m.workbench.Update(delegateMsg)
 		case TabNodes:
-			m.nodes, cmd = m.nodes.Update(msg)
+			m.nodes, cmd = m.nodes.Update(delegateMsg)
 		}
 	}
 

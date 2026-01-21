@@ -81,6 +81,9 @@ func SaveHistory(history *History) error {
 }
 
 func (h *History) Add(entry HistoryEntry) bool {
+	if entry.Path == "" {
+		return false
+	}
 	for _, e := range h.Entries {
 		if e.Method == entry.Method && e.Path == entry.Path && e.Body == entry.Body {
 			return false
@@ -88,4 +91,13 @@ func (h *History) Add(entry HistoryEntry) bool {
 	}
 	h.Entries = append(h.Entries, entry)
 	return true
+}
+
+func (h *History) Last() *HistoryEntry {
+	for i := len(h.Entries) - 1; i >= 0; i-- {
+		if h.Entries[i].Path != "" {
+			return &h.Entries[i]
+		}
+	}
+	return nil
 }

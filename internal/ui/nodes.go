@@ -80,6 +80,50 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				m.scrollY++
 			}
 		}
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if msg.Y == 0 {
+				tabs := []struct {
+					label string
+					view  NodesView
+				}{
+					{"[1:Memory]", ViewMemory},
+					{"[2:Disk]", ViewDisk},
+					{"[3:Index]", ViewFielddataIndex},
+					{"[4:Field]", ViewFielddataField},
+				}
+
+				pos := 0
+				for _, tab := range tabs {
+					tabWidth := lipgloss.Width(InactiveTabStyle.Render(tab.label))
+					if msg.X >= pos && msg.X < pos+tabWidth {
+						m.activeView = tab.view
+						m.scrollY = 0
+						break
+					}
+					pos += tabWidth
+				}
+			}
+		}
+
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			scrollAmount := 3
+			total := m.getItemCount()
+			maxVisible := m.height - 8
+			if maxVisible < 1 {
+				maxVisible = 10
+			}
+			maxScroll := total - maxVisible
+			if maxScroll < 0 {
+				maxScroll = 0
+			}
+
+			if msg.Button == tea.MouseButtonWheelUp {
+				m.scrollY = max(0, m.scrollY-scrollAmount)
+			} else {
+				m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
+			}
+		}
 	}
 	return m, nil
 }

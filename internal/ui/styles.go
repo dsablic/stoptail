@@ -11,9 +11,11 @@ var (
 	ColorGray   lipgloss.Color
 	ColorWhite  lipgloss.Color
 
-	HeaderBg   lipgloss.Color
-	ActiveBg   lipgloss.Color
-	SpinnerClr lipgloss.Color
+	HeaderBg     lipgloss.Color
+	ActiveBg     lipgloss.Color
+	SpinnerClr   lipgloss.Color
+	TextBg       lipgloss.Color
+	ColorOnAccent lipgloss.Color // Always light - for text on colored backgrounds
 
 	// Base styles
 	HeaderStyle      lipgloss.Style
@@ -48,6 +50,8 @@ func SetTheme(theme string) {
 		HeaderBg = lipgloss.Color("#1f2937")
 		ActiveBg = lipgloss.Color("#374151")
 		SpinnerClr = lipgloss.Color("#3b82f6")
+		TextBg = lipgloss.Color("#111827")
+		ColorOnAccent = lipgloss.Color("#f9fafb")
 	} else {
 		ColorGreen = lipgloss.Color("#16a34a")
 		ColorYellow = lipgloss.Color("#ca8a04")
@@ -58,6 +62,8 @@ func SetTheme(theme string) {
 		HeaderBg = lipgloss.Color("#e5e7eb")
 		ActiveBg = lipgloss.Color("#d1d5db")
 		SpinnerClr = lipgloss.Color("#2563eb")
+		TextBg = lipgloss.Color("#f9fafb")
+		ColorOnAccent = lipgloss.Color("#f9fafb")
 	}
 
 	HeaderStyle = lipgloss.NewStyle().

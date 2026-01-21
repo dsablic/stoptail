@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -104,8 +105,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-			nodeColWidth := 15
-			indexColWidth := 20
+			nodeColWidth := 18
+			indexColWidth := 25
 			headerRows := 6
 
 			if msg.Y >= headerRows && msg.X > nodeColWidth+2 {
@@ -130,13 +131,11 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 	filterText := strings.ToLower(m.filter.Value())
 
 	for _, idx := range m.cluster.Indices {
-		// Text filter
 		if filterText != "" {
 			match := false
 			if strings.Contains(strings.ToLower(idx.Name), filterText) {
 				match = true
 			}
-			// Wildcard support
 			if strings.HasSuffix(filterText, "*") {
 				prefix := strings.TrimSuffix(filterText, "*")
 				if strings.HasPrefix(strings.ToLower(idx.Name), prefix) {
@@ -148,7 +147,6 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 			}
 		}
 
-		// Alias filter
 		if len(m.aliasFilters) > 0 {
 			hasActiveAlias := false
 			for _, active := range m.aliasFilters {
@@ -174,6 +172,11 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 
 		filtered = append(filtered, idx)
 	}
+
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].Name < filtered[j].Name
+	})
+
 	return filtered
 }
 
@@ -186,9 +189,10 @@ func (m OverviewModel) SelectedIndex() string {
 }
 
 func (m OverviewModel) visibleColumns() int {
-	nodeColWidth := 15
-	indexColWidth := 20
-	cols := (m.width - nodeColWidth) / indexColWidth
+	nodeColWidth := 18
+	indexColWidth := 25
+	separatorWidth := 2
+	cols := (m.width - nodeColWidth - separatorWidth) / indexColWidth
 	if cols < 1 {
 		cols = 1
 	}
@@ -234,7 +238,7 @@ func (m OverviewModel) View() string {
 			}
 			style := lipgloss.NewStyle().Padding(0, 1)
 			if m.aliasFilters[alias] {
-				style = style.Background(ColorBlue).Foreground(ColorWhite)
+				style = style.Background(ColorBlue).Foreground(ColorOnAccent)
 			} else {
 				style = style.Foreground(ColorGray)
 			}
@@ -290,16 +294,23 @@ func (m OverviewModel) renderGrid() string {
 
 	nodes := m.cluster.Nodes
 
-	// Calculate column widths
-	nodeColWidth := 15
-	indexColWidth := 20
+	nodeColWidth := 18
+	indexColWidth := 25
+	visibleCols := m.visibleColumns()
+	actualVisibleCols := visibleCols
+	if actualVisibleCols > len(indices)-m.scrollX {
+		actualVisibleCols = len(indices) - m.scrollX
+	}
+	if actualVisibleCols < 0 {
+		actualVisibleCols = 0
+	}
+	contentWidth := nodeColWidth + 2 + actualVisibleCols*indexColWidth
 
 	var b strings.Builder
 
-	// Header row - index names
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+((m.width-nodeColWidth)/indexColWidth) {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
 			healthColor := ColorGreen
 			switch idx.Health {
 			case "yellow":
@@ -316,10 +327,9 @@ func (m OverviewModel) renderGrid() string {
 	}
 	b.WriteString("\n")
 
-	// Header row - stats
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+((m.width-nodeColWidth)/indexColWidth) {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
 			statsStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
 				Foreground(ColorGray)
@@ -329,10 +339,9 @@ func (m OverviewModel) renderGrid() string {
 	}
 	b.WriteString("\n")
 
-	// Header row - aliases
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+((m.width-nodeColWidth)/indexColWidth) {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
 			aliases := m.cluster.GetAliasesForIndex(idx.Name)
 			aliasStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
@@ -345,7 +354,7 @@ func (m OverviewModel) renderGrid() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat("─", m.width) + "\n")
+	b.WriteString(strings.Repeat("─", contentWidth) + "\n")
 
 	// Node rows
 	visibleNodes := nodes
@@ -357,12 +366,15 @@ func (m OverviewModel) renderGrid() string {
 		maxRows = len(visibleNodes)
 	}
 
+	nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
+	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
+
 	for _, node := range visibleNodes[:maxRows] {
 		var shardLines [][]string
 		maxLines := 1
 
 		for i, idx := range indices {
-			if i >= m.scrollX && i < m.scrollX+((m.width-nodeColWidth)/indexColWidth) {
+			if i >= m.scrollX && i < m.scrollX+visibleCols {
 				shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
 				lines := m.renderShardBoxes(shards, indexColWidth)
 				shardLines = append(shardLines, lines)
@@ -372,12 +384,56 @@ func (m OverviewModel) renderGrid() string {
 			}
 		}
 
-		nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
-		emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
-
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
 			if lineIdx == 0 {
 				b.WriteString(nodeStyle.Render(truncate(node.Name, nodeColWidth-2)))
+				b.WriteString("│ ")
+			} else {
+				b.WriteString(nodeStyle.Render(""))
+				b.WriteString("│ ")
+			}
+
+			for colIdx := range shardLines {
+				if lineIdx < len(shardLines[colIdx]) {
+					b.WriteString(shardLines[colIdx][lineIdx])
+				} else {
+					b.WriteString(emptyCol)
+				}
+			}
+			b.WriteString("\n")
+		}
+	}
+
+	// Unassigned shards row
+	hasUnassigned := false
+	for _, idx := range indices {
+		if len(m.cluster.GetUnassignedShardsForIndex(idx.Name)) > 0 {
+			hasUnassigned = true
+			break
+		}
+	}
+
+	if hasUnassigned {
+		b.WriteString(strings.Repeat("─", contentWidth) + "\n")
+
+		var shardLines [][]string
+		maxLines := 1
+
+		for i, idx := range indices {
+			if i >= m.scrollX && i < m.scrollX+visibleCols {
+				shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
+				lines := m.renderShardBoxes(shards, indexColWidth)
+				shardLines = append(shardLines, lines)
+				if len(lines) > maxLines {
+					maxLines = len(lines)
+				}
+			}
+		}
+
+		unassignedStyle := lipgloss.NewStyle().Width(nodeColWidth).Foreground(ColorRed)
+		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
+			if lineIdx == 0 {
+				b.WriteString(unassignedStyle.Render("Unassigned"))
 				b.WriteString("│ ")
 			} else {
 				b.WriteString(nodeStyle.Render(""))
@@ -403,13 +459,9 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 		return []string{lipgloss.NewStyle().Width(width).Render("")}
 	}
 
-	shardsPerLine := width / 3
-	if shardsPerLine < 1 {
-		shardsPerLine = 1
-	}
-
 	var lines []string
 	var currentLine []string
+	currentWidth := 0
 
 	for _, sh := range shards {
 		var color lipgloss.Color
@@ -426,13 +478,18 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 			color = ColorRed
 		}
 
-		style := lipgloss.NewStyle().Foreground(color)
-		currentLine = append(currentLine, style.Render("["+sh.Shard+"]"))
+		shardText := "[" + sh.Shard + "]"
+		shardWidth := len(shardText)
 
-		if len(currentLine) >= shardsPerLine {
+		if currentWidth+shardWidth > width && len(currentLine) > 0 {
 			lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
 			currentLine = nil
+			currentWidth = 0
 		}
+
+		style := lipgloss.NewStyle().Foreground(color)
+		currentLine = append(currentLine, style.Render(shardText))
+		currentWidth += shardWidth
 	}
 
 	if len(currentLine) > 0 {

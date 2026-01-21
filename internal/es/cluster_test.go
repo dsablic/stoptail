@@ -238,6 +238,73 @@ func TestParseFielddataInfoResponse(t *testing.T) {
 	}
 }
 
+func TestGetShardsForIndexAndNode(t *testing.T) {
+	state := &ClusterState{
+		Shards: []ShardInfo{
+			{Index: "test", Shard: "2", PriRep: "r", State: "STARTED", Node: "node-1", Primary: false},
+			{Index: "test", Shard: "0", PriRep: "p", State: "STARTED", Node: "node-1", Primary: true},
+			{Index: "test", Shard: "1", PriRep: "r", State: "STARTED", Node: "node-1", Primary: false},
+			{Index: "test", Shard: "1", PriRep: "p", State: "STARTED", Node: "node-1", Primary: true},
+			{Index: "test", Shard: "0", PriRep: "r", State: "STARTED", Node: "node-2", Primary: false},
+			{Index: "other", Shard: "0", PriRep: "p", State: "STARTED", Node: "node-1", Primary: true},
+		},
+	}
+
+	shards := state.GetShardsForIndexAndNode("test", "node-1")
+
+	if len(shards) != 4 {
+		t.Fatalf("got %d shards, want 4", len(shards))
+	}
+
+	expected := []struct {
+		shard   string
+		primary bool
+	}{
+		{"0", true},
+		{"1", true},
+		{"1", false},
+		{"2", false},
+	}
+
+	for i, exp := range expected {
+		if shards[i].Shard != exp.shard {
+			t.Errorf("shards[%d].Shard = %q, want %q", i, shards[i].Shard, exp.shard)
+		}
+		if shards[i].Primary != exp.primary {
+			t.Errorf("shards[%d].Primary = %v, want %v", i, shards[i].Primary, exp.primary)
+		}
+	}
+}
+
+func TestGetUnassignedShardsForIndex(t *testing.T) {
+	state := &ClusterState{
+		Shards: []ShardInfo{
+			{Index: "test", Shard: "0", PriRep: "p", State: "STARTED", Node: "node-1", Primary: true},
+			{Index: "test", Shard: "0", PriRep: "r", State: "UNASSIGNED", Node: "", Primary: false},
+			{Index: "test", Shard: "1", PriRep: "p", State: "STARTED", Node: "node-1", Primary: true},
+			{Index: "test", Shard: "1", PriRep: "r", State: "UNASSIGNED", Node: "", Primary: false},
+			{Index: "test", Shard: "2", PriRep: "r", State: "UNASSIGNED", Node: "", Primary: false},
+			{Index: "other", Shard: "0", PriRep: "r", State: "UNASSIGNED", Node: "", Primary: false},
+		},
+	}
+
+	shards := state.GetUnassignedShardsForIndex("test")
+
+	if len(shards) != 3 {
+		t.Fatalf("got %d shards, want 3", len(shards))
+	}
+
+	expectedShards := []string{"0", "1", "2"}
+	for i, exp := range expectedShards {
+		if shards[i].Shard != exp {
+			t.Errorf("shards[%d].Shard = %q, want %q", i, shards[i].Shard, exp)
+		}
+		if shards[i].State != "UNASSIGNED" {
+			t.Errorf("shards[%d].State = %q, want UNASSIGNED", i, shards[i].State)
+		}
+	}
+}
+
 func TestParseNodesStatsFielddataByIndexResponse(t *testing.T) {
 	raw := `{
 		"nodes": {

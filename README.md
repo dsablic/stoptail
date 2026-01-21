@@ -19,7 +19,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Fielddata by Index: top 20 indices by fielddata memory
   - Fielddata by Field: field-level fielddata breakdown
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
-- **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail.yaml`
+- **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`
 - **Help Overlay**: Press `?` for keybindings
 
 ## Installation
@@ -43,7 +43,7 @@ stoptail
 # Connect with URL
 stoptail https://user:pass@localhost:9200
 
-# Connect to a named cluster from ~/.stoptail.yaml
+# Connect to a named cluster from ~/.stoptail/config.yaml
 stoptail production
 
 # Or use environment variable
@@ -57,13 +57,13 @@ stoptail --version
 ### Configuration Priority
 
 1. URL argument (highest priority)
-2. Named cluster from `~/.stoptail.yaml`
+2. Named cluster from `~/.stoptail/config.yaml`
 3. `ES_URL` environment variable
 4. Default: `http://localhost:9200`
 
 ### Multi-cluster Configuration
 
-Create `~/.stoptail.yaml` to configure multiple clusters:
+Create `~/.stoptail/config.yaml` to configure multiple clusters:
 
 ```yaml
 clusters:
@@ -84,6 +84,17 @@ stoptail production
 ```
 
 If no argument is provided and multiple clusters are configured, you'll be prompted to select one.
+
+**Note:** The legacy path `~/.stoptail.yaml` is still supported for backwards compatibility.
+
+### Data Storage
+
+stoptail stores data in `~/.stoptail/`:
+
+| File | Description |
+|------|-------------|
+| `config.yaml` | Cluster configuration |
+| `history.json` | Workbench query history |
 
 ## Keybindings
 

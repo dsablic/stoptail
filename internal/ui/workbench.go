@@ -30,22 +30,26 @@ const (
 var methods = []string{"GET", "POST", "PUT", "DELETE", "HEAD"}
 
 type WorkbenchModel struct {
-	client       *es.Client
-	methodIdx    int
-	path         textinput.Model
-	body         textarea.Model
-	response     viewport.Model
-	responseText string
-	statusCode   int
-	duration     string
-	focus        WorkbenchFocus
-	width        int
-	height       int
-	executing    bool
-	err          error
-	history      *storage.History
-	historyIdx   int
-	spinner      spinner.Model
+	client        *es.Client
+	methodIdx     int
+	path          textinput.Model
+	body          textarea.Model
+	response      viewport.Model
+	responseText  string
+	statusCode    int
+	duration      string
+	focus         WorkbenchFocus
+	width         int
+	height        int
+	executing     bool
+	err           error
+	history       *storage.History
+	historyIdx    int
+	spinner       spinner.Model
+	searchActive  bool
+	searchInput   textinput.Model
+	searchMatches []int
+	searchIdx     int
 }
 
 type executeResultMsg struct {
@@ -57,37 +61,65 @@ func NewWorkbench() WorkbenchModel {
 	path.Placeholder = "/_search"
 	path.CharLimit = 200
 	path.Width = 40
-	path.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
-	path.Cursor.TextStyle = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
+	path.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorOnAccent)
+	path.TextStyle = lipgloss.NewStyle().Foreground(ColorWhite)
+	path.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorGray)
 
 	body := textarea.New()
-	body.Placeholder = `{
-  "query": {
-    "match_all": {}
-  }
-}`
+	body.Placeholder = `{"query": {"match_all": {}}}`
 	body.CharLimit = 50000
 	body.ShowLineNumbers = false
-	body.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
-	body.Cursor.TextStyle = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorWhite)
+	body.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorOnAccent)
+	body.FocusedStyle.Text = lipgloss.NewStyle().Foreground(ColorWhite)
+	body.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	body.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
+	body.BlurredStyle.Text = lipgloss.NewStyle().Foreground(ColorGray)
+	body.BlurredStyle.CursorLine = lipgloss.NewStyle()
+	body.BlurredStyle.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
 
 	vp := viewport.New(40, 10)
 
 	history, _ := storage.LoadHistory()
 
+	methodIdx := 0
+	if last := history.Last(); last != nil {
+		path.SetValue(last.Path)
+		var pretty bytes.Buffer
+		if err := json.Indent(&pretty, []byte(last.Body), "", "  "); err == nil {
+			body.SetValue(pretty.String())
+		} else {
+			body.SetValue(last.Body)
+		}
+		for i, m := range methods {
+			if m == last.Method {
+				methodIdx = i
+				break
+			}
+		}
+	} else {
+		path.SetValue("/_search")
+		body.SetValue("{}")
+	}
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
 
+	search := textinput.New()
+	search.Placeholder = "Search..."
+	search.CharLimit = 100
+	search.Width = 30
+
 	return WorkbenchModel{
-		methodIdx:  0,
-		path:       path,
-		body:       body,
-		response:   vp,
-		focus:      FocusPath,
-		history:    history,
-		historyIdx: -1,
-		spinner:    s,
+		methodIdx:   methodIdx,
+		path:        path,
+		body:        body,
+		response:    vp,
+		focus:       FocusPath,
+		history:     history,
+		historyIdx:  -1,
+		spinner:     s,
+		searchInput: search,
 	}
 }
 
@@ -99,15 +131,15 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Split panes
-	paneWidth := (width - 3) / 2 // -3 for divider and padding
-	bodyHeight := height - 6      // -6 for method/path row and status
+	// Split panes: account for borders (2 chars each pane) and divider (1 char)
+	paneInnerWidth := (width - 5) / 2
+	bodyHeight := height - 6
 
-	m.path.Width = paneWidth - 10 // -10 for method selector
-	m.body.SetWidth(paneWidth)
-	m.body.SetHeight(bodyHeight)
-	m.response.Width = paneWidth
-	m.response.Height = bodyHeight
+	m.path.Width = paneInnerWidth - 8
+	m.body.SetWidth(paneInnerWidth)
+	m.body.SetHeight(bodyHeight - 2)
+	m.response.Width = paneInnerWidth
+	m.response.Height = bodyHeight - 2
 }
 
 func (m *WorkbenchModel) Prefill(index string) {
@@ -163,7 +195,46 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.searchActive {
+			switch msg.String() {
+			case "esc", "enter":
+				m.searchActive = false
+				m.searchInput.Blur()
+				return m, nil
+			case "ctrl+n", "n":
+				if len(m.searchMatches) > 0 {
+					m.searchIdx = (m.searchIdx + 1) % len(m.searchMatches)
+					m.response.GotoTop()
+					m.response.SetYOffset(m.searchMatches[m.searchIdx])
+				}
+				return m, nil
+			case "ctrl+p", "N":
+				if len(m.searchMatches) > 0 {
+					m.searchIdx--
+					if m.searchIdx < 0 {
+						m.searchIdx = len(m.searchMatches) - 1
+					}
+					m.response.GotoTop()
+					m.response.SetYOffset(m.searchMatches[m.searchIdx])
+				}
+				return m, nil
+			default:
+				m.searchInput, cmd = m.searchInput.Update(msg)
+				m.updateSearchMatches()
+				return m, cmd
+			}
+		}
+
 		switch msg.String() {
+		case "ctrl+f":
+			if m.focus == FocusResponse {
+				m.searchActive = true
+				m.searchInput.Focus()
+				m.searchInput.SetValue("")
+				m.searchMatches = nil
+				m.searchIdx = 0
+				return m, textinput.Blink
+			}
 		case "ctrl+m":
 			m.methodIdx = (m.methodIdx + 1) % len(methods)
 			return m, nil
@@ -207,19 +278,54 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-			paneWidth := (m.width - 3) / 2
+			paneInnerWidth := (m.width - 5) / 2
 
-			if msg.Y < 2 {
-				if msg.X < 10 {
+			topRowHeight := 3
+
+			if msg.Y < topRowHeight+1 {
+				btnStyle := lipgloss.NewStyle().Padding(0, 1)
+				methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
+				pathView := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.path.View())
+				execBtn := btnStyle.Render("▶ Run")
+				fmtBtn := btnStyle.Render("{ } Format")
+				histPrev := btnStyle.Render("◀")
+				histNext := btnStyle.Render("▶")
+
+				pos := 0
+				methodEnd := pos + lipgloss.Width(methodView)
+				pos = methodEnd + 1
+				pathEnd := pos + lipgloss.Width(pathView)
+				pos = pathEnd + 2
+				execEnd := pos + lipgloss.Width(execBtn)
+				pos = execEnd + 1
+				fmtEnd := pos + lipgloss.Width(fmtBtn)
+				pos = fmtEnd + 2
+				histPrevEnd := pos + lipgloss.Width(histPrev)
+				pos = histPrevEnd
+				histNextEnd := pos + lipgloss.Width(histNext)
+
+				if msg.X < methodEnd {
 					m.path.Blur()
 					m.body.Blur()
 					m.focus = FocusMethod
-				} else {
+				} else if msg.X < pathEnd {
 					m.body.Blur()
 					m.path.Focus()
 					m.focus = FocusPath
+				} else if msg.X < execEnd {
+					if m.client != nil && !m.executing {
+						m.executing = true
+						return m, tea.Batch(m.spinner.Tick, m.execute())
+					}
+				} else if msg.X < fmtEnd {
+					m.prettyPrintBody()
+				} else if msg.X < histPrevEnd {
+					m.historyPrev()
+				} else if msg.X < histNextEnd {
+					m.historyNext()
 				}
-			} else if msg.X < paneWidth+1 {
+				return m, nil
+			} else if msg.X < paneInnerWidth+1 {
 				m.path.Blur()
 				m.body.Focus()
 				m.focus = FocusBody
@@ -227,6 +333,61 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.path.Blur()
 				m.body.Blur()
 				m.focus = FocusResponse
+
+				if m.searchActive && msg.Y >= m.height-4 {
+					relX := msg.X - paneInnerWidth - 3
+					searchInputEnd := 35
+					if relX > searchInputEnd {
+						text := m.searchInput.View()
+						btnStart := len(text) + 10
+						if len(m.searchMatches) > 0 {
+							prevEnd := btnStart + 4
+							nextEnd := prevEnd + 5
+							closeStart := nextEnd + 1
+							if relX >= btnStart && relX < prevEnd {
+								m.searchIdx--
+								if m.searchIdx < 0 {
+									m.searchIdx = len(m.searchMatches) - 1
+								}
+								m.response.GotoTop()
+								m.response.SetYOffset(m.searchMatches[m.searchIdx])
+							} else if relX >= prevEnd && relX < nextEnd {
+								m.searchIdx = (m.searchIdx + 1) % len(m.searchMatches)
+								m.response.GotoTop()
+								m.response.SetYOffset(m.searchMatches[m.searchIdx])
+							} else if relX >= closeStart {
+								m.searchActive = false
+								m.searchInput.Blur()
+							}
+						} else if relX >= btnStart {
+							m.searchActive = false
+							m.searchInput.Blur()
+						}
+					}
+				}
+			}
+			return m, nil
+		}
+
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			paneInnerWidth := (m.width - 5) / 2
+			topRowHeight := 3
+			scrollAmount := 3
+
+			if msg.Y > topRowHeight {
+				if msg.X < paneInnerWidth+2 {
+					if msg.Button == tea.MouseButtonWheelUp {
+						m.body.SetCursor(max(0, m.body.Line()-scrollAmount))
+					} else {
+						m.body.SetCursor(m.body.Line() + scrollAmount)
+					}
+				} else {
+					if msg.Button == tea.MouseButtonWheelUp {
+						m.response.SetYOffset(max(0, m.response.YOffset-scrollAmount))
+					} else {
+						m.response.SetYOffset(m.response.YOffset + scrollAmount)
+					}
+				}
 			}
 			return m, nil
 		}
@@ -319,6 +480,28 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 	m.body.SetValue(entry.Body)
 }
 
+func (m *WorkbenchModel) updateSearchMatches() {
+	query := strings.ToLower(m.searchInput.Value())
+	m.searchMatches = nil
+	m.searchIdx = 0
+
+	if query == "" {
+		return
+	}
+
+	lines := strings.Split(m.responseText, "\n")
+	for i, line := range lines {
+		if strings.Contains(strings.ToLower(line), query) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+
+	if len(m.searchMatches) > 0 {
+		m.response.GotoTop()
+		m.response.SetYOffset(m.searchMatches[0])
+	}
+}
+
 func (m WorkbenchModel) execute() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -331,25 +514,39 @@ func (m WorkbenchModel) execute() tea.Cmd {
 }
 
 func (m WorkbenchModel) View() string {
-	// Method + Path row
 	methodStyle := lipgloss.NewStyle().
 		Padding(0, 1).
 		Bold(true)
 	if m.focus == FocusMethod {
-		methodStyle = methodStyle.Background(ColorBlue).Foreground(ColorWhite)
+		methodStyle = methodStyle.Background(ColorBlue).Foreground(ColorOnAccent)
 	}
 	methodView := methodStyle.Render(methods[m.methodIdx] + " ▼")
 
-	pathStyle := lipgloss.NewStyle()
+	pathBorderColor := ColorGray
 	if m.focus == FocusPath {
-		pathStyle = pathStyle.Border(lipgloss.RoundedBorder()).BorderForeground(ColorBlue)
+		pathBorderColor = ColorBlue
 	}
+	pathStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(pathBorderColor)
 	pathView := pathStyle.Render(m.path.View())
 
-	topRow := lipgloss.JoinHorizontal(lipgloss.Center, methodView, " ", pathView)
+	btnStyle := lipgloss.NewStyle().Padding(0, 1).Background(ActiveBg)
+	execBtn := btnStyle.Render("▶ Run")
+	if m.executing {
+		execBtn = btnStyle.Render(m.spinner.View())
+	}
+	fmtBtn := btnStyle.Render("{ } Format")
+	histPrev := btnStyle.Render("◀")
+	histNext := btnStyle.Render("▶")
 
-	// Split panes
-	paneWidth := (m.width - 3) / 2
+	topRow := lipgloss.JoinHorizontal(lipgloss.Center,
+		methodView, " ", pathView, "  ",
+		execBtn, " ", fmtBtn, "  ",
+		histPrev, histNext)
+
+	// Split panes: account for borders (2 chars each pane) and divider (1 char)
+	// Total = 2 * (innerWidth + 2) + 1 = width
+	// innerWidth = (width - 5) / 2
+	paneInnerWidth := (m.width - 5) / 2
 
 	// Left pane - body
 	bodyBorder := lipgloss.RoundedBorder()
@@ -357,12 +554,15 @@ func (m WorkbenchModel) View() string {
 	if m.focus == FocusBody {
 		bodyBorderColor = ColorBlue
 	}
+	bodyPaneContent := lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.NewStyle().Bold(true).Render("Body"),
+		m.body.View())
 	bodyPane := lipgloss.NewStyle().
 		Border(bodyBorder).
 		BorderForeground(bodyBorderColor).
-		Width(paneWidth).
+		Width(paneInnerWidth).
 		Height(m.height - 6).
-		Render(m.body.View())
+		Render(bodyPaneContent)
 
 	// Right pane - response
 	responseBorder := lipgloss.RoundedBorder()
@@ -385,22 +585,77 @@ func (m WorkbenchModel) View() string {
 		responseHeader = m.spinner.View() + " Executing..."
 	}
 
+	responseContent := m.response.View()
+	if m.searchActive {
+		searchStatus := ""
+		if len(m.searchMatches) > 0 {
+			searchStatus = fmt.Sprintf(" %d/%d ", m.searchIdx+1, len(m.searchMatches))
+		} else if m.searchInput.Value() != "" {
+			searchStatus = " No matches "
+		}
+		navBtns := ""
+		if len(m.searchMatches) > 0 {
+			navBtns = " [◀] [▶]"
+		}
+		searchBar := lipgloss.NewStyle().
+			Background(ActiveBg).
+			Padding(0, 1).
+			Width(paneInnerWidth - 4).
+			Render("/" + m.searchInput.View() + searchStatus + navBtns + " [×]")
+		responseContent = lipgloss.JoinVertical(lipgloss.Left, responseContent, searchBar)
+	}
+
+	responsePaneContent := lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.NewStyle().Bold(true).Render(responseHeader),
+		responseContent)
+
 	responsePane := lipgloss.NewStyle().
 		Border(responseBorder).
 		BorderForeground(responseBorderColor).
-		Width(paneWidth).
+		Width(paneInnerWidth).
 		Height(m.height - 6).
-		Render(lipgloss.JoinVertical(lipgloss.Left,
-			lipgloss.NewStyle().Bold(true).Render(responseHeader),
-			m.response.View()))
+		Render(responsePaneContent)
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, bodyPane, " ", responsePane)
+	trimANSI := func(s string) string {
+		for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") {
+			s = strings.TrimSuffix(s, " ")
+			s = strings.TrimSuffix(s, "\x1b[0m")
+		}
+		return s + "\x1b[0m"
+	}
+	bodyLines := strings.Split(bodyPane, "\n")
+	responseLines := strings.Split(responsePane, "\n")
+	maxLines := len(bodyLines)
+	if len(responseLines) > maxLines {
+		maxLines = len(responseLines)
+	}
+	var paneLines []string
+	for i := 0; i < maxLines; i++ {
+		bl := ""
+		rl := ""
+		if i < len(bodyLines) {
+			bl = trimANSI(bodyLines[i])
+		}
+		if i < len(responseLines) {
+			rl = trimANSI(responseLines[i])
+		}
+		paneLines = append(paneLines, bl+" "+rl)
+	}
+	panes := strings.Join(paneLines, "\n")
 
 	// Status bar
 	validIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Render("✓ Valid JSON")
 	if !m.isValidJSON() {
 		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render("✗ Invalid JSON")
 	}
+
+	helpText := "Ctrl+E: Execute  Ctrl+M: Method  Ctrl+P: Pretty  Ctrl+F: Search"
+	if m.searchActive {
+		helpText = "n/N: Next/Prev match  Enter/Esc: Close search"
+	} else if m.focus == FocusResponse {
+		helpText = "Ctrl+F: Search  ↑↓: Scroll"
+	}
+
 	padding := m.width - 50
 	if padding < 0 {
 		padding = 0
@@ -408,9 +663,15 @@ func (m WorkbenchModel) View() string {
 	statusBar := lipgloss.JoinHorizontal(lipgloss.Center,
 		validIndicator,
 		strings.Repeat(" ", padding),
-		HelpStyle.Render("Ctrl+E: Execute  Ctrl+M: Method  Ctrl+P: Pretty"))
+		HelpStyle.Render(helpText))
 
-	return lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes, statusBar)
+	output := lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes, statusBar)
+
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " ")
+	}
+	return strings.Join(lines, "\n")
 }
 
 func highlightJSON(input string) string {

@@ -260,6 +260,28 @@ func (s *ClusterState) GetShardsForIndexAndNode(index, node string) []ShardInfo 
 			shards = append(shards, sh)
 		}
 	}
+	sort.Slice(shards, func(i, j int) bool {
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
+	return shards
+}
+
+func (s *ClusterState) GetUnassignedShardsForIndex(index string) []ShardInfo {
+	var shards []ShardInfo
+	for _, sh := range s.Shards {
+		if sh.Index == index && (sh.Node == "" || sh.State == "UNASSIGNED") {
+			shards = append(shards, sh)
+		}
+	}
+	sort.Slice(shards, func(i, j int) bool {
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
 	return shards
 }
 
