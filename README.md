@@ -24,6 +24,13 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap dsablic/tap
+brew install stoptail
+```
+
 ### From Releases
 
 Download the latest binary from [GitHub Releases](https://github.com/dsablic/stoptail/releases).
