@@ -384,3 +384,60 @@ func TestParseNodesStatsFielddataByIndexResponse(t *testing.T) {
 		t.Errorf("logs-2024-03 size = %d, want %d", indexSizes["logs-2024-03"], 3145728)
 	}
 }
+
+func TestParseTasksResponse(t *testing.T) {
+	raw := `{
+		"nodes": {
+			"node-id-1": {
+				"name": "es-node-1",
+				"tasks": {
+					"node-id-1:12345": {
+						"node": "node-id-1",
+						"id": 12345,
+						"type": "transport",
+						"action": "indices:data/write/reindex",
+						"description": "reindex from [source] to [dest]",
+						"start_time_in_millis": 1700000000000,
+						"running_time_in_nanos": 120000000000,
+						"cancellable": true,
+						"cancelled": false
+					},
+					"node-id-1:12346": {
+						"node": "node-id-1",
+						"id": 12346,
+						"type": "transport",
+						"action": "cluster:monitor/tasks/lists",
+						"start_time_in_millis": 1700000001000,
+						"running_time_in_nanos": 1000000,
+						"cancellable": false
+					}
+				}
+			}
+		}
+	}`
+
+	tasks, err := parseTasksResponse([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(tasks) != 1 {
+		t.Fatalf("got %d tasks, want 1 (only cancellable reindex)", len(tasks))
+	}
+
+	if tasks[0].ID != "node-id-1:12345" {
+		t.Errorf("ID = %q, want %q", tasks[0].ID, "node-id-1:12345")
+	}
+	if tasks[0].Action != "indices:data/write/reindex" {
+		t.Errorf("Action = %q, want %q", tasks[0].Action, "indices:data/write/reindex")
+	}
+	if tasks[0].Node != "es-node-1" {
+		t.Errorf("Node = %q, want %q", tasks[0].Node, "es-node-1")
+	}
+	if tasks[0].RunningTime != "2m 0s" {
+		t.Errorf("RunningTime = %q, want %q", tasks[0].RunningTime, "2m 0s")
+	}
+	if tasks[0].Cancellable != true {
+		t.Error("Cancellable should be true")
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"time"
 )
 
 type IndexInfo struct {
@@ -88,6 +89,17 @@ type NodesState struct {
 	Nodes            []NodeStats
 	FielddataByField []FielddataInfo
 	FielddataByIndex []FielddataByIndex
+}
+
+type TaskInfo struct {
+	ID            string
+	Action        string
+	Node          string
+	Index         string
+	RunningTime   string
+	RunningTimeMs int64
+	Description   string
+	Cancellable   bool
 }
 
 type ClusterState struct {
@@ -447,4 +459,79 @@ func (c *Client) FetchNodesState(ctx context.Context) (*NodesState, error) {
 	state.FielddataByIndex = fielddataByIndex
 
 	return state, nil
+}
+
+func parseTasksResponse(data []byte) ([]TaskInfo, error) {
+	var response struct {
+		Nodes map[string]struct {
+			Name  string `json:"name"`
+			Tasks map[string]struct {
+				Node             string `json:"node"`
+				ID               int64  `json:"id"`
+				Action           string `json:"action"`
+				Description      string `json:"description"`
+				RunningTimeNanos int64  `json:"running_time_in_nanos"`
+				Cancellable      bool   `json:"cancellable"`
+			} `json:"tasks"`
+		} `json:"nodes"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parsing tasks response: %w", err)
+	}
+
+	actionPrefixes := []string{
+		"indices:data/write/reindex",
+		"indices:data/write/update/byquery",
+		"indices:data/write/delete/byquery",
+		"indices:admin/forcemerge",
+		"cluster:admin/snapshot",
+	}
+
+	isTargetAction := func(action string) bool {
+		for _, prefix := range actionPrefixes {
+			if len(action) >= len(prefix) && action[:len(prefix)] == prefix {
+				return true
+			}
+		}
+		return false
+	}
+
+	var tasks []TaskInfo
+	for nodeID, nodeData := range response.Nodes {
+		for taskID, task := range nodeData.Tasks {
+			if !task.Cancellable || !isTargetAction(task.Action) {
+				continue
+			}
+
+			runningMs := task.RunningTimeNanos / 1_000_000
+			tasks = append(tasks, TaskInfo{
+				ID:            taskID,
+				Action:        task.Action,
+				Node:          nodeData.Name,
+				Description:   task.Description,
+				RunningTime:   formatDuration(runningMs),
+				RunningTimeMs: runningMs,
+				Cancellable:   task.Cancellable,
+			})
+			_ = nodeID
+		}
+	}
+
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].RunningTimeMs > tasks[j].RunningTimeMs
+	})
+
+	return tasks, nil
+}
+
+func formatDuration(ms int64) string {
+	d := time.Duration(ms) * time.Millisecond
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
 }
