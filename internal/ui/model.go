@@ -15,6 +15,7 @@ const (
 	TabOverview = iota
 	TabWorkbench
 	TabNodes
+	TabTasks
 )
 
 type Model struct {
@@ -24,6 +25,7 @@ type Model struct {
 	overview  OverviewModel
 	workbench WorkbenchModel
 	nodes     NodesModel
+	tasks     TasksModel
 	spinner   spinner.Model
 	activeTab int
 	width     int
@@ -37,6 +39,8 @@ type Model struct {
 
 type connectedMsg struct{ state *es.ClusterState }
 type nodesStateMsg struct{ state *es.NodesState }
+type tasksMsg struct{ tasks []es.TaskInfo }
+type taskCancelledMsg struct{ err error }
 type errMsg struct{ err error }
 
 func New(client *es.Client, cfg *config.Config) Model {
@@ -53,6 +57,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		overview:  NewOverview(),
 		workbench: wb,
 		nodes:     NewNodes(),
+		tasks:     NewTasks(),
 		spinner:   s,
 		activeTab: TabOverview,
 		loading:   true,
@@ -88,6 +93,25 @@ func (m Model) fetchNodes() tea.Cmd {
 	}
 }
 
+func (m Model) fetchTasks() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		tasks, err := m.client.FetchTasks(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return tasksMsg{tasks}
+	}
+}
+
+func (m Model) cancelTask(taskID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		err := m.client.CancelTask(ctx, taskID)
+		return taskCancelledMsg{err}
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -104,6 +128,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case nodesStateMsg:
 		m.loading = false
 		m.nodes.SetState(msg.state)
+	case tasksMsg:
+		m.loading = false
+		m.tasks.SetTasks(msg.tasks)
+	case taskCancelledMsg:
+		m.tasks.ClearConfirming()
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.loading = true
+			return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+		}
+	case taskCancelRequestMsg:
+		return m, m.cancelTask(msg.taskID)
 	case errMsg:
 		m.err = msg.err
 		m.loading = false
@@ -134,6 +171,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.quitting = true
 				return m, tea.Quit
 			}
+			if m.activeTab == TabTasks && m.tasks.confirming == "" {
+				m.quitting = true
+				return m, tea.Quit
+			}
 		case "tab":
 			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
@@ -148,6 +189,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
+				m.activeTab = TabTasks
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+			}
+			if m.activeTab == TabTasks && m.tasks.confirming == "" {
 				m.activeTab = TabOverview
 				return m, nil
 			}
@@ -159,6 +205,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if m.activeTab == TabOverview && !m.overview.filterActive {
+				m.activeTab = TabTasks
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+			}
+			if m.activeTab == TabTasks && m.tasks.confirming == "" {
 				m.activeTab = TabNodes
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
@@ -177,6 +228,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
+			if m.activeTab == TabTasks {
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+			}
 		case "enter":
 			// From overview, enter on index switches to workbench
 			if m.activeTab == TabOverview && !m.overview.filterActive {
@@ -194,11 +249,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overview.SetSize(msg.Width, msg.Height-4)
 		m.workbench.SetSize(msg.Width, msg.Height-4)
 		m.nodes.SetSize(msg.Width, msg.Height-4)
+		m.tasks.SetSize(msg.Width, msg.Height-4)
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
 				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
+				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Nodes"))
 
 				if msg.X < overviewWidth {
 					m.activeTab = TabOverview
@@ -206,11 +263,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else if msg.X < overviewWidth+workbenchWidth {
 					m.activeTab = TabWorkbench
 					m.workbench.Focus()
-				} else {
+				} else if msg.X < overviewWidth+workbenchWidth+nodesWidth {
 					m.activeTab = TabNodes
 					m.workbench.Blur()
 					m.loading = true
 					return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
+				} else {
+					m.activeTab = TabTasks
+					m.workbench.Blur()
+					m.loading = true
+					return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
 				}
 				return m, nil
 			}
@@ -231,6 +293,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.workbench, cmd = m.workbench.Update(delegateMsg)
 		case TabNodes:
 			m.nodes, cmd = m.nodes.Update(delegateMsg)
+		case TabTasks:
+			var cmd tea.Cmd
+			m.tasks, cmd = m.tasks.Update(delegateMsg)
+			if cmd != nil {
+				return m, cmd
+			}
 		}
 	}
 
@@ -264,6 +332,7 @@ func (m Model) View() string {
 	overviewTab := InactiveTabStyle.Render("Overview")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
 	nodesTab := InactiveTabStyle.Render("Nodes")
+	tasksTab := InactiveTabStyle.Render("Tasks")
 	switch m.activeTab {
 	case TabOverview:
 		overviewTab = ActiveTabStyle.Render("Overview")
@@ -271,8 +340,10 @@ func (m Model) View() string {
 		workbenchTab = ActiveTabStyle.Render("Workbench")
 	case TabNodes:
 		nodesTab = ActiveTabStyle.Render("Nodes")
+	case TabTasks:
+		tasksTab = ActiveTabStyle.Render("Tasks")
 	}
-	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, nodesTab)
+	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, nodesTab, tasksTab)
 
 	// Content
 	contentHeight := m.height - 4
@@ -298,6 +369,8 @@ func (m Model) View() string {
 			content = m.workbench.View()
 		case TabNodes:
 			content = m.nodes.View()
+		case TabTasks:
+			content = m.tasks.View()
 		}
 	}
 
@@ -305,11 +378,13 @@ func (m Model) View() string {
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
-		statusText = "q: quit  Tab: workbench  Shift+Tab: nodes  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
+		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
 	case TabWorkbench:
 		statusText = "Shift+Tab: overview  Tab: cycle focus  Ctrl+E: execute"
 	case TabNodes:
-		statusText = "q: quit  Tab: overview  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
+		statusText = "q: quit  Tab: tasks  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
+	case TabTasks:
+		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  c: cancel  ↑↓: select"
 	}
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 

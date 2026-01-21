@@ -140,10 +140,7 @@ func (m TasksModel) View() string {
 	b.WriteString(m.renderHeader(headers, colWidths))
 
 	maxVisible := m.maxVisibleRows()
-	endIdx := m.scrollY + maxVisible
-	if endIdx > len(m.tasks) {
-		endIdx = len(m.tasks)
-	}
+	endIdx := min(m.scrollY+maxVisible, len(m.tasks))
 
 	for i := m.scrollY; i < endIdx; i++ {
 		task := m.tasks[i]
