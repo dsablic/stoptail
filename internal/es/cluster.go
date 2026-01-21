@@ -577,3 +577,69 @@ func formatDuration(ms int64) string {
 	}
 	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
 }
+
+func parseMappingResponse(data []byte) ([]string, error) {
+	var response map[string]struct {
+		Mappings struct {
+			Properties map[string]interface{} `json:"properties"`
+		} `json:"mappings"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parsing mapping response: %w", err)
+	}
+
+	var fields []string
+	for _, indexData := range response {
+		fields = extractFields(indexData.Mappings.Properties, "")
+		break
+	}
+
+	return fields, nil
+}
+
+func extractFields(properties map[string]interface{}, prefix string) []string {
+	var fields []string
+
+	for name, prop := range properties {
+		fieldName := name
+		if prefix != "" {
+			fieldName = prefix + "." + name
+		}
+
+		propMap, ok := prop.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		if nested, ok := propMap["properties"].(map[string]interface{}); ok {
+			fields = append(fields, extractFields(nested, fieldName)...)
+		} else {
+			fields = append(fields, fieldName)
+		}
+	}
+
+	return fields
+}
+
+func (c *Client) FetchMapping(ctx context.Context, index string) ([]string, error) {
+	res, err := c.es.Indices.GetMapping(
+		c.es.Indices.GetMapping.WithContext(ctx),
+		c.es.Indices.GetMapping.WithIndex(index),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching mapping: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		return nil, fmt.Errorf("ES error %s", res.Status())
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading mapping response: %w", err)
+	}
+
+	return parseMappingResponse(body)
+}

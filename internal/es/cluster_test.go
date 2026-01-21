@@ -441,3 +441,45 @@ func TestParseTasksResponse(t *testing.T) {
 		t.Error("Cancellable should be true")
 	}
 }
+
+func TestParseMappingResponse(t *testing.T) {
+	raw := `{
+		"products": {
+			"mappings": {
+				"properties": {
+					"title": {"type": "text"},
+					"price": {"type": "float"},
+					"category": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "keyword"},
+							"id": {"type": "integer"}
+						}
+					},
+					"tags": {"type": "keyword"}
+				}
+			}
+		}
+	}`
+
+	fields, err := parseMappingResponse([]byte(raw))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	expected := []string{"title", "price", "category.name", "category.id", "tags"}
+	if len(fields) != len(expected) {
+		t.Fatalf("got %d fields, want %d: %v", len(fields), len(expected), fields)
+	}
+
+	fieldMap := make(map[string]bool)
+	for _, f := range fields {
+		fieldMap[f] = true
+	}
+
+	for _, e := range expected {
+		if !fieldMap[e] {
+			t.Errorf("missing field %q", e)
+		}
+	}
+}
