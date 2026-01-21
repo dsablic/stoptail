@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"github.com/labtiva/stoptail/internal/config"
 	"github.com/labtiva/stoptail/internal/es"
 	"github.com/labtiva/stoptail/internal/ui"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -21,60 +21,86 @@ var (
 	date    = "unknown"
 )
 
+var (
+	themeFlag  string
+	renderFlag string
+	widthFlag  int
+	heightFlag int
+)
+
 func main() {
-	versionFlag := flag.Bool("version", false, "Print version and exit")
-	themeFlag := flag.String("theme", "auto", "Color theme: auto, dark, light")
-	renderFlag := flag.String("render", "", "Render a tab and exit (overview, nodes, workbench)")
-	widthFlag := flag.Int("width", 120, "Terminal width for --render")
-	heightFlag := flag.Int("height", 40, "Terminal height for --render")
-	flag.Parse()
+	rootCmd := &cobra.Command{
+		Use:   "stoptail [cluster]",
+		Short: "Elasticsearch TUI - like elasticsearch-head but for your terminal",
+		Long: `stoptail is a terminal UI for Elasticsearch.
 
-	ui.SetTheme(*themeFlag)
+Connect to a cluster by URL, by name from ~/.stoptail/config.yaml,
+or via the ES_URL environment variable.
 
-	if *versionFlag {
-		fmt.Printf("stoptail %s", version)
-		if commit != "none" {
-			if len(commit) >= 7 {
-				fmt.Printf(" (%s)", commit[:7])
-			} else {
-				fmt.Printf(" (%s)", commit)
-			}
-		}
-		if date != "unknown" {
-			fmt.Printf(" built %s", date)
-		}
-		fmt.Println()
-		return
+Examples:
+  stoptail                              # Connect to localhost:9200
+  stoptail http://localhost:9200        # Connect by URL
+  stoptail https://user:pass@host:9200  # Connect with credentials
+  stoptail production                   # Connect to named cluster from config`,
+		Args:    cobra.MaximumNArgs(1),
+		Version: formatVersion(),
+		RunE:    run,
 	}
 
-	esURL, err := resolveESURL(flag.Args())
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
+	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, nodes, workbench)")
+	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
+	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
+
+	rootCmd.SetVersionTemplate("{{.Version}}\n")
+
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
+	}
+}
+
+func formatVersion() string {
+	v := fmt.Sprintf("stoptail %s", version)
+	if commit != "none" {
+		if len(commit) >= 7 {
+			v += fmt.Sprintf(" (%s)", commit[:7])
+		} else {
+			v += fmt.Sprintf(" (%s)", commit)
+		}
+	}
+	if date != "unknown" {
+		v += fmt.Sprintf(" built %s", date)
+	}
+	return v
+}
+
+func run(cmd *cobra.Command, args []string) error {
+	ui.SetTheme(themeFlag)
+
+	esURL, err := resolveESURL(args)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := config.ParseURL(esURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Config error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("config error: %w", err)
 	}
 
 	client, err := es.NewClient(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Client error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("client error: %w", err)
 	}
 
-	if *renderFlag != "" {
-		renderAndExit(client, *renderFlag, *widthFlag, *heightFlag)
-		return
+	if renderFlag != "" {
+		return renderAndExit(client, renderFlag, widthFlag, heightFlag)
 	}
 
 	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return err
 	}
+	return nil
 }
 
 func resolveESURL(args []string) (string, error) {
@@ -192,15 +218,14 @@ func (m clusterPickerModel) View() string {
 	return b.String()
 }
 
-func renderAndExit(client *es.Client, tab string, width, height int) {
+func renderAndExit(client *es.Client, tab string, width, height int) error {
 	ctx := context.Background()
 
 	switch tab {
 	case "overview":
 		state, err := client.FetchClusterState(ctx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching cluster state: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("fetching cluster state: %w", err)
 		}
 		overview := ui.NewOverview()
 		overview.SetSize(width, height)
@@ -210,8 +235,7 @@ func renderAndExit(client *es.Client, tab string, width, height int) {
 	case "nodes":
 		state, err := client.FetchNodesState(ctx)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error fetching nodes state: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("fetching nodes state: %w", err)
 		}
 		nodes := ui.NewNodes()
 		nodes.SetSize(width, height)
@@ -225,7 +249,7 @@ func renderAndExit(client *es.Client, tab string, width, height int) {
 		fmt.Println(workbench.View())
 
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown tab: %s (use: overview, nodes, workbench)\n", tab)
-		os.Exit(1)
+		return fmt.Errorf("unknown tab: %s (use: overview, nodes, workbench)", tab)
 	}
+	return nil
 }

@@ -40,7 +40,7 @@ go build .
 # Run with named cluster from ~/.stoptail/config.yaml
 ./stoptail production
 
-# Debug UI rendering without full TUI (flags must come before cluster name)
+# Debug UI rendering without full TUI
 ./stoptail --render overview --width 120 --height 40 [cluster]
 ./stoptail --render workbench --width 120 --height 30 [cluster]
 ./stoptail --render nodes --width 120 --height 40 [cluster]
@@ -212,8 +212,6 @@ Always verify UI changes using the render flag before committing:
 ./stoptail --render workbench --width 120 --height 30 [cluster]
 ./stoptail --render nodes --width 120 --height 40 [cluster]
 ```
-
-Note: Flags must come before the cluster name argument.
 
 This renders the UI to stdout without starting the full TUI, allowing visual verification of layout, borders, and styling.
 
