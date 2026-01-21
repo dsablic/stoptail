@@ -276,6 +276,38 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case FocusBody:
 			m.body, cmd = m.body.Update(msg)
 			cmds = append(cmds, cmd)
+
+			key := msg.String()
+			if !m.completion.Active {
+				if key == `"` || key == ":" || key == "shift+;" {
+					m.triggerCompletion()
+				}
+			} else {
+				switch key {
+				case "up":
+					m.completion.MoveUp()
+					return m, nil
+				case "down":
+					m.completion.MoveDown()
+					return m, nil
+				case "enter", "tab":
+					m.acceptCompletion()
+					return m, nil
+				case "esc":
+					m.completion.Close()
+					return m, nil
+				default:
+					if len(key) == 1 || key == "backspace" {
+						col := m.body.LineInfo().CharOffset
+						if col > m.completion.TriggerCol {
+							query := m.getCompletionQuery()
+							m.completion.Filter(query)
+						} else {
+							m.completion.Close()
+						}
+					}
+				}
+			}
 		case FocusResponse:
 			m.response, cmd = m.response.Update(msg)
 			cmds = append(cmds, cmd)
@@ -676,6 +708,107 @@ func (m WorkbenchModel) View() string {
 		lines[i] = strings.TrimRight(line, " ")
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *WorkbenchModel) triggerCompletion() {
+	text := m.body.Value()
+	lines := strings.Split(text, "\n")
+	row := m.body.Line()
+	col := m.body.LineInfo().CharOffset
+
+	textUpToCursor := ""
+	for i := 0; i < row && i < len(lines); i++ {
+		textUpToCursor += lines[i] + "\n"
+	}
+	if row < len(lines) {
+		if col <= len(lines[row]) {
+			textUpToCursor += lines[row][:col]
+		} else {
+			textUpToCursor += lines[row]
+		}
+	}
+
+	ctx := ParseJSONContext(textUpToCursor)
+
+	var items []CompletionItem
+	keywords := GetKeywordsForContext(ctx.Path)
+	items = append(items, keywords...)
+
+	if fields, ok := m.fieldCache[m.lastIndex]; ok {
+		items = append(items, fields...)
+	}
+
+	if len(items) == 0 {
+		return
+	}
+
+	m.completion.Active = true
+	m.completion.Items = items
+	m.completion.Filtered = items
+	m.completion.SelectedIdx = 0
+	m.completion.TriggerCol = col
+	m.completion.Query = ""
+}
+
+func (m *WorkbenchModel) getCompletionQuery() string {
+	lines := strings.Split(m.body.Value(), "\n")
+	row := m.body.Line()
+	col := m.body.LineInfo().CharOffset
+
+	if row >= len(lines) {
+		return ""
+	}
+
+	line := lines[row]
+	if col > len(line) {
+		col = len(line)
+	}
+
+	start := m.completion.TriggerCol
+	if start > col {
+		return ""
+	}
+
+	return line[start:col]
+}
+
+func (m *WorkbenchModel) acceptCompletion() {
+	selected := m.completion.Selected()
+	if selected == nil {
+		m.completion.Close()
+		return
+	}
+
+	query := m.getCompletionQuery()
+	insertion := selected.Text[len(query):]
+
+	lines := strings.Split(m.body.Value(), "\n")
+	row := m.body.Line()
+	col := m.body.LineInfo().CharOffset
+
+	if row < len(lines) {
+		line := lines[row]
+		if col <= len(line) {
+			lines[row] = line[:col] + insertion + `": ` + line[col:]
+		}
+	}
+
+	m.body.SetValue(strings.Join(lines, "\n"))
+	newCol := col + len(insertion) + 3
+	m.body.SetCursor(newCol)
+
+	m.completion.Close()
+}
+
+func (m *WorkbenchModel) extractIndexFromPath() string {
+	path := m.path.Value()
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for _, part := range parts {
+		if part != "" && !strings.HasPrefix(part, "_") {
+			return part
+		}
+	}
+	return ""
 }
 
 func highlightJSON(input string) string {
