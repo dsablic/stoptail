@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
@@ -61,6 +63,7 @@ type WorkbenchModel struct {
 	completion    CompletionState
 	fieldCache    map[string][]CompletionItem
 	lastIndex     string
+	copyMsg       string
 }
 
 type executeResultMsg struct {
@@ -179,6 +182,26 @@ func (m *WorkbenchModel) Blur() {
 	m.body.Blur()
 }
 
+func (m *WorkbenchModel) SetBody(body string) {
+	m.body.SetValue(body)
+}
+
+func (m *WorkbenchModel) copyToClipboard(text string) bool {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbcopy")
+	case "linux":
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	case "windows":
+		cmd = exec.Command("clip")
+	default:
+		return false
+	}
+	cmd.Stdin = strings.NewReader(text)
+	return cmd.Run() == nil
+}
+
 func (m WorkbenchModel) jsonError() (line, col int, msg string) {
 	val := m.body.Value()
 	if val == "" {
@@ -254,6 +277,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		m.copyMsg = ""
 		if m.searchActive {
 			switch msg.String() {
 			case "esc", "enter":
@@ -299,6 +323,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.executing = true
 				return m, tea.Batch(m.spinner.Tick, m.execute())
 			}
+		case "ctrl+y":
+			var text string
+			switch m.focus {
+			case FocusBody:
+				text = m.body.Value()
+			case FocusResponse:
+				text = m.responseText
+			}
+			if text != "" {
+				if m.copyToClipboard(text) {
+					m.copyMsg = "Copied!"
+				} else {
+					m.copyMsg = "Copy failed"
+				}
+			}
+			return m, nil
 		case "tab":
 			if m.focus == FocusBody {
 				if m.completion.Active {
@@ -335,9 +375,8 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		// Handle bracket auto-pairing in body
 		if m.focus == FocusBody {
 			if pair, ok := bracketPairs[msg.String()]; ok {
-				col := m.body.LineInfo().CharOffset
 				m.body.InsertString(msg.String() + pair)
-				m.body.SetCursor(col + 1)
+				m.body, _ = m.body.Update(tea.KeyMsg{Type: tea.KeyLeft})
 				return m, nil
 			}
 		}
@@ -673,7 +712,12 @@ func (m WorkbenchModel) View() string {
 	if m.focus == FocusBody {
 		bodyBorderColor = ColorBlue
 	}
+	errLine, errCol, errMsg := m.jsonError()
+
 	bodyContent := m.body.View()
+	if errMsg != "" {
+		bodyContent = m.overlayErrorMarker(bodyContent, errLine)
+	}
 	if m.completion.Active {
 		dropdown := m.renderCompletionDropdown()
 		bodyContent = m.overlayDropdown(bodyContent, dropdown)
@@ -767,8 +811,6 @@ func (m WorkbenchModel) View() string {
 	}
 	panes := strings.Join(paneLines, "\n")
 
-	// Status bar
-	errLine, errCol, errMsg := m.jsonError()
 	var validIndicator string
 	if errMsg == "" {
 		validIndicator = lipgloss.NewStyle().Foreground(ColorGreen).Render("✓ Valid JSON")
@@ -777,19 +819,25 @@ func (m WorkbenchModel) View() string {
 			fmt.Sprintf("✗ JSON error at %d:%d", errLine, errCol))
 	}
 
-	helpText := "Ctrl+Enter: Execute  Ctrl+F: Search"
+	copyIndicator := ""
+	if m.copyMsg != "" {
+		copyIndicator = "  " + lipgloss.NewStyle().Foreground(ColorGreen).Render(m.copyMsg)
+	}
+
+	helpText := "Ctrl+Enter: Execute  Ctrl+Y: Copy  Ctrl+F: Search"
 	if m.searchActive {
 		helpText = "n/N: Next/Prev match  Enter/Esc: Close search"
 	} else if m.focus == FocusResponse {
-		helpText = "Ctrl+F: Search  ↑↓: Scroll"
+		helpText = "Ctrl+Y: Copy  Ctrl+F: Search  ↑↓: Scroll"
 	}
 
-	padding := m.width - 50
+	padding := m.width - 60
 	if padding < 0 {
 		padding = 0
 	}
 	statusBar := lipgloss.JoinHorizontal(lipgloss.Center,
 		validIndicator,
+		copyIndicator,
 		strings.Repeat(" ", padding),
 		HelpStyle.Render(helpText))
 
@@ -924,6 +972,22 @@ func (m WorkbenchModel) renderCompletionDropdown() string {
 		Render(strings.Join(lines, "\n"))
 
 	return dropdown
+}
+
+func (m WorkbenchModel) overlayErrorMarker(bodyView string, errorLine int) string {
+	if errorLine <= 0 {
+		return bodyView
+	}
+
+	lines := strings.Split(bodyView, "\n")
+	if errorLine > len(lines) {
+		return bodyView
+	}
+
+	redIndicator := lipgloss.NewStyle().Foreground(ColorRed).Render("┃")
+	lines[errorLine-1] = strings.Replace(lines[errorLine-1], "┃", redIndicator, 1)
+
+	return strings.Join(lines, "\n")
 }
 
 func (m WorkbenchModel) overlayDropdown(bodyView, dropdown string) string {

@@ -40,6 +40,7 @@ func renderHelp(width, height int) string {
 			keys: [][]string{
 				{"Tab", "Trigger autocomplete / cycle focus"},
 				{"Ctrl+Enter", "Execute request"},
+				{"Ctrl+Y", "Copy body/response to clipboard"},
 				{"Up/Down", "Navigate completions"},
 				{"Enter/Tab", "Accept completion"},
 				{"Esc", "Dismiss completions"},

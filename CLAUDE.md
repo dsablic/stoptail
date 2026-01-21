@@ -43,6 +43,7 @@ go build .
 # Debug UI rendering without full TUI
 ./stoptail --render overview --width 120 --height 40 [cluster]
 ./stoptail --render workbench --width 120 --height 30 [cluster]
+./stoptail --render workbench --width 120 --height 20 --body '{"invalid": json}' [cluster]
 ./stoptail --render nodes --width 120 --height 40 [cluster]
 ```
 

@@ -19,22 +19,22 @@ const (
 )
 
 type Model struct {
-	client    *es.Client
-	cfg       *config.Config
-	cluster   *es.ClusterState
-	overview  OverviewModel
-	workbench WorkbenchModel
-	nodes     NodesModel
-	tasks     TasksModel
-	spinner   spinner.Model
-	activeTab int
-	width     int
-	height    int
-	connected bool
-	loading   bool
-	err       error
-	quitting  bool
-	showHelp  bool
+	client       *es.Client
+	cfg          *config.Config
+	cluster      *es.ClusterState
+	overview     OverviewModel
+	workbench    WorkbenchModel
+	nodes        NodesModel
+	tasks        TasksModel
+	spinner      spinner.Model
+	activeTab    int
+	width        int
+	height       int
+	connected    bool
+	loading      bool
+	err          error
+	quitting     bool
+	showHelp     bool
 }
 
 type connectedMsg struct{ state *es.ClusterState }

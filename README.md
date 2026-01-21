@@ -14,8 +14,9 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
 - **Workbench Tab**: Full request editor like Kibana Dev Tools
   - Support for GET, POST, PUT, DELETE, HEAD methods
   - JSON syntax highlighting in responses
-  - Real-time JSON validation
+  - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
+  - Bracket auto-pairing for `{}`, `[]`, and `""`
 - **Nodes Tab**: Node statistics with 4 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
@@ -141,6 +142,7 @@ stoptail stores data in `~/.stoptail/`:
 |-----|--------|
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+Enter` | Execute request |
+| `Ctrl+Y` | Copy body or response to clipboard |
 | `Up/Down` | Navigate completions (when open) |
 | `Enter/Tab` | Accept completion |
 | `Esc` | Dismiss completions |

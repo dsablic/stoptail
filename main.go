@@ -26,6 +26,7 @@ var (
 	renderFlag string
 	widthFlag  int
 	heightFlag int
+	bodyFlag   string
 )
 
 func main() {
@@ -51,6 +52,7 @@ Examples:
 	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, nodes, workbench)")
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
+	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
 
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
@@ -93,7 +95,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	if renderFlag != "" {
-		return renderAndExit(client, renderFlag, widthFlag, heightFlag)
+		return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag)
 	}
 
 	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
@@ -218,7 +220,7 @@ func (m clusterPickerModel) View() string {
 	return b.String()
 }
 
-func renderAndExit(client *es.Client, tab string, width, height int) error {
+func renderAndExit(client *es.Client, tab string, width, height int, body string) error {
 	ctx := context.Background()
 
 	switch tab {
@@ -246,6 +248,9 @@ func renderAndExit(client *es.Client, tab string, width, height int) error {
 		workbench := ui.NewWorkbench()
 		workbench.SetClient(client)
 		workbench.SetSize(width, height)
+		if body != "" {
+			workbench.SetBody(body)
+		}
 		fmt.Println(workbench.View())
 
 	default:
