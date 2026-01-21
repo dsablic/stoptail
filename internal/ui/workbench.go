@@ -179,12 +179,42 @@ func (m *WorkbenchModel) Blur() {
 	m.body.Blur()
 }
 
-func (m WorkbenchModel) isValidJSON() bool {
+func (m WorkbenchModel) jsonError() (line, col int, msg string) {
 	val := m.body.Value()
 	if val == "" {
-		return true
+		return 0, 0, ""
 	}
-	return json.Valid([]byte(val))
+
+	var js json.RawMessage
+	err := json.Unmarshal([]byte(val), &js)
+	if err == nil {
+		return 0, 0, ""
+	}
+
+	if syntaxErr, ok := err.(*json.SyntaxError); ok {
+		offset := int(syntaxErr.Offset)
+		line, col = offsetToLineCol(val, offset)
+		return line, col, syntaxErr.Error()
+	}
+
+	return 1, 1, err.Error()
+}
+
+func offsetToLineCol(text string, offset int) (line, col int) {
+	line = 1
+	col = 1
+	for i, ch := range text {
+		if i >= offset {
+			break
+		}
+		if ch == '\n' {
+			line++
+			col = 1
+		} else {
+			col++
+		}
+	}
+	return line, col
 }
 
 func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
@@ -738,9 +768,13 @@ func (m WorkbenchModel) View() string {
 	panes := strings.Join(paneLines, "\n")
 
 	// Status bar
-	validIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Render("✓ Valid JSON")
-	if !m.isValidJSON() {
-		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render("✗ Invalid JSON")
+	errLine, errCol, errMsg := m.jsonError()
+	var validIndicator string
+	if errMsg == "" {
+		validIndicator = lipgloss.NewStyle().Foreground(ColorGreen).Render("✓ Valid JSON")
+	} else {
+		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render(
+			fmt.Sprintf("✗ JSON error at %d:%d", errLine, errCol))
 	}
 
 	helpText := "Ctrl+Enter: Execute  Ctrl+F: Search"
