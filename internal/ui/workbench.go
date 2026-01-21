@@ -283,9 +283,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.acceptCompletion()
 				return m, nil
 			}
-			if m.focus == FocusBody {
-				return m, nil
-			}
 			m.cycleFocus()
 			return m, nil
 		case "esc":
