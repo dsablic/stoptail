@@ -2,6 +2,8 @@
 
 A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go and the [Charm](https://charm.sh) stack.
 
+![stoptail demo](demo.gif)
+
 ## Features
 
 - **Overview Tab**: Visual shard grid showing nodes vs indices with colored shard boxes
