@@ -629,7 +629,7 @@ func (m WorkbenchModel) View() string {
 	bodyContent := m.body.View()
 	if m.completion.Active {
 		dropdown := m.renderCompletionDropdown()
-		bodyContent = lipgloss.JoinVertical(lipgloss.Left, bodyContent, dropdown)
+		bodyContent = m.overlayDropdown(bodyContent, dropdown)
 	}
 	bodyPaneContent := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render("Body"),
@@ -887,6 +887,26 @@ func (m WorkbenchModel) renderCompletionDropdown() string {
 		Render(strings.Join(lines, "\n"))
 
 	return dropdown
+}
+
+func (m WorkbenchModel) overlayDropdown(bodyView, dropdown string) string {
+	if dropdown == "" {
+		return bodyView
+	}
+
+	bodyLines := strings.Split(bodyView, "\n")
+	dropdownLines := strings.Split(dropdown, "\n")
+
+	dropdownHeight := len(dropdownLines)
+	if dropdownHeight >= len(bodyLines) {
+		return dropdown
+	}
+
+	result := make([]string, len(bodyLines))
+	copy(result, bodyLines[:len(bodyLines)-dropdownHeight])
+	copy(result[len(bodyLines)-dropdownHeight:], dropdownLines)
+
+	return strings.Join(result, "\n")
 }
 
 func highlightJSON(input string) string {
