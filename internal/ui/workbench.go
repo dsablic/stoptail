@@ -50,6 +50,9 @@ type WorkbenchModel struct {
 	searchInput   textinput.Model
 	searchMatches []int
 	searchIdx     int
+	completion    CompletionState
+	fieldCache    map[string][]CompletionItem
+	lastIndex     string
 }
 
 type executeResultMsg struct {
@@ -120,6 +123,7 @@ func NewWorkbench() WorkbenchModel {
 		historyIdx:  -1,
 		spinner:     s,
 		searchInput: search,
+		fieldCache:  make(map[string][]CompletionItem),
 	}
 }
 

@@ -1,5 +1,7 @@
 package ui
 
+import "strings"
+
 type CompletionItem struct {
 	Text string
 	Kind string
@@ -179,4 +181,55 @@ func GetKeywordsForContext(path []string) []CompletionItem {
 		}
 	}
 	return dslKeywords[""]
+}
+
+type CompletionState struct {
+	Active      bool
+	Items       []CompletionItem
+	Filtered    []CompletionItem
+	SelectedIdx int
+	TriggerCol  int
+	Query       string
+}
+
+func (c *CompletionState) Filter(query string) {
+	c.Query = query
+	c.Filtered = nil
+	c.SelectedIdx = 0
+	query = strings.ToLower(query)
+	for _, item := range c.Items {
+		if strings.HasPrefix(strings.ToLower(item.Text), query) {
+			c.Filtered = append(c.Filtered, item)
+		}
+	}
+	if len(c.Filtered) == 0 {
+		c.Active = false
+	}
+}
+
+func (c *CompletionState) MoveUp() {
+	if c.SelectedIdx > 0 {
+		c.SelectedIdx--
+	}
+}
+
+func (c *CompletionState) MoveDown() {
+	if c.SelectedIdx < len(c.Filtered)-1 {
+		c.SelectedIdx++
+	}
+}
+
+func (c *CompletionState) Selected() *CompletionItem {
+	if c.SelectedIdx >= 0 && c.SelectedIdx < len(c.Filtered) {
+		return &c.Filtered[c.SelectedIdx]
+	}
+	return nil
+}
+
+func (c *CompletionState) Close() {
+	c.Active = false
+	c.Items = nil
+	c.Filtered = nil
+	c.SelectedIdx = 0
+	c.Query = ""
 }
