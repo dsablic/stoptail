@@ -23,36 +23,33 @@ Type "l"
 Sleep 400ms
 Type "l"
 Sleep 400ms
-Type "j"
-Sleep 400ms
-Type "j"
-Sleep 400ms
 
 # Filter indices
 Type "/"
 Sleep 300ms
 Type "logs"
 Sleep 1s
-Escape
-Sleep 500ms
 
 # Clear filter
 Escape
+Sleep 500ms
+Escape
 Sleep 1s
 
-# Switch to Workbench tab
+# Switch to Workbench tab (focus is automatically on path)
 Tab
 Sleep 1s
 
-# Focus path input
-Tab
-Sleep 300ms
-Type "/products/_search"
+# Go to start of path and prepend "/products" (default path is /_search)
+Ctrl+a
+Type "/products"
 Sleep 500ms
 
-# Add request body
+# Tab to body, clear it, then type query
 Tab
 Sleep 300ms
+Ctrl+l
+Sleep 200ms
 Type@50ms '{"query":{"match_all":{}},"size":5}'
 Sleep 500ms
 
@@ -60,7 +57,11 @@ Sleep 500ms
 Ctrl+e
 Sleep 2s
 
-# Switch to Nodes tab
+# Tab to response (focus moves from body to response)
+Tab
+Sleep 300ms
+
+# Tab to Nodes (from response, global Tab works)
 Tab
 Sleep 1s
 

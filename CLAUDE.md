@@ -217,6 +217,34 @@ Note: Flags must come before the cluster name argument.
 
 This renders the UI to stdout without starting the full TUI, allowing visual verification of layout, borders, and styling.
 
+### Verify Demo GIF Before Committing
+
+When modifying `demo.tape`, always verify the generated `demo.gif` before committing:
+
+1. **Regenerate the demo**: `vhs demo.tape`
+2. **Extract frames for verification**:
+   ```bash
+   mkdir -p /tmp/demo-frames
+   ffmpeg -i demo.gif -vf "select=not(mod(n\\,50))" -vsync vfr /tmp/demo-frames/frame_%03d.png
+   ```
+3. **Check key frames** to verify:
+   - Overview tab shows `es-node-1` (not Docker container ID)
+   - Filter shows filtered indices
+   - Workbench shows correct path (`/products/_search`) and 200 response
+   - Nodes tab shows all 4 views (Memory, Disk, Index, Field)
+   - Help overlay displays correctly
+
+**Common demo.tape issues**:
+- Tab from Overview goes to Workbench with focus on path (no extra Tab needed)
+- Path input has default `/_search` - use `Ctrl+a` to go to start, then type `/products` to prepend
+- Body input has default `{}` - use `Ctrl+l` to clear before typing query
+- After typing in body, Tab cycles to response, then another Tab switches to Nodes tab
+
+**Keep demo generic**:
+- Use `http://localhost:9200` URL directly (not cluster names from config)
+- Use `Hide`/`Show` to hide shell prompt (avoids showing username/machine)
+- ES node should be named `es-node-1` (set via `node.name` in docker-compose.yml)
+
 ## Releasing
 
 Releases are automated via GitHub Actions + goreleaser:

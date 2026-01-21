@@ -3,6 +3,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.2.4
     container_name: stoptail-es
     environment:
+      - node.name=es-node-1
       - discovery.type=single-node
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
