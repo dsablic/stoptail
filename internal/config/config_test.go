@@ -65,14 +65,43 @@ func TestParseURL(t *testing.T) {
 }
 
 func TestMaskedURL(t *testing.T) {
-	cfg := &Config{
-		Host:     "https://localhost:9200",
-		Username: "elastic",
-		Password: "secret",
+	tests := []struct {
+		name string
+		cfg  *Config
+		want string
+	}{
+		{
+			name: "with username and password",
+			cfg: &Config{
+				Host:     "https://localhost:9200",
+				Username: "elastic",
+				Password: "secret",
+			},
+			want: "elastic:***@localhost:9200",
+		},
+		{
+			name: "without credentials",
+			cfg: &Config{
+				Host: "https://localhost:9200",
+			},
+			want: "localhost:9200",
+		},
+		{
+			name: "from ParseURL with embedded credentials",
+			cfg: func() *Config {
+				c, _ := ParseURL("https://myuser:mypass@es.example.com:9200")
+				return c
+			}(),
+			want: "myuser:***@es.example.com:9200",
+		},
 	}
-	got := cfg.MaskedURL()
-	want := "elastic:***@localhost:9200"
-	if got != want {
-		t.Errorf("MaskedURL() = %q, want %q", got, want)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.cfg.MaskedURL()
+			if got != tt.want {
+				t.Errorf("MaskedURL() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
