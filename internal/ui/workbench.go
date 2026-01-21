@@ -829,21 +829,7 @@ func (m *WorkbenchModel) acceptCompletion() {
 	insertion := selected.Text[len(query):]
 	suffix := `": `
 
-	lines := strings.Split(m.body.Value(), "\n")
-	row := m.body.Line()
-	col := m.body.LineInfo().CharOffset
-
-	if row < len(lines) {
-		line := lines[row]
-		if col <= len(line) {
-			lines[row] = line[:col] + insertion + suffix + line[col:]
-		}
-	}
-
-	m.body.SetValue(strings.Join(lines, "\n"))
-	newCol := col + len(insertion) + len(suffix)
-	m.body.SetCursor(newCol)
-
+	m.body.InsertString(insertion + suffix)
 	m.completion.Close()
 }
 
