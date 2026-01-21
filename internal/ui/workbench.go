@@ -25,6 +25,8 @@ const (
 	FocusPath
 	FocusBody
 	FocusResponse
+
+	completionMaxVisible = 8
 )
 
 var methods = []string{"GET", "POST", "PUT", "DELETE", "HEAD"}
@@ -57,6 +59,11 @@ type WorkbenchModel struct {
 
 type executeResultMsg struct {
 	result es.RequestResult
+}
+
+type mappingResultMsg struct {
+	index  string
+	fields []string
 }
 
 func NewWorkbench() WorkbenchModel {
@@ -198,6 +205,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		m.response.GotoTop()
 		return m, nil
 
+	case mappingResultMsg:
+		items := make([]CompletionItem, len(msg.fields))
+		for i, f := range msg.fields {
+			items[i] = CompletionItem{Text: f, Kind: "field"}
+		}
+		m.fieldCache[msg.index] = items
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.searchActive {
 			switch msg.String() {
@@ -273,6 +288,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case FocusPath:
 			m.path, cmd = m.path.Update(msg)
 			cmds = append(cmds, cmd)
+			if cmd := m.checkIndexChange(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		case FocusBody:
 			m.body, cmd = m.body.Update(msg)
 			cmds = append(cmds, cmd)
@@ -547,6 +565,31 @@ func (m WorkbenchModel) execute() tea.Cmd {
 		result := m.client.Request(ctx, method, path, body)
 		return executeResultMsg{result}
 	}
+}
+
+func (m WorkbenchModel) fetchMapping(index string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return nil
+		}
+		ctx := context.Background()
+		fields, err := m.client.FetchMapping(ctx, index)
+		if err != nil {
+			return nil
+		}
+		return mappingResultMsg{index: index, fields: fields}
+	}
+}
+
+func (m *WorkbenchModel) checkIndexChange() tea.Cmd {
+	index := m.extractIndexFromPath()
+	if index != "" && index != m.lastIndex {
+		m.lastIndex = index
+		if _, ok := m.fieldCache[index]; !ok {
+			return m.fetchMapping(index)
+		}
+	}
+	return nil
 }
 
 func (m WorkbenchModel) View() string {
@@ -826,10 +869,9 @@ func (m WorkbenchModel) renderCompletionDropdown() string {
 		return ""
 	}
 
-	maxVisible := 8
 	items := m.completion.Filtered
-	if len(items) > maxVisible {
-		items = items[:maxVisible]
+	if len(items) > completionMaxVisible {
+		items = items[:completionMaxVisible]
 	}
 
 	var lines []string
