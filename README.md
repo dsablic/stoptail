@@ -121,10 +121,13 @@ stoptail stores data in `~/.stoptail/`:
 | Key | Action |
 |-----|--------|
 | `/` | Focus filter input |
-| `Esc` | Clear filter / unfocus |
+| `Esc` | Clear all filters |
 | `Left/Right` | Select index (column) |
 | `Up/Down` | Scroll nodes (rows) |
 | `1-9` | Toggle alias filter buttons |
+| `U` | Show only UNASSIGNED shards |
+| `R` | Show only RELOCATING shards |
+| `I` | Show only INITIALIZING shards |
 | `Enter` | Open selected index in Workbench |
 
 ### Workbench Tab

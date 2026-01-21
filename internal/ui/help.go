@@ -28,10 +28,11 @@ func renderHelp(width, height int) string {
 			header: "Overview",
 			keys: [][]string{
 				{"/", "Focus filter"},
-				{"Esc", "Clear filter"},
+				{"Esc", "Clear all filters"},
 				{"up/down/left/right", "Navigate grid"},
 				{"Enter", "Open index in Workbench"},
 				{"1-9", "Toggle alias filters"},
+				{"U/R/I", "Show Unassigned/Relocating/Initializing"},
 			},
 		},
 		{

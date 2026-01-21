@@ -12,15 +12,16 @@ import (
 )
 
 type OverviewModel struct {
-	cluster       *es.ClusterState
-	filter        textinput.Model
-	filterActive  bool
-	aliasFilters  map[string]bool
-	scrollX       int
-	scrollY       int
-	selectedIndex int
-	width         int
-	height        int
+	cluster          *es.ClusterState
+	filter           textinput.Model
+	filterActive     bool
+	aliasFilters     map[string]bool
+	shardStateFilter string
+	scrollX          int
+	scrollY          int
+	selectedIndex    int
+	width            int
+	height           int
 }
 
 func NewOverview() OverviewModel {
@@ -67,7 +68,32 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		case "esc":
 			m.filter.SetValue("")
 			m.aliasFilters = make(map[string]bool)
+			m.shardStateFilter = ""
 			m.selectedIndex = 0
+		case "U":
+			if m.shardStateFilter == "UNASSIGNED" {
+				m.shardStateFilter = ""
+			} else {
+				m.shardStateFilter = "UNASSIGNED"
+			}
+			m.selectedIndex = 0
+			m.scrollX = 0
+		case "R":
+			if m.shardStateFilter == "RELOCATING" {
+				m.shardStateFilter = ""
+			} else {
+				m.shardStateFilter = "RELOCATING"
+			}
+			m.selectedIndex = 0
+			m.scrollX = 0
+		case "I":
+			if m.shardStateFilter == "INITIALIZING" {
+				m.shardStateFilter = ""
+			} else {
+				m.shardStateFilter = "INITIALIZING"
+			}
+			m.selectedIndex = 0
+			m.scrollX = 0
 		case "up", "k":
 			if m.scrollY > 0 {
 				m.scrollY--
@@ -170,6 +196,12 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 			}
 		}
 
+		if m.shardStateFilter != "" {
+			if !m.indexHasShardsInState(idx.Name, m.shardStateFilter) {
+				continue
+			}
+		}
+
 		filtered = append(filtered, idx)
 	}
 
@@ -178,6 +210,18 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 	})
 
 	return filtered
+}
+
+func (m OverviewModel) indexHasShardsInState(indexName, state string) bool {
+	if m.cluster == nil {
+		return false
+	}
+	for _, sh := range m.cluster.Shards {
+		if sh.Index == indexName && sh.State == state {
+			return true
+		}
+	}
+	return false
 }
 
 func (m OverviewModel) SelectedIndex() string {
@@ -226,6 +270,12 @@ func (m OverviewModel) View() string {
 		b.WriteString(filterStyle.Render("Filter: " + m.filter.Value() + " (/ to edit, Esc to clear)"))
 	} else {
 		b.WriteString(filterStyle.Render("/ to filter"))
+	}
+
+	// Shard state filter indicator
+	if m.shardStateFilter != "" {
+		stateStyle := lipgloss.NewStyle().Padding(0, 1).Background(ColorYellow).Foreground(ColorOnAccent)
+		b.WriteString(stateStyle.Render("Showing: " + m.shardStateFilter + " (Esc to clear)"))
 	}
 
 	// Alias toggles
