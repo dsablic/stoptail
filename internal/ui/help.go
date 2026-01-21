@@ -54,6 +54,15 @@ func renderHelp(width, height int) string {
 				{"r", "Refresh"},
 			},
 		},
+		{
+			header: "Tasks",
+			keys: [][]string{
+				{"c", "Cancel selected task"},
+				{"y/n", "Confirm/abort cancel"},
+				{"up/down", "Select task"},
+				{"r", "Refresh"},
+			},
+		},
 	}
 
 	keyStyle := lipgloss.NewStyle().Foreground(ColorBlue).Width(20)
