@@ -182,7 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.workbench.Focus()
 				return m, nil
 			}
-			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
+			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
 				m.activeTab = TabNodes
 				m.workbench.Blur()
 				m.loading = true

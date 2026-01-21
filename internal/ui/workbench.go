@@ -138,6 +138,10 @@ func (m *WorkbenchModel) SetClient(client *es.Client) {
 	m.client = client
 }
 
+func (m WorkbenchModel) HasActiveInput() bool {
+	return m.focus == FocusPath || m.focus == FocusBody
+}
+
 func (m *WorkbenchModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -275,6 +279,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.historyNext()
 			return m, nil
 		case "tab":
+			if m.completion.Active {
+				m.acceptCompletion()
+				return m, nil
+			}
+			if m.focus == FocusBody {
+				return m, nil
+			}
 			m.cycleFocus()
 			return m, nil
 		case "esc":
