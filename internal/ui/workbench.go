@@ -31,6 +31,12 @@ const (
 
 var methods = []string{"GET", "POST", "PUT", "DELETE", "HEAD"}
 
+var bracketPairs = map[string]string{
+	"{": "}",
+	"[": "]",
+	`"`: `"`,
+}
+
 type WorkbenchModel struct {
 	client        *es.Client
 	methodIdx     int
@@ -292,6 +298,16 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, nil
 			case "enter":
 				m.acceptCompletion()
+				return m, nil
+			}
+		}
+
+		// Handle bracket auto-pairing in body
+		if m.focus == FocusBody {
+			if pair, ok := bracketPairs[msg.String()]; ok {
+				col := m.body.LineInfo().CharOffset
+				m.body.InsertString(msg.String() + pair)
+				m.body.SetCursor(col + 1)
 				return m, nil
 			}
 		}
