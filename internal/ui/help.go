@@ -44,6 +44,10 @@ func renderHelp(width, height int) string {
 				{"Ctrl+L", "Clear body"},
 				{"Ctrl+P", "Pretty-print JSON"},
 				{"Ctrl+Up/Down", "Browse history"},
+				{`"/:`, "Trigger autocomplete"},
+				{"Up/Down", "Navigate completions"},
+				{"Enter/Tab", "Accept completion"},
+				{"Esc", "Dismiss completions"},
 			},
 		},
 		{
