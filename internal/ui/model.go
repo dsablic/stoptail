@@ -179,7 +179,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				m.activeTab = TabWorkbench
-				m.workbench.Focus()
 				return m, nil
 			}
 			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
@@ -216,7 +215,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.activeTab == TabNodes {
 				m.activeTab = TabWorkbench
-				m.workbench.Focus()
 				return m, nil
 			}
 		case "r":
@@ -262,7 +260,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.workbench.Blur()
 				} else if msg.X < overviewWidth+workbenchWidth {
 					m.activeTab = TabWorkbench
-					m.workbench.Focus()
 				} else if msg.X < overviewWidth+workbenchWidth+nodesWidth {
 					m.activeTab = TabNodes
 					m.workbench.Blur()
@@ -378,9 +375,9 @@ func (m Model) View() string {
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
-		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ↑↓←→: scroll  Enter: open index"
+		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select index  ↑↓: scroll  Enter: open"
 	case TabWorkbench:
-		statusText = "Shift+Tab: overview  Tab: cycle focus  Ctrl+E: execute"
+		statusText = "q: quit  Tab: workbench/autocomplete  Shift+Tab: overview  Ctrl+Enter: execute  Ctrl+Y: copy  Ctrl+F: search"
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
 	case TabTasks:

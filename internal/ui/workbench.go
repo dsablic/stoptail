@@ -342,7 +342,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "tab":
 			if m.focus == FocusBody {
 				if m.completion.Active {
-					m.acceptCompletion()
+					m.completion.MoveDown()
 					return m, nil
 				}
 				m.triggerCompletion()
@@ -350,6 +350,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 			m.cycleFocus()
 			return m, nil
+		case "shift+tab":
+			if m.focus == FocusBody && m.completion.Active {
+				m.completion.MoveUp()
+				return m, nil
+			}
 		case "esc":
 			m.path.Blur()
 			m.body.Blur()
@@ -722,8 +727,19 @@ func (m WorkbenchModel) View() string {
 		dropdown := m.renderCompletionDropdown()
 		bodyContent = m.overlayDropdown(bodyContent, dropdown)
 	}
+
+	bodyHeaderText := "Body"
+	var bodyValidation string
+	if errMsg == "" {
+		bodyValidation = lipgloss.NewStyle().Foreground(ColorGreen).Render("✓")
+	} else {
+		bodyValidation = lipgloss.NewStyle().Foreground(ColorRed).Render(
+			fmt.Sprintf("✗ %d:%d", errLine, errCol))
+	}
+	bodyHeader := lipgloss.NewStyle().Bold(true).Render(bodyHeaderText) + "  " + bodyValidation
+
 	bodyPaneContent := lipgloss.JoinVertical(lipgloss.Left,
-		lipgloss.NewStyle().Bold(true).Render("Body"),
+		bodyHeader,
 		bodyContent)
 	bodyPane := lipgloss.NewStyle().
 		Border(bodyBorder).
@@ -811,37 +827,7 @@ func (m WorkbenchModel) View() string {
 	}
 	panes := strings.Join(paneLines, "\n")
 
-	var validIndicator string
-	if errMsg == "" {
-		validIndicator = lipgloss.NewStyle().Foreground(ColorGreen).Render("✓ Valid JSON")
-	} else {
-		validIndicator = lipgloss.NewStyle().Foreground(ColorRed).Render(
-			fmt.Sprintf("✗ JSON error at %d:%d", errLine, errCol))
-	}
-
-	copyIndicator := ""
-	if m.copyMsg != "" {
-		copyIndicator = "  " + lipgloss.NewStyle().Foreground(ColorGreen).Render(m.copyMsg)
-	}
-
-	helpText := "Ctrl+Enter: Execute  Ctrl+Y: Copy  Ctrl+F: Search"
-	if m.searchActive {
-		helpText = "n/N: Next/Prev match  Enter/Esc: Close search"
-	} else if m.focus == FocusResponse {
-		helpText = "Ctrl+Y: Copy  Ctrl+F: Search  ↑↓: Scroll"
-	}
-
-	padding := m.width - 60
-	if padding < 0 {
-		padding = 0
-	}
-	statusBar := lipgloss.JoinHorizontal(lipgloss.Center,
-		validIndicator,
-		copyIndicator,
-		strings.Repeat(" ", padding),
-		HelpStyle.Render(helpText))
-
-	output := lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes, statusBar)
+	output := lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes)
 
 	lines := strings.Split(output, "\n")
 	for i, line := range lines {
