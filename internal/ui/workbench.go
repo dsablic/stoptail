@@ -264,8 +264,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, tea.Batch(m.spinner.Tick, m.execute())
 			}
 		case "tab":
-			if m.completion.Active {
-				m.acceptCompletion()
+			if m.focus == FocusBody {
+				if m.completion.Active {
+					m.acceptCompletion()
+					return m, nil
+				}
+				m.triggerCompletion()
 				return m, nil
 			}
 			m.cycleFocus()
@@ -273,7 +277,23 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "esc":
 			m.path.Blur()
 			m.body.Blur()
+			m.completion.Close()
 			return m, nil
+		}
+
+		// Handle completion keys before passing to textarea
+		if m.focus == FocusBody && m.completion.Active {
+			switch msg.String() {
+			case "up":
+				m.completion.MoveUp()
+				return m, nil
+			case "down":
+				m.completion.MoveDown()
+				return m, nil
+			case "enter":
+				m.acceptCompletion()
+				return m, nil
+			}
 		}
 
 		// Delegate to focused component
@@ -288,34 +308,15 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.body, cmd = m.body.Update(msg)
 			cmds = append(cmds, cmd)
 
-			key := msg.String()
-			if !m.completion.Active {
-				if key == `"` || key == ":" || key == "shift+;" {
-					m.triggerCompletion()
-				}
-			} else {
-				switch key {
-				case "up":
-					m.completion.MoveUp()
-					return m, nil
-				case "down":
-					m.completion.MoveDown()
-					return m, nil
-				case "enter", "tab":
-					m.acceptCompletion()
-					return m, nil
-				case "esc":
-					m.completion.Close()
-					return m, nil
-				default:
-					if len(key) == 1 || key == "backspace" {
-						col := m.body.LineInfo().CharOffset
-						if col > m.completion.TriggerCol {
-							query := m.getCompletionQuery()
-							m.completion.Filter(query)
-						} else {
-							m.completion.Close()
-						}
+			if m.completion.Active {
+				key := msg.String()
+				if len(key) == 1 || key == "backspace" {
+					col := m.body.LineInfo().CharOffset
+					if col > m.completion.TriggerCol {
+						query := m.getCompletionQuery()
+						m.completion.Filter(query)
+					} else {
+						m.completion.Close()
 					}
 				}
 			}

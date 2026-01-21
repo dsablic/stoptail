@@ -139,9 +139,8 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
-| `Tab` | Cycle focus (method, path, body, response) |
+| `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+Enter` | Execute request |
-| `"` or `:` | Trigger autocomplete |
 | `Up/Down` | Navigate completions (when open) |
 | `Enter/Tab` | Accept completion |
 | `Esc` | Dismiss completions |
