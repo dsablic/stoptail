@@ -48,18 +48,6 @@ changelog:
       - '^test:'
       - '^chore:'
 
-brews:
-  - repository:
-      owner: dsablic
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: "https://github.com/dsablic/stoptail"
-    description: "Elasticsearch TUI - like elasticsearch-head but for your terminal"
-    license: "MIT"
-    commit_author:
-      name: goreleaserbot
-      email: bot@goreleaser.com
-
 nfpms:
   - package_name: stoptail
     homepage: "https://github.com/dsablic/stoptail"
