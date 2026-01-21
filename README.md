@@ -20,6 +20,10 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Disk: disk usage, shard counts, versions
   - Fielddata by Index: top 20 indices by fielddata memory
   - Fielddata by Field: field-level fielddata breakdown
+- **Tasks Tab**: Monitor long-running operations
+  - Reindex, update-by-query, delete-by-query tracking
+  - Force merge and snapshot operations
+  - Cancel with confirmation
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
 - **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`
 - **Help Overlay**: Press `?` for keybindings
@@ -149,6 +153,15 @@ stoptail stores data in `~/.stoptail/`:
 | `3` | Fielddata by Index view |
 | `4` | Fielddata by Field view |
 | `Up/Down` | Scroll |
+
+### Tasks Tab
+
+| Key | Action |
+|-----|--------|
+| `c` | Cancel selected task |
+| `y` | Confirm cancel |
+| `n` / `Esc` | Abort cancel |
+| `Up/Down` | Select task |
 
 ## Requirements
 
