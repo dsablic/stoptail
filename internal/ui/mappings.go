@@ -296,7 +296,7 @@ func (m MappingsModel) View() string {
 	}
 
 	var paneLines []string
-	for i := 0; i < maxLines; i++ {
+	for i := range maxLines {
 		left := ""
 		right := ""
 		if i < len(leftLines) {
@@ -409,15 +409,16 @@ func (m MappingsModel) renderMappingsPane(width int) string {
 	b.WriteString("\n")
 
 	var fieldLines []string
-	if m.treeView {
-		fieldLines = m.renderFieldsTree(m.mappings.Fields, 0, width-4)
-	} else {
-		fieldLines = m.renderFieldsFlat(width - 4)
-	}
 
 	if len(m.analyzers) > 0 {
-		fieldLines = append(fieldLines, "")
 		fieldLines = append(fieldLines, m.renderAnalyzers(width-4)...)
+		fieldLines = append(fieldLines, "")
+	}
+
+	if m.treeView {
+		fieldLines = append(fieldLines, m.renderFieldsTree(m.mappings.Fields, 0, width-4)...)
+	} else {
+		fieldLines = append(fieldLines, m.renderFieldsFlat(width-4)...)
 	}
 
 	maxVisible := m.height - 8
