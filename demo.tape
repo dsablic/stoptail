@@ -39,53 +39,60 @@ Sleep 500ms
 Escape
 Sleep 1s
 
-# Go to Mappings tab directly (press 'm')
-Type "m"
-Sleep 1s
-
-# Navigate and select an index
-Down
-Sleep 300ms
-Down
-Sleep 300ms
-Down
-Sleep 300ms
-Enter
-Sleep 1.5s
-
-# Search in mappings with Ctrl+F
-Ctrl+f
-Sleep 300ms
-Type "name"
-Sleep 800ms
-Enter
-Sleep 400ms
-Escape
+# Go to Nodes tab (Tab 3 times: Overview -> Workbench -> Mappings -> Nodes)
+Tab
 Sleep 500ms
-
-# Toggle tree view
-Type "t"
-Sleep 1s
-Type "t"
+Tab
 Sleep 500ms
-
-# Go to Nodes tab
 Tab
 Sleep 1s
 
-# Show different views
-Type "2"
+# Show Memory view with heap% bars (already on view 1)
 Sleep 1s
+
+# Show Disk view with disk% bars
+Type "2"
+Sleep 1.5s
+
+# Show Fielddata view
 Type "3"
 Sleep 1s
+
+# Back to Memory
 Type "1"
 Sleep 1s
 
-# Show help
+# Show help (glamour rendered)
 Type "?"
 Sleep 2s
 Type "?"
 Sleep 500ms
+
+# Go back to Workbench (Shift+Tab twice: Nodes -> Mappings -> Workbench)
+Shift+Tab
+Sleep 500ms
+Shift+Tab
+Sleep 500ms
+
+# Type a path
+Ctrl+a
+Ctrl+k
+Type "/products/_search"
+Sleep 500ms
+
+# Tab to body
+Tab
+Sleep 300ms
+
+# Type a query
+Ctrl+a
+Ctrl+k
+Type@75ms '{"query":{"match_all":{}},"size":5}'
+Sleep 500ms
+
+# Execute
+Ctrl+Enter
+Sleep 1.5s
 
 # Quit - hide the exit
 Hide
