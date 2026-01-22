@@ -11,7 +11,6 @@ import (
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -44,7 +43,7 @@ type WorkbenchModel struct {
 	client        *es.Client
 	methodIdx     int
 	path          textinput.Model
-	body          textarea.Model
+	editor        Editor
 	response      viewport.Model
 	responseText  string
 	statusCode    int
@@ -85,17 +84,7 @@ func NewWorkbench() WorkbenchModel {
 	path.TextStyle = lipgloss.NewStyle().Foreground(ColorWhite)
 	path.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorGray)
 
-	body := textarea.New()
-	body.Placeholder = `{"query": {"match_all": {}}}`
-	body.CharLimit = 50000
-	body.ShowLineNumbers = false
-	body.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorOnAccent)
-	body.FocusedStyle.Text = lipgloss.NewStyle().Foreground(ColorWhite)
-	body.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	body.FocusedStyle.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
-	body.BlurredStyle.Text = lipgloss.NewStyle().Foreground(ColorGray)
-	body.BlurredStyle.CursorLine = lipgloss.NewStyle()
-	body.BlurredStyle.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
+	editor := NewEditor()
 
 	vp := viewport.New(40, 10)
 
@@ -106,9 +95,9 @@ func NewWorkbench() WorkbenchModel {
 		path.SetValue(last.Path)
 		var pretty bytes.Buffer
 		if err := json.Indent(&pretty, []byte(last.Body), "", "  "); err == nil {
-			body.SetValue(pretty.String())
+			editor.SetContent(pretty.String())
 		} else {
-			body.SetValue(last.Body)
+			editor.SetContent(last.Body)
 		}
 		for i, m := range methods {
 			if m == last.Method {
@@ -118,7 +107,7 @@ func NewWorkbench() WorkbenchModel {
 		}
 	} else {
 		path.SetValue("/_search")
-		body.SetValue("{}")
+		editor.SetContent("{}")
 	}
 
 	s := spinner.New()
@@ -133,7 +122,7 @@ func NewWorkbench() WorkbenchModel {
 	return WorkbenchModel{
 		methodIdx:   methodIdx,
 		path:        path,
-		body:        body,
+		editor:      editor,
 		response:    vp,
 		focus:       FocusNone,
 		history:     history,
@@ -156,13 +145,11 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	// Split panes: account for borders (2 chars each pane) and divider (1 char)
 	paneInnerWidth := (width - 5) / 2
 	bodyHeight := height - 6
 
 	m.path.Width = paneInnerWidth - 8
-	m.body.SetWidth(paneInnerWidth)
-	m.body.SetHeight(bodyHeight - 2)
+	m.editor.SetSize(paneInnerWidth, bodyHeight-2)
 	m.response.Width = paneInnerWidth
 	m.response.Height = bodyHeight - 2
 }
@@ -170,7 +157,7 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 func (m *WorkbenchModel) Prefill(index string) {
 	m.methodIdx = 0 // GET
 	m.path.SetValue("/" + index + "/_search")
-	m.body.SetValue("{}")
+	m.editor.SetContent("{}")
 }
 
 func (m *WorkbenchModel) Focus() {
@@ -180,12 +167,12 @@ func (m *WorkbenchModel) Focus() {
 
 func (m *WorkbenchModel) Blur() {
 	m.path.Blur()
-	m.body.Blur()
+	m.editor.Blur()
 	m.focus = FocusNone
 }
 
 func (m *WorkbenchModel) SetBody(body string) {
-	m.body.SetValue(body)
+	m.editor.SetContent(body)
 }
 
 func (m *WorkbenchModel) copyToClipboard(text string) bool {
@@ -205,7 +192,7 @@ func (m *WorkbenchModel) copyToClipboard(text string) bool {
 }
 
 func (m WorkbenchModel) jsonError() (line, col int, msg string) {
-	val := m.body.Value()
+	val := m.editor.Content()
 	if val == "" {
 		return 0, 0, ""
 	}
@@ -335,7 +322,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			var text string
 			switch m.focus {
 			case FocusBody:
-				text = m.body.Value()
+				text = m.editor.Content()
 			case FocusResponse:
 				text = m.responseText
 			}
@@ -368,7 +355,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "esc":
 			m.path.Blur()
-			m.body.Blur()
+			m.editor.Blur()
 			m.focus = FocusNone
 			m.completion.Close()
 			return m, nil
@@ -389,16 +376,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 
-		// Handle bracket auto-pairing in body
 		if m.focus == FocusBody {
 			if pair, ok := bracketPairs[msg.String()]; ok {
-				m.body.InsertString(msg.String() + pair)
-				m.body, _ = m.body.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				m.editor.InsertString(msg.String() + pair)
+				m.editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
 				return m, nil
 			}
 		}
 
-		// Delegate to focused component
 		switch m.focus {
 		case FocusPath:
 			m.path, cmd = m.path.Update(msg)
@@ -407,13 +392,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				cmds = append(cmds, cmd)
 			}
 		case FocusBody:
-			m.body, cmd = m.body.Update(msg)
+			cmd = m.editor.Update(msg)
 			cmds = append(cmds, cmd)
 
 			if m.completion.Active {
 				key := msg.String()
 				if len(key) == 1 || key == "backspace" {
-					col := m.body.LineInfo().CharOffset
+					col := m.editor.LineInfo().CharOffset
 					if col > m.completion.TriggerCol {
 						query := m.getCompletionQuery()
 						m.completion.Filter(query)
@@ -456,10 +441,10 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 				if msg.X < methodEnd {
 					m.path.Blur()
-					m.body.Blur()
+					m.editor.Blur()
 					m.focus = FocusMethod
 				} else if msg.X < pathEnd {
-					m.body.Blur()
+					m.editor.Blur()
 					m.path.Focus()
 					m.focus = FocusPath
 				} else if msg.X < execEnd {
@@ -477,11 +462,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, nil
 			} else if msg.X < paneInnerWidth+1 {
 				m.path.Blur()
-				m.body.Focus()
+				m.editor.Focus()
 				m.focus = FocusBody
 			} else {
 				m.path.Blur()
-				m.body.Blur()
+				m.editor.Blur()
 				m.focus = FocusResponse
 
 				if m.searchActive && msg.Y >= m.height-4 {
@@ -527,9 +512,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			if msg.Y > topRowHeight {
 				if msg.X < paneInnerWidth+2 {
 					if msg.Button == tea.MouseButtonWheelUp {
-						m.body.SetCursor(max(0, m.body.Line()-scrollAmount))
+						m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
 					} else {
-						m.body.SetCursor(m.body.Line() + scrollAmount)
+						m.editor.SetCursor(m.editor.Line() + scrollAmount)
 					}
 				} else {
 					if msg.Button == tea.MouseButtonWheelUp {
@@ -548,7 +533,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 func (m *WorkbenchModel) cycleFocus() {
 	m.path.Blur()
-	m.body.Blur()
+	m.editor.Blur()
 
 	m.focus = (m.focus + 1) % 4
 	switch m.focus {
@@ -557,20 +542,20 @@ func (m *WorkbenchModel) cycleFocus() {
 	case FocusPath:
 		m.path.Focus()
 	case FocusBody:
-		m.body.Focus()
+		m.editor.Focus()
 	case FocusResponse:
 		// Viewport doesn't need focus call
 	}
 }
 
 func (m *WorkbenchModel) prettyPrintBody() {
-	val := m.body.Value()
+	val := m.editor.Content()
 	if val == "" {
 		return
 	}
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, []byte(val), "", "  "); err == nil {
-		m.body.SetValue(pretty.String())
+		m.editor.SetContent(pretty.String())
 	}
 }
 
@@ -578,7 +563,7 @@ func (m *WorkbenchModel) addToHistory() {
 	entry := storage.HistoryEntry{
 		Method: methods[m.methodIdx],
 		Path:   m.path.Value(),
-		Body:   m.body.Value(),
+		Body:   m.editor.Content(),
 	}
 
 	if m.history.Add(entry) {
@@ -627,7 +612,7 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 		}
 	}
 	m.path.SetValue(entry.Path)
-	m.body.SetValue(entry.Body)
+	m.editor.SetContent(entry.Body)
 }
 
 func (m *WorkbenchModel) updateSearchMatches() {
@@ -657,7 +642,7 @@ func (m WorkbenchModel) execute() tea.Cmd {
 		ctx := context.Background()
 		method := methods[m.methodIdx]
 		path := m.path.Value()
-		body := m.body.Value()
+		body := m.editor.Content()
 		result := m.client.Request(ctx, method, path, body)
 		return executeResultMsg{result}
 	}
@@ -731,7 +716,7 @@ func (m WorkbenchModel) View() string {
 	}
 	errLine, errCol, errMsg := m.jsonError()
 
-	bodyContent := m.body.View()
+	bodyContent := m.editor.View()
 	if errMsg != "" {
 		bodyContent = m.overlayErrorMarker(bodyContent, errLine)
 	}
@@ -842,10 +827,10 @@ func (m WorkbenchModel) View() string {
 }
 
 func (m *WorkbenchModel) triggerCompletion() {
-	text := m.body.Value()
+	text := m.editor.Content()
 	lines := strings.Split(text, "\n")
-	row := m.body.Line()
-	col := m.body.LineInfo().CharOffset
+	row := m.editor.Line()
+	col := m.editor.LineInfo().CharOffset
 
 	textUpToCursor := ""
 	for i := 0; i < row && i < len(lines); i++ {
@@ -882,9 +867,9 @@ func (m *WorkbenchModel) triggerCompletion() {
 }
 
 func (m *WorkbenchModel) getCompletionQuery() string {
-	lines := strings.Split(m.body.Value(), "\n")
-	row := m.body.Line()
-	col := m.body.LineInfo().CharOffset
+	lines := strings.Split(m.editor.Content(), "\n")
+	row := m.editor.Line()
+	col := m.editor.LineInfo().CharOffset
 
 	if row >= len(lines) {
 		return ""
@@ -918,7 +903,7 @@ func (m *WorkbenchModel) acceptCompletion() {
 	insertion := selected.Text[len(query):]
 	suffix := `": `
 
-	m.body.InsertString(insertion + suffix)
+	m.editor.InsertString(insertion + suffix)
 	m.completion.Close()
 }
 

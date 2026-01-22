@@ -490,3 +490,37 @@ func (e Editor) GetSelectedText() string {
 
 	return strings.Join(result, "\n")
 }
+
+func (e *Editor) Focus() {
+	e.textarea.Focus()
+}
+
+func (e *Editor) Blur() {
+	e.textarea.Blur()
+}
+
+func (e Editor) Focused() bool {
+	return e.textarea.Focused()
+}
+
+func (e *Editor) Update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	e.textarea, cmd = e.textarea.Update(msg)
+	return cmd
+}
+
+func (e Editor) Line() int {
+	return e.textarea.Line()
+}
+
+func (e Editor) LineInfo() textarea.LineInfo {
+	return e.textarea.LineInfo()
+}
+
+func (e *Editor) InsertString(s string) {
+	e.textarea.InsertString(s)
+}
+
+func (e *Editor) SetCursor(pos int) {
+	e.textarea.SetCursor(pos)
+}
