@@ -83,10 +83,12 @@ Run `go test ./...` before committing to ensure all tests pass.
 
 ### Always Update Documentation
 
+**Before every commit**, check if documentation needs updating. Search for references to changed functionality in README.md, CLAUDE.md, help.go, and status bar text in model.go.
+
 When making changes:
 
 1. **New CLI flags** - Update help text in `main.go` and README.md
-2. **New keyboard shortcuts** - Update `internal/ui/help.go` and README.md keybindings table
+2. **New/changed keyboard shortcuts** - Update `internal/ui/help.go`, README.md keybindings table, and status bar in `internal/ui/model.go`
 3. **New config options** - Document in README.md and CLAUDE.md
 4. **Changed file paths** - Update both README.md and CLAUDE.md (e.g., config paths)
 5. **New UI patterns** - Add to "Lipgloss Layout Patterns" or "Mouse Click Detection" sections in CLAUDE.md
