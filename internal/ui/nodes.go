@@ -182,11 +182,6 @@ func (m NodesModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderLegend())
 
-	if m.activeView != ViewFielddata && len(m.state.Nodes) > 0 {
-		b.WriteString("\n\n")
-		b.WriteString(m.renderDetailPanel())
-	}
-
 	content := b.String()
 	if m.search.Active() {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
@@ -339,61 +334,6 @@ func (m NodesModel) renderLegend() string {
 	default:
 		return ""
 	}
-}
-
-func (m NodesModel) renderDetailPanel() string {
-	if len(m.state.Nodes) == 0 {
-		return ""
-	}
-
-	idx := m.scrollY
-	if idx >= len(m.state.Nodes) {
-		idx = len(m.state.Nodes) - 1
-	}
-	node := m.state.Nodes[idx]
-
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
-
-	var b strings.Builder
-	b.WriteString(titleStyle.Render(node.Name))
-	b.WriteString("\n")
-
-	switch m.activeView {
-	case ViewMemory:
-		heapPct := m.parsePercent(node.HeapPercent)
-		b.WriteString(labelStyle.Render("heap: "))
-		b.WriteString(RenderBar(heapPct, 30))
-		b.WriteString(fmt.Sprintf(" %s (%s)\n", node.HeapPercent, node.HeapCurrent))
-
-		b.WriteString(labelStyle.Render("fielddata:   "))
-		b.WriteString(node.FielddataSize)
-		b.WriteString("\n")
-		b.WriteString(labelStyle.Render("query_cache: "))
-		b.WriteString(node.QueryCacheSize)
-		b.WriteString("\n")
-		b.WriteString(labelStyle.Render("segments:    "))
-		b.WriteString(node.SegmentsCount)
-
-	case ViewDisk:
-		diskPct := m.parsePercent(node.DiskPercent)
-		b.WriteString(labelStyle.Render("disk: "))
-		b.WriteString(RenderBar(diskPct, 30))
-		b.WriteString(fmt.Sprintf(" %s\n", node.DiskPercent))
-
-		b.WriteString(labelStyle.Render("used:  "))
-		b.WriteString(node.DiskUsed)
-		b.WriteString(" / ")
-		b.WriteString(node.DiskTotal)
-		b.WriteString("\n")
-		b.WriteString(labelStyle.Render("avail: "))
-		b.WriteString(node.DiskAvail)
-		b.WriteString("\n")
-		b.WriteString(labelStyle.Render("shards: "))
-		b.WriteString(node.Shards)
-	}
-
-	return b.String()
 }
 
 func (m NodesModel) renderTableHeader(headers []string, widths []int, leftAlignCols ...int) string {

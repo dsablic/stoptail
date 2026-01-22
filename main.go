@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/config"
 	"github.com/labtiva/stoptail/internal/es"
@@ -123,7 +125,7 @@ func resolveESURL(args []string) (string, error) {
 			return arg, nil
 		}
 		if clusters != nil {
-			return clusters.ResolveURL(arg)
+			return resolveURLWithProgress(clusters, arg)
 		}
 		return "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
@@ -144,86 +146,204 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	sort.Strings(names)
 
 	if len(names) == 1 {
-		return clusters.ResolveURL(names[0])
+		return resolveURLWithProgress(clusters, names[0])
 	}
 
-	picker := newClusterPicker(names)
+	picker := newClusterPickerModal(names)
 	p := tea.NewProgram(picker)
 	result, err := p.Run()
 	if err != nil {
 		return "", err
 	}
 
-	m := result.(clusterPickerModel)
+	m := result.(*clusterPickerModal)
 	if m.cancelled {
 		return "", fmt.Errorf("cancelled")
 	}
 
-	return clusters.ResolveURL(names[m.selected])
+	return resolveURLWithProgress(clusters, m.selected)
 }
 
-type clusterPickerModel struct {
-	names     []string
-	selected  int
+type clusterPickerModal struct {
+	form      *huh.Form
+	selected  string
 	cancelled bool
+	done      bool
+	width     int
+	height    int
 }
 
-func newClusterPicker(names []string) clusterPickerModel {
-	return clusterPickerModel{names: names}
+func newClusterPickerModal(names []string) *clusterPickerModal {
+	m := &clusterPickerModal{}
+
+	options := make([]huh.Option[string], len(names))
+	for i, name := range names {
+		options[i] = huh.NewOption(name, name)
+	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select a cluster").
+				Options(options...).
+				Value(&m.selected),
+		),
+	).WithShowHelp(false)
+
+	return m
 }
 
-func (m clusterPickerModel) Init() tea.Cmd {
-	return nil
+func (m *clusterPickerModal) Init() tea.Cmd {
+	return m.form.Init()
 }
 
-func (m clusterPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *clusterPickerModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "up", "k":
-			if m.selected > 0 {
-				m.selected--
-			}
-		case "down", "j":
-			if m.selected < len(m.names)-1 {
-				m.selected++
-			}
-		case "enter":
-			return m, tea.Quit
-		case "q", "esc", "ctrl+c":
+		case "esc", "ctrl+c":
 			m.cancelled = true
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+
+	form, cmd := m.form.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.form = f
+	}
+
+	if m.form.State == huh.StateCompleted {
+		m.done = true
+		return m, tea.Quit
+	}
+
+	return m, cmd
+}
+
+func (m *clusterPickerModal) View() string {
+	if m.width == 0 || m.height == 0 {
+		return ""
+	}
+
+	boxWidth := 50
+	formView := m.form.View()
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ui.ColorBlue).
+		Padding(1, 2).
+		Width(boxWidth)
+
+	box := boxStyle.Render(formView)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+type urlResolverModel struct {
+	clusters *config.ClustersConfig
+	name     string
+	spinner  spinner.Model
+	url      string
+	err      error
+	done     bool
+	width    int
+	height   int
+}
+
+type urlResolvedMsg struct {
+	url string
+	err error
+}
+
+func newURLResolver(clusters *config.ClustersConfig, name string) urlResolverModel {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(ui.SpinnerClr)
+	return urlResolverModel{
+		clusters: clusters,
+		name:     name,
+		spinner:  s,
+	}
+}
+
+func (m urlResolverModel) Init() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, m.resolveURL)
+}
+
+func (m urlResolverModel) resolveURL() tea.Msg {
+	url, err := m.clusters.ResolveURL(m.name)
+	return urlResolvedMsg{url: url, err: err}
+}
+
+func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+	case urlResolvedMsg:
+		m.url = msg.url
+		m.err = msg.err
+		m.done = true
+		return m, tea.Quit
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
 	}
 	return m, nil
 }
 
-func (m clusterPickerModel) View() string {
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	normalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("Select a cluster:"))
-	b.WriteString("\n\n")
-
-	for i, name := range m.names {
-		if i == m.selected {
-			b.WriteString(cursorStyle.Render("  > "))
-			b.WriteString(selectedStyle.Render(name))
-		} else {
-			b.WriteString("    ")
-			b.WriteString(normalStyle.Render(name))
-		}
-		b.WriteString("\n")
+func (m urlResolverModel) View() string {
+	if m.done {
+		return ""
+	}
+	if m.width == 0 || m.height == 0 {
+		return ""
 	}
 
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓: navigate  Enter: select  q: quit"))
-	b.WriteString("\n")
-	return b.String()
+	msgStyle := lipgloss.NewStyle().Foreground(ui.ColorGray)
+	content := fmt.Sprintf("%s %s", m.spinner.View(), msgStyle.Render("Fetching cluster URL..."))
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ui.ColorBlue).
+		Padding(1, 2).
+		Width(50)
+
+	box := boxStyle.Render(content)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+func resolveURLWithProgress(clusters *config.ClustersConfig, name string) (string, error) {
+	entry, ok := clusters.Clusters[name]
+	if !ok {
+		return "", fmt.Errorf("cluster %q not found", name)
+	}
+
+	if entry.URL != "" {
+		return entry.URL, nil
+	}
+
+	m := newURLResolver(clusters, name)
+	p := tea.NewProgram(m)
+	result, err := p.Run()
+	if err != nil {
+		return "", err
+	}
+	resolved := result.(urlResolverModel)
+	if resolved.err != nil {
+		return "", resolved.err
+	}
+	return resolved.url, nil
 }
 
 func renderAndExit(client *es.Client, tab string, width, height int, body, view string) error {
