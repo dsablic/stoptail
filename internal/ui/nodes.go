@@ -293,8 +293,8 @@ func (m NodesModel) renderFielddataByField() string {
 		return "No fielddata by field found"
 	}
 
-	colWidths := []int{40, 15}
-	headers := []string{"field", "size"}
+	colWidths := []int{20, 35, 15}
+	headers := []string{"node", "field", "size"}
 
 	var b strings.Builder
 	b.WriteString(m.renderTableHeader(headers, colWidths))
@@ -302,8 +302,9 @@ func (m NodesModel) renderFielddataByField() string {
 	visibleItems := m.visibleItems(len(m.state.FielddataByField))
 	for _, fd := range m.state.FielddataByField[visibleItems.start:visibleItems.end] {
 		row := []string{
-			m.leftAlign(fd.Field, colWidths[0]),
-			m.rightAlign(fd.Size, colWidths[1]),
+			m.leftAlign(fd.Node, colWidths[0]),
+			m.leftAlign(fd.Field, colWidths[1]),
+			m.rightAlign(fd.Size, colWidths[2]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")

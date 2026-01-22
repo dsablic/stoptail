@@ -78,6 +78,7 @@ type NodeStats struct {
 }
 
 type FielddataInfo struct {
+	Node  string `json:"node"`
 	Field string `json:"field"`
 	Size  string `json:"size"`
 }
@@ -380,6 +381,7 @@ func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, er
 		c.es.Cat.Fielddata.WithContext(ctx),
 		c.es.Cat.Fielddata.WithFormat("json"),
 		c.es.Cat.Fielddata.WithFields("*"),
+		c.es.Cat.Fielddata.WithH("node", "field", "size"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching fielddata: %w", err)
@@ -407,7 +409,10 @@ func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, er
 		if sizeI != sizeJ {
 			return sizeI > sizeJ
 		}
-		return fielddata[i].Field < fielddata[j].Field
+		if fielddata[i].Field != fielddata[j].Field {
+			return fielddata[i].Field < fielddata[j].Field
+		}
+		return fielddata[i].Node < fielddata[j].Node
 	})
 
 	return fielddata, nil
