@@ -11,6 +11,11 @@ import (
 	"github.com/labtiva/stoptail/internal/es"
 )
 
+type IndexCreatedMsg struct{ Err error }
+type IndexDeletedMsg struct{ Err error }
+type AliasAddedMsg struct{ Err error }
+type AliasRemovedMsg struct{ Err error }
+
 type OverviewModel struct {
 	cluster          *es.ClusterState
 	filter           textinput.Model
@@ -22,6 +27,11 @@ type OverviewModel struct {
 	selectedIndex    int
 	width            int
 	height           int
+	modal            *Modal
+	modalAction      string
+	modalStep        int
+	createName       string
+	createShards     string
 }
 
 func NewOverview() OverviewModel {
