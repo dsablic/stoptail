@@ -167,6 +167,10 @@ func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
 		return nil, fmt.Errorf("parsing indices: %w", err)
 	}
 
+	sort.Slice(indices, func(i, j int) bool {
+		return indices[i].Name < indices[j].Name
+	})
+
 	return indices, nil
 }
 
@@ -195,6 +199,10 @@ func (c *Client) fetchNodes(ctx context.Context) ([]NodeInfo, error) {
 	if err := json.Unmarshal(body, &nodes); err != nil {
 		return nil, fmt.Errorf("parsing nodes: %w", err)
 	}
+
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name < nodes[j].Name
+	})
 
 	return nodes, nil
 }
@@ -225,6 +233,16 @@ func (c *Client) fetchShards(ctx context.Context) ([]ShardInfo, error) {
 		return nil, fmt.Errorf("parsing shards: %w", err)
 	}
 
+	sort.Slice(shards, func(i, j int) bool {
+		if shards[i].Index != shards[j].Index {
+			return shards[i].Index < shards[j].Index
+		}
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
+
 	return shards, nil
 }
 
@@ -253,6 +271,13 @@ func (c *Client) fetchAliases(ctx context.Context) ([]AliasInfo, error) {
 	if err := json.Unmarshal(body, &aliases); err != nil {
 		return nil, fmt.Errorf("parsing aliases: %w", err)
 	}
+
+	sort.Slice(aliases, func(i, j int) bool {
+		if aliases[i].Alias != aliases[j].Alias {
+			return aliases[i].Alias < aliases[j].Alias
+		}
+		return aliases[i].Index < aliases[j].Index
+	})
 
 	return aliases, nil
 }
