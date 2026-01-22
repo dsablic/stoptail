@@ -140,12 +140,12 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
+| `Enter` | Activate editor |
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
-| `Ctrl+Enter` | Execute request |
+| `Ctrl+R` | Execute request |
 | `Ctrl+Y` | Copy body or response to clipboard |
 | `Up/Down` | Navigate completions (when open) |
-| `Enter/Tab` | Accept completion |
-| `Esc` | Dismiss completions |
+| `Esc` | Dismiss completions / deactivate editor |
 
 ### Nodes Tab
 

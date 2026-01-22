@@ -379,7 +379,7 @@ func (m Model) View() string {
 	case TabOverview:
 		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select index  ↑↓: scroll  Enter: open"
 	case TabWorkbench:
-		statusText = "q: quit  Tab: workbench/autocomplete  Shift+Tab: overview  Ctrl+Enter: execute  Ctrl+Y: copy  Ctrl+F: search"
+		statusText = "q: quit  Tab: autocomplete  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
 	case TabTasks:
