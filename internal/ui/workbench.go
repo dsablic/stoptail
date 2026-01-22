@@ -23,7 +23,8 @@ import (
 type WorkbenchFocus int
 
 const (
-	FocusMethod WorkbenchFocus = iota
+	FocusNone WorkbenchFocus = iota
+	FocusMethod
 	FocusPath
 	FocusBody
 	FocusResponse
@@ -134,7 +135,7 @@ func NewWorkbench() WorkbenchModel {
 		path:        path,
 		body:        body,
 		response:    vp,
-		focus:       FocusPath,
+		focus:       FocusNone,
 		history:     history,
 		historyIdx:  -1,
 		spinner:     s,
@@ -180,6 +181,7 @@ func (m *WorkbenchModel) Focus() {
 func (m *WorkbenchModel) Blur() {
 	m.path.Blur()
 	m.body.Blur()
+	m.focus = FocusNone
 }
 
 func (m *WorkbenchModel) SetBody(body string) {
@@ -309,6 +311,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "enter":
+			if m.focus == FocusNone {
+				m.path.Focus()
+				m.focus = FocusPath
+				return m, textinput.Blink
+			}
 		case "ctrl+f":
 			if m.focus == FocusResponse {
 				m.searchActive = true
@@ -340,6 +348,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 			return m, nil
 		case "tab":
+			if m.focus == FocusNone {
+				break
+			}
 			if m.focus == FocusBody {
 				if m.completion.Active {
 					m.completion.MoveDown()
@@ -358,6 +369,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "esc":
 			m.path.Blur()
 			m.body.Blur()
+			m.focus = FocusNone
 			m.completion.Close()
 			return m, nil
 		}

@@ -38,12 +38,12 @@ func renderHelp(width, height int) string {
 		{
 			header: "Workbench",
 			keys: [][]string{
+				{"Enter", "Activate editor"},
 				{"Tab", "Trigger autocomplete / cycle focus"},
 				{"Ctrl+Enter", "Execute request"},
 				{"Ctrl+Y", "Copy body/response to clipboard"},
 				{"Up/Down", "Navigate completions"},
-				{"Enter/Tab", "Accept completion"},
-				{"Esc", "Dismiss completions"},
+				{"Esc", "Dismiss completions / deactivate"},
 			},
 		},
 		{

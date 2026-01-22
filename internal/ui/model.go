@@ -179,6 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				m.activeTab = TabWorkbench
+				m.workbench.Blur()
 				return m, nil
 			}
 			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
@@ -215,6 +216,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.activeTab == TabNodes {
 				m.activeTab = TabWorkbench
+				m.workbench.Blur()
 				return m, nil
 			}
 		case "r":
