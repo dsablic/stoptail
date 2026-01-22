@@ -257,10 +257,6 @@ func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, m.createIndexCmd(name, shards, replicas))
 
 	case ModalDeleteIndex:
-		if !m.modal.Confirmed() {
-			m.modal = nil
-			return m, nil
-		}
 		indexName := m.modal.IndexName()
 		m.modal = nil
 		m.operationMsg = "Deleting index..."

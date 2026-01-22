@@ -60,6 +60,7 @@ func NewCreateIndexModal() *Modal {
 }
 
 func NewDeleteIndexModal(indexName string) *Modal {
+	var confirmName string
 	m := &Modal{
 		modalType: ModalDeleteIndex,
 		indexName: indexName,
@@ -67,14 +68,18 @@ func NewDeleteIndexModal(indexName string) *Modal {
 
 	m.form = huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
-				Title(fmt.Sprintf("Delete index '%s'?", indexName)).
+			huh.NewInput().
+				Title(fmt.Sprintf("Type '%s' to confirm deletion", indexName)).
 				Description("This action cannot be undone.").
-				Affirmative("Delete").
-				Negative("Cancel").
-				Value(&m.confirmed),
+				Value(&confirmName).
+				Validate(func(s string) error {
+					if s != indexName {
+						return fmt.Errorf("name does not match")
+					}
+					return nil
+				}),
 		),
-	).WithShowHelp(false)
+	).WithShowHelp(false).WithShowErrors(true)
 
 	return m
 }
