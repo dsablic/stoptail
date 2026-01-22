@@ -108,6 +108,10 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 func resolveESURL(args []string) (string, error) {
+	if err := config.EnsureConfigDir(); err != nil {
+		return "", fmt.Errorf("creating config dir: %w", err)
+	}
+
 	clusters, err := config.LoadClustersConfig()
 	if err != nil {
 		return "", fmt.Errorf("loading clusters config: %w", err)

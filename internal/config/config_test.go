@@ -64,6 +64,13 @@ func TestParseURL(t *testing.T) {
 	}
 }
 
+func TestEnsureConfigDir(t *testing.T) {
+	err := EnsureConfigDir()
+	if err != nil {
+		t.Fatalf("EnsureConfigDir() failed: %v", err)
+	}
+}
+
 func TestMaskedURL(t *testing.T) {
 	tests := []struct {
 		name string

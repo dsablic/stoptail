@@ -67,6 +67,36 @@ type ClustersConfig struct {
 	Clusters map[string]ClusterEntry `yaml:"clusters"`
 }
 
+func EnsureConfigDir() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	dir := filepath.Join(home, ".stoptail")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	configPath := filepath.Join(dir, "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		stub := `# stoptail configuration
+# Add your Elasticsearch clusters here
+#
+# clusters:
+#   production:
+#     url: https://user:pass@es-prod:9200
+#   staging:
+#     url_command: "vault read -field=url secret/es-staging"
+`
+		if err := os.WriteFile(configPath, []byte(stub), 0644); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func LoadClustersConfig() (*ClustersConfig, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
