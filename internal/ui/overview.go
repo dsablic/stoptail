@@ -383,6 +383,9 @@ func (m OverviewModel) renderGrid() string {
 				Width(indexColWidth).
 				Foreground(healthColor).
 				Bold(true)
+			if i == m.selectedIndex {
+				nameStyle = nameStyle.Reverse(true)
+			}
 			b.WriteString(nameStyle.Render(truncate(idx.Name, indexColWidth-2)))
 		}
 	}
