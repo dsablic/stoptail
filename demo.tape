@@ -57,11 +57,47 @@ Sleep 500ms
 Ctrl+e
 Sleep 2s
 
-# Tab to response (focus moves from body to response)
+# Search in response with Ctrl+F
+Ctrl+f
+Sleep 300ms
+Type "name"
+Sleep 1s
+Enter
+Sleep 500ms
+Enter
+Sleep 500ms
+Escape
+Sleep 500ms
+
+# Tab to response, then to Mappings tab
 Tab
 Sleep 300ms
+Tab
+Sleep 1s
 
-# Tab to Nodes (from response, global Tab works)
+# Select an index and load mappings
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Enter
+Sleep 1.5s
+
+# Search in mappings with Ctrl+F
+Ctrl+f
+Sleep 300ms
+Type "price"
+Sleep 1s
+Escape
+Sleep 500ms
+
+# Toggle tree view
+Type "t"
+Sleep 1s
+Type "t"
+Sleep 500ms
+
+# Go to Nodes tab
 Tab
 Sleep 1s
 
@@ -69,8 +105,6 @@ Sleep 1s
 Type "2"
 Sleep 1.5s
 Type "3"
-Sleep 1.5s
-Type "4"
 Sleep 1.5s
 Type "1"
 Sleep 1s
