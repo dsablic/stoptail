@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -18,6 +20,7 @@ type AliasRemovedMsg struct{ Err error }
 
 type OverviewModel struct {
 	cluster          *es.ClusterState
+	client           *es.Client
 	filter           textinput.Model
 	filterActive     bool
 	aliasFilters     map[string]bool
@@ -52,6 +55,10 @@ func (m *OverviewModel) SetCluster(cluster *es.ClusterState) {
 func (m *OverviewModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+}
+
+func (m *OverviewModel) SetClient(client *es.Client) {
+	m.client = client
 }
 
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
@@ -200,9 +207,125 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 }
 
 func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
+	value := m.modal.Value()
+
+	switch m.modalAction {
+	case "create":
+		switch m.modalStep {
+		case 1:
+			if value == "" {
+				m.modal.SetError("Index name required")
+				m.modal.SetDone(false)
+				return m, nil
+			}
+			m.createName = value
+			m.modal.Reset("Create Index", "Number of shards (default 1):")
+			m.modalStep = 2
+			return m, textinput.Blink
+		case 2:
+			m.createShards = value
+			if m.createShards == "" {
+				m.createShards = "1"
+			}
+			m.modal.Reset("Create Index", "Number of replicas (default 1):")
+			m.modalStep = 3
+			return m, textinput.Blink
+		case 3:
+			replicas := value
+			if replicas == "" {
+				replicas = "1"
+			}
+			m.modal = nil
+			m.modalAction = ""
+			m.modalStep = 0
+			return m, m.createIndexCmd(m.createName, m.createShards, replicas)
+		}
+
+	case "delete":
+		if value != m.SelectedIndex() {
+			m.modal.SetError("Name does not match")
+			m.modal.SetDone(false)
+			return m, nil
+		}
+		indexName := m.SelectedIndex()
+		m.modal = nil
+		m.modalAction = ""
+		return m, m.deleteIndexCmd(indexName)
+
+	case "addAlias":
+		if value == "" {
+			m.modal.SetError("Alias name required")
+			m.modal.SetDone(false)
+			return m, nil
+		}
+		indexName := m.SelectedIndex()
+		m.modal = nil
+		m.modalAction = ""
+		return m, m.addAliasCmd(indexName, value)
+
+	case "removeAlias":
+		if value == "" {
+			m.modal.SetError("Alias name required")
+			m.modal.SetDone(false)
+			return m, nil
+		}
+		indexName := m.SelectedIndex()
+		m.modal = nil
+		m.modalAction = ""
+		return m, m.removeAliasCmd(indexName, value)
+	}
+
 	m.modal = nil
 	m.modalAction = ""
 	return m, nil
+}
+
+func (m OverviewModel) createIndexCmd(name, shards, replicas string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return IndexCreatedMsg{Err: fmt.Errorf("no client")}
+		}
+		s, _ := strconv.Atoi(shards)
+		r, _ := strconv.Atoi(replicas)
+		if s < 1 {
+			s = 1
+		}
+		if r < 0 {
+			r = 0
+		}
+		err := m.client.CreateIndex(context.Background(), name, s, r)
+		return IndexCreatedMsg{Err: err}
+	}
+}
+
+func (m OverviewModel) deleteIndexCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return IndexDeletedMsg{Err: fmt.Errorf("no client")}
+		}
+		err := m.client.DeleteIndex(context.Background(), name)
+		return IndexDeletedMsg{Err: err}
+	}
+}
+
+func (m OverviewModel) addAliasCmd(index, alias string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return AliasAddedMsg{Err: fmt.Errorf("no client")}
+		}
+		err := m.client.AddAlias(context.Background(), index, alias)
+		return AliasAddedMsg{Err: err}
+	}
+}
+
+func (m OverviewModel) removeAliasCmd(index, alias string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return AliasRemovedMsg{Err: fmt.Errorf("no client")}
+		}
+		err := m.client.RemoveAlias(context.Background(), index, alias)
+		return AliasRemovedMsg{Err: err}
+	}
 }
 
 func (m OverviewModel) filteredIndices() []es.IndexInfo {

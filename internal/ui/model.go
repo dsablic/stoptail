@@ -54,6 +54,9 @@ func New(client *es.Client, cfg *config.Config) Model {
 	wb := NewWorkbench()
 	wb.SetClient(client)
 
+	ov := NewOverview()
+	ov.SetClient(client)
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
@@ -61,7 +64,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 	return Model{
 		client:    client,
 		cfg:       cfg,
-		overview:  NewOverview(),
+		overview:  ov,
 		workbench: wb,
 		mappings:  NewMappings(),
 		nodes:     NewNodes(),

@@ -53,6 +53,10 @@ func (m *Modal) Cancelled() bool {
 	return m.cancelled
 }
 
+func (m *Modal) SetDone(d bool) {
+	m.done = d
+}
+
 func (m *Modal) Reset(title, prompt string) {
 	m.title = title
 	m.prompt = prompt
