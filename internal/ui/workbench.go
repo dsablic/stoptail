@@ -326,7 +326,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.searchIdx = 0
 				return m, textinput.Blink
 			}
-		case "ctrl+enter":
+		case "ctrl+enter", "ctrl+r":
 			if m.client != nil && !m.executing {
 				m.executing = true
 				return m, tea.Batch(m.spinner.Tick, m.execute())
