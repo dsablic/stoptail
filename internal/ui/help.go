@@ -50,6 +50,7 @@ func renderHelp(width, height int) string {
 			header: "Mappings",
 			keys: [][]string{
 				{"/", "Filter indices"},
+				{"Ctrl+F", "Search"},
 				{"left/right", "Switch panes"},
 				{"Enter", "Load mappings for selected index"},
 				{"t", "Toggle tree/flat view"},
@@ -60,6 +61,7 @@ func renderHelp(width, height int) string {
 			header: "Nodes",
 			keys: [][]string{
 				{"1/2/3", "Switch view (Mem/Disk/Fielddata)"},
+				{"Ctrl+F", "Search"},
 				{"up/down", "Scroll"},
 				{"r", "Refresh"},
 			},
@@ -67,6 +69,7 @@ func renderHelp(width, height int) string {
 		{
 			header: "Tasks",
 			keys: [][]string{
+				{"Ctrl+F", "Search"},
 				{"c", "Cancel selected task"},
 				{"y/n", "Confirm/abort cancel"},
 				{"up/down", "Select task"},

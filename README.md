@@ -157,6 +157,7 @@ stoptail stores data in `~/.stoptail/`:
 | Key | Action |
 |-----|--------|
 | `/` | Filter indices |
+| `Ctrl+F` | Search fields |
 | `Left/Right` | Switch between index list and mapping panes |
 | `Enter` | Load mappings for selected index |
 | `t` | Toggle tree/flat view |
@@ -169,12 +170,14 @@ stoptail stores data in `~/.stoptail/`:
 | `1` | Memory view |
 | `2` | Disk view |
 | `3` | Fielddata view |
+| `Ctrl+F` | Search nodes |
 | `Up/Down` | Scroll |
 
 ### Tasks Tab
 
 | Key | Action |
 |-----|--------|
+| `Ctrl+F` | Search tasks |
 | `c` | Cancel selected task |
 | `y` | Confirm cancel |
 | `n` / `Esc` | Abort cancel |
