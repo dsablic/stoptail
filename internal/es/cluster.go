@@ -113,6 +113,80 @@ type IndexMappings struct {
 	Analyzers  []AnalyzerInfo
 }
 
+func parseMappingProperties(props map[string]json.RawMessage, prefix string) []MappingField {
+	var fields []MappingField
+
+	for name, raw := range props {
+		var prop struct {
+			Type       string                     `json:"type"`
+			Properties map[string]json.RawMessage `json:"properties"`
+			Analyzer   string                     `json:"analyzer"`
+			Index      *bool                      `json:"index"`
+			DocValues  *bool                      `json:"doc_values"`
+			Norms      *bool                      `json:"norms"`
+			Store      *bool                      `json:"store"`
+			NullValue  any                        `json:"null_value"`
+			Fields     map[string]json.RawMessage `json:"fields"`
+		}
+		if err := json.Unmarshal(raw, &prop); err != nil {
+			continue
+		}
+
+		fullName := name
+		if prefix != "" {
+			fullName = prefix + "." + name
+		}
+
+		field := MappingField{
+			Name:       fullName,
+			Type:       prop.Type,
+			Properties: make(map[string]string),
+		}
+
+		if prop.Type == "" && prop.Properties != nil {
+			field.Type = "object"
+		}
+
+		if prop.Analyzer != "" {
+			field.Properties["analyzer"] = prop.Analyzer
+		}
+		if prop.Index != nil && !*prop.Index {
+			field.Properties["index"] = "false"
+		}
+		if prop.DocValues != nil && !*prop.DocValues {
+			field.Properties["doc_values"] = "false"
+		}
+		if prop.Norms != nil && !*prop.Norms {
+			field.Properties["norms"] = "false"
+		}
+		if prop.Store != nil && *prop.Store {
+			field.Properties["store"] = "true"
+		}
+		if prop.NullValue != nil {
+			field.Properties["null_value"] = fmt.Sprintf("%v", prop.NullValue)
+		}
+
+		if prop.Properties != nil {
+			field.Children = parseMappingProperties(prop.Properties, fullName)
+		}
+
+		if prop.Fields != nil {
+			for subName, subRaw := range prop.Fields {
+				subFields := parseMappingProperties(map[string]json.RawMessage{subName: subRaw}, fullName)
+				field.Children = append(field.Children, subFields...)
+			}
+		}
+
+		fields = append(fields, field)
+	}
+
+	sort.Slice(fields, func(i, j int) bool {
+		return fields[i].Name < fields[j].Name
+	})
+
+	return fields
+}
+
 type ClusterState struct {
 	Indices []IndexInfo
 	Nodes   []NodeInfo
