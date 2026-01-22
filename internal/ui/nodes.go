@@ -25,12 +25,14 @@ type NodesModel struct {
 	width      int
 	height     int
 	loading    bool
+	search     SearchBar
 }
 
 func NewNodes() NodesModel {
 	return NodesModel{
 		activeView: ViewMemory,
 		loading:    true,
+		search:     NewSearchBar(),
 	}
 }
 
@@ -59,7 +61,31 @@ func (m *NodesModel) SetView(view string) {
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.search.Active() {
+			switch msg.String() {
+			case "esc":
+				m.search.Deactivate()
+				return m, nil
+			case "enter":
+				if match := m.search.NextMatch(); match >= 0 {
+					m.scrollY = match
+				}
+				return m, nil
+			case "shift+enter":
+				if match := m.search.PrevMatch(); match >= 0 {
+					m.scrollY = match
+				}
+				return m, nil
+			default:
+				cmd := m.search.Update(msg)
+				(&m).updateNodeSearch()
+				return m, cmd
+			}
+		}
 		switch msg.String() {
+		case "ctrl+f":
+			m.search.Activate()
+			return m, nil
 		case "1":
 			m.activeView = ViewMemory
 			m.scrollY = 0
@@ -156,7 +182,12 @@ func (m NodesModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderLegend())
 
-	return b.String()
+	content := b.String()
+	if m.search.Active() {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
+	}
+
+	return content
 }
 
 func (m NodesModel) renderTabs() string {
@@ -394,6 +425,28 @@ func (m NodesModel) rightAlign(s string, width int) string {
 		return string(r[:width])
 	}
 	return strings.Repeat(" ", width-len(r)) + s
+}
+
+func (m *NodesModel) updateNodeSearch() {
+	if m.state == nil {
+		return
+	}
+	lines := m.getSearchableLines()
+	m.search.FindMatches(lines)
+	if match := m.search.CurrentMatch(); match >= 0 {
+		m.scrollY = match
+	}
+}
+
+func (m *NodesModel) getSearchableLines() []string {
+	if m.state == nil {
+		return nil
+	}
+	var lines []string
+	for _, node := range m.state.Nodes {
+		lines = append(lines, node.Name)
+	}
+	return lines
 }
 
 func formatBytes(bytes int64) string {
