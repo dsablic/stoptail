@@ -152,6 +152,21 @@ When adding new functionality, check if a utility already exists before creating
 - Delegate to sub-models for tab-specific logic
 - Handle tea.WindowSizeMsg to propagate dimensions
 
+**Modal keyboard handling** - When a modal/form is open, global keybindings (q, r, tab, ?, etc.) must be disabled so users can type in form fields. Create a helper method combining the checks:
+
+```go
+func (m Model) overviewAcceptsGlobalKeys() bool {
+    return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
+}
+
+case "r":
+    if m.overviewAcceptsGlobalKeys() {
+        // handle refresh
+    }
+```
+
+Sub-models with modals should expose a `HasModal() bool` method. The modal itself handles Esc for cancellation. Apply this pattern to any tab that can have modals or input states that capture keys.
+
 ### Lipgloss Layout Patterns
 
 **Width() excludes borders** - When using `Width(n)` on a bordered style, the border adds 2 chars to the total. For two side-by-side bordered panes:

@@ -75,6 +75,10 @@ func New(client *es.Client, cfg *config.Config) Model {
 	}
 }
 
+func (m Model) overviewAcceptsGlobalKeys() bool {
+	return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
+}
+
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.spinner.Tick, m.connect())
 }
@@ -197,13 +201,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Global keys
 		switch msg.String() {
 		case "?":
-			m.showHelp = !m.showHelp
-			return m, nil
+			if m.overviewAcceptsGlobalKeys() || m.activeTab != TabOverview {
+				m.showHelp = !m.showHelp
+				return m, nil
+			}
 		case "ctrl+c":
 			m.quitting = true
 			return m, tea.Quit
 		case "q":
-			if m.activeTab == TabOverview && !m.overview.filterActive {
+			if m.overviewAcceptsGlobalKeys() {
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -224,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "tab":
-			if m.activeTab == TabOverview && !m.overview.filterActive {
+			if m.overviewAcceptsGlobalKeys() {
 				m.activeTab = TabWorkbench
 				m.workbench.Blur()
 				return m, nil
@@ -261,7 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeTab = TabWorkbench
 				return m, nil
 			}
-			if m.activeTab == TabOverview && !m.overview.filterActive {
+			if m.overviewAcceptsGlobalKeys() {
 				m.activeTab = TabTasks
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
@@ -279,7 +285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "m":
-			if m.activeTab != TabWorkbench || !m.workbench.HasActiveInput() {
+			if m.overviewAcceptsGlobalKeys() || (m.activeTab != TabWorkbench || !m.workbench.HasActiveInput()) && m.activeTab != TabOverview {
 				m.activeTab = TabMappings
 				m.workbench.Blur()
 				if m.cluster != nil {
@@ -288,7 +294,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "r":
-			if m.activeTab == TabOverview && !m.overview.filterActive {
+			if m.overviewAcceptsGlobalKeys() {
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.connect())
 			}
@@ -305,8 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
 			}
 		case "enter":
-			// From overview, enter on index switches to workbench
-			if m.activeTab == TabOverview && !m.overview.filterActive {
+			if m.overviewAcceptsGlobalKeys() {
 				if idx := m.overview.SelectedIndex(); idx != "" {
 					m.workbench.Prefill(idx)
 					m.activeTab = TabWorkbench

@@ -425,6 +425,10 @@ func (m OverviewModel) SelectedIndex() string {
 	return ""
 }
 
+func (m OverviewModel) HasModal() bool {
+	return m.modal != nil
+}
+
 func (m OverviewModel) visibleColumns() int {
 	nodeColWidth := 18
 	indexColWidth := 25
