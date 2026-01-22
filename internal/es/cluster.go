@@ -821,7 +821,7 @@ func formatDuration(ms int64) string {
 func parseMappingResponse(data []byte) ([]string, error) {
 	var response map[string]struct {
 		Mappings struct {
-			Properties map[string]interface{} `json:"properties"`
+			Properties map[string]any `json:"properties"`
 		} `json:"mappings"`
 	}
 
@@ -838,7 +838,7 @@ func parseMappingResponse(data []byte) ([]string, error) {
 	return fields, nil
 }
 
-func extractFields(properties map[string]interface{}, prefix string) []string {
+func extractFields(properties map[string]any, prefix string) []string {
 	var fields []string
 
 	for name, prop := range properties {
@@ -847,12 +847,12 @@ func extractFields(properties map[string]interface{}, prefix string) []string {
 			fieldName = prefix + "." + name
 		}
 
-		propMap, ok := prop.(map[string]interface{})
+		propMap, ok := prop.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		if nested, ok := propMap["properties"].(map[string]interface{}); ok {
+		if nested, ok := propMap["properties"].(map[string]any); ok {
 			fields = append(fields, extractFields(nested, fieldName)...)
 		} else {
 			fields = append(fields, fieldName)
