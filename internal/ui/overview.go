@@ -57,6 +57,20 @@ func (m *OverviewModel) SetSize(width, height int) {
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	var cmd tea.Cmd
 
+	if m.modal != nil {
+		cmd := m.modal.Update(msg)
+		if m.modal.Cancelled() {
+			m.modal = nil
+			m.modalAction = ""
+			m.modalStep = 0
+			return m, nil
+		}
+		if m.modal.Done() {
+			return m.handleModalDone()
+		}
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.filterActive {
@@ -142,6 +156,29 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 					m.scrollX = 0
 				}
 			}
+		case "c":
+			m.modal = NewModal("Create Index", "Index name:")
+			m.modalAction = "create"
+			m.modalStep = 1
+			return m, textinput.Blink
+		case "d":
+			if m.SelectedIndex() != "" {
+				m.modal = NewModal("Delete Index", "Type '"+m.SelectedIndex()+"' to confirm:")
+				m.modalAction = "delete"
+				return m, textinput.Blink
+			}
+		case "a":
+			if m.SelectedIndex() != "" {
+				m.modal = NewModal("Add Alias", "Alias name:")
+				m.modalAction = "addAlias"
+				return m, textinput.Blink
+			}
+		case "A":
+			if m.SelectedIndex() != "" {
+				m.modal = NewModal("Remove Alias", "Alias name:")
+				m.modalAction = "removeAlias"
+				return m, textinput.Blink
+			}
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
@@ -159,6 +196,12 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			}
 		}
 	}
+	return m, nil
+}
+
+func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
+	m.modal = nil
+	m.modalAction = ""
 	return m, nil
 }
 
