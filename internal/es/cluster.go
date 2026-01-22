@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -341,6 +343,10 @@ func (c *Client) FetchNodeStats(ctx context.Context) ([]NodeStats, error) {
 		return nil, fmt.Errorf("parsing node stats: %w", err)
 	}
 
+	sort.Slice(nodes, func(i, j int) bool {
+		return nodes[i].Name < nodes[j].Name
+	})
+
 	return nodes, nil
 }
 
@@ -369,6 +375,15 @@ func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, er
 	if err := json.Unmarshal(body, &fielddata); err != nil {
 		return nil, fmt.Errorf("parsing fielddata: %w", err)
 	}
+
+	sort.Slice(fielddata, func(i, j int) bool {
+		sizeI := parseSizeToBytes(fielddata[i].Size)
+		sizeJ := parseSizeToBytes(fielddata[j].Size)
+		if sizeI != sizeJ {
+			return sizeI > sizeJ
+		}
+		return fielddata[i].Field < fielddata[j].Field
+	})
 
 	return fielddata, nil
 }
@@ -427,7 +442,10 @@ func (c *Client) FetchFielddataByIndex(ctx context.Context) ([]FielddataByIndex,
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Size > result[j].Size
+		if result[i].Size != result[j].Size {
+			return result[i].Size > result[j].Size
+		}
+		return result[i].Index < result[j].Index
 	})
 
 	if len(result) > 20 {
@@ -642,4 +660,39 @@ func (c *Client) FetchMapping(ctx context.Context, index string) ([]string, erro
 	}
 
 	return parseMappingResponse(body)
+}
+
+func parseSizeToBytes(size string) int64 {
+	size = strings.TrimSpace(strings.ToLower(size))
+	if size == "" || size == "-" {
+		return 0
+	}
+
+	suffixes := []struct {
+		suffix string
+		mult   int64
+	}{
+		{"tb", 1024 * 1024 * 1024 * 1024},
+		{"gb", 1024 * 1024 * 1024},
+		{"mb", 1024 * 1024},
+		{"kb", 1024},
+		{"b", 1},
+	}
+
+	for _, s := range suffixes {
+		if strings.HasSuffix(size, s.suffix) {
+			numStr := strings.TrimSuffix(size, s.suffix)
+			num, err := strconv.ParseFloat(numStr, 64)
+			if err != nil {
+				return 0
+			}
+			return int64(num * float64(s.mult))
+		}
+	}
+
+	num, err := strconv.ParseInt(size, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return num
 }
