@@ -93,6 +93,17 @@ func (m Model) connect() tea.Cmd {
 	}
 }
 
+func (m Model) fetchCluster() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		state, err := m.client.FetchClusterState(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return connectedMsg{state}
+	}
+}
+
 func (m Model) fetchNodes() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -304,6 +315,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case IndexCreatedMsg, IndexDeletedMsg, AliasAddedMsg, AliasRemovedMsg:
+		m.overview, cmd = m.overview.Update(msg)
+		if hasNoError(msg) {
+			return m, tea.Batch(cmd, m.fetchCluster())
+		}
+		return m, cmd
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -463,4 +480,18 @@ func (m Model) View() string {
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, tabs, content, statusBar)
+}
+
+func hasNoError(msg tea.Msg) bool {
+	switch m := msg.(type) {
+	case IndexCreatedMsg:
+		return m.Err == nil
+	case IndexDeletedMsg:
+		return m.Err == nil
+	case AliasAddedMsg:
+		return m.Err == nil
+	case AliasRemovedMsg:
+		return m.Err == nil
+	}
+	return false
 }

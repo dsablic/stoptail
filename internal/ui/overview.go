@@ -66,7 +66,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 
 	if m.modal != nil {
 		cmd := m.modal.Update(msg)
-		if m.modal.Cancelled() {
+		if m.modal.Cancelled() || (m.modal.Done() && m.modalAction == "error") {
 			m.modal = nil
 			m.modalAction = ""
 			m.modalStep = 0
@@ -202,6 +202,31 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				}
 			}
 		}
+	case IndexCreatedMsg:
+		if msg.Err != nil {
+			m.modal = NewModal("Error", msg.Err.Error())
+			m.modalAction = "error"
+		}
+		return m, nil
+	case IndexDeletedMsg:
+		if msg.Err != nil {
+			m.modal = NewModal("Error", msg.Err.Error())
+			m.modalAction = "error"
+		}
+		m.selectedIndex = 0
+		return m, nil
+	case AliasAddedMsg:
+		if msg.Err != nil {
+			m.modal = NewModal("Error", msg.Err.Error())
+			m.modalAction = "error"
+		}
+		return m, nil
+	case AliasRemovedMsg:
+		if msg.Err != nil {
+			m.modal = NewModal("Error", msg.Err.Error())
+			m.modalAction = "error"
+		}
+		return m, nil
 	}
 	return m, nil
 }
