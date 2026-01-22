@@ -141,6 +141,19 @@ func TestRenderSelection(t *testing.T) {
 	}
 }
 
+func TestEditorView(t *testing.T) {
+	e := NewEditor()
+	e.SetContent(`{"query": {}}`)
+	e.SetSize(60, 10)
+	view := e.View()
+	if !strings.Contains(view, "1") {
+		t.Error("expected line numbers in view")
+	}
+	if !strings.Contains(view, "query") {
+		t.Error("expected content in view")
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}

@@ -394,6 +394,53 @@ func (e Editor) renderWithSelection(content string) string {
 	return strings.Join(result, "\n")
 }
 
+func (e Editor) View() string {
+	content := e.textarea.Value()
+	lines := strings.Split(content, "\n")
+	lineCount := len(lines)
+
+	gutterWidth := 3
+	if lineCount >= 100 {
+		gutterWidth = 4
+	}
+
+	highlighted := e.highlightContent()
+
+	if e.selection.Active {
+		highlighted = e.renderWithSelection(highlighted)
+	}
+
+	highlightedLines := strings.Split(highlighted, "\n")
+
+	gutterStyle := lipgloss.NewStyle().
+		Foreground(ColorGray).
+		Width(gutterWidth).
+		Align(lipgloss.Right)
+
+	separatorStyle := lipgloss.NewStyle().Foreground(ColorGray)
+
+	var resultLines []string
+	visibleLines := e.height
+	if visibleLines == 0 {
+		visibleLines = lineCount
+	}
+	if visibleLines > lineCount {
+		visibleLines = lineCount
+	}
+
+	for i := 0; i < visibleLines; i++ {
+		lineNum := gutterStyle.Render(fmt.Sprintf("%d", i+1))
+		separator := separatorStyle.Render(" \u2502 ")
+		lineContent := ""
+		if i < len(highlightedLines) {
+			lineContent = highlightedLines[i]
+		}
+		resultLines = append(resultLines, lineNum+separator+lineContent)
+	}
+
+	return strings.Join(resultLines, "\n")
+}
+
 func (e Editor) GetSelectedText() string {
 	if !e.selection.Active {
 		return ""
