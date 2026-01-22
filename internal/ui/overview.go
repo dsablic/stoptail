@@ -249,12 +249,21 @@ func (m OverviewModel) maxScrollY() int {
 	if m.cluster == nil {
 		return 0
 	}
-	maxRows := (m.height - 8) / 2
+	maxRows := m.maxVisibleNodes()
 	maxScroll := len(m.cluster.Nodes) - maxRows
 	if maxScroll < 0 {
 		return 0
 	}
 	return maxScroll
+}
+
+func (m OverviewModel) maxVisibleNodes() int {
+	maxLinesPerNode := 4
+	rows := (m.height - 8) / maxLinesPerNode
+	if rows < 1 {
+		rows = 1
+	}
+	return rows
 }
 
 func (m OverviewModel) View() string {
@@ -413,13 +422,15 @@ func (m OverviewModel) renderGrid() string {
 	if m.scrollY < len(nodes) {
 		visibleNodes = nodes[m.scrollY:]
 	}
-	maxRows := (m.height - 8) / 2
+	maxRows := m.maxVisibleNodes()
 	if maxRows > len(visibleNodes) {
 		maxRows = len(visibleNodes)
 	}
 
 	nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
 	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
+
+	maxLinesPerNode := 4
 
 	for _, node := range visibleNodes[:maxRows] {
 		var shardLines [][]string
@@ -434,6 +445,10 @@ func (m OverviewModel) renderGrid() string {
 					maxLines = len(lines)
 				}
 			}
+		}
+
+		if maxLines > maxLinesPerNode {
+			maxLines = maxLinesPerNode
 		}
 
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
