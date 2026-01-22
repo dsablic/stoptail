@@ -248,14 +248,21 @@ When modifying `demo.tape`, always verify the generated `demo.gif` before commit
    - Overview tab shows `es-node-1` (not Docker container ID)
    - Filter shows filtered indices
    - Workbench shows correct path (`/products/_search`) and 200 response
-   - Nodes tab shows all 4 views (Memory, Disk, Index, Field)
+   - Mappings tab shows field mappings with Ctrl+F search
+   - Nodes tab shows all 3 views (Memory, Disk, Fielddata)
    - Help overlay displays correctly
+
+**Before recording demo**:
+- Build first: `go build .`
+- Clear history to start fresh: `rm ~/.stoptail/history.json`
+- Demo uses `./stoptail` (local build) not `stoptail` (may be old homebrew version)
 
 **Common demo.tape issues**:
 - Tab from Overview goes to Workbench with focus on path (no extra Tab needed)
-- Path input has default `/_search` - use `Ctrl+a` to go to start, then type `/products` to prepend
-- Body input has default `{}` - use `Ctrl+l` to clear before typing query
-- After typing in body, Tab cycles to response, then another Tab switches to Nodes tab
+- Path input loads from history if exists - clear history first or use `Ctrl+a` then `Ctrl+k` to select all and delete before typing
+- Body input loads from history - use `Ctrl+a` then `Ctrl+k` to clear before typing query
+- After typing in body, Tab cycles to response, then another Tab switches to next tab
+- Ctrl+F search only works when focus is in the right pane (response for Workbench)
 
 **Keep demo generic**:
 - Use `http://localhost:9200` URL directly (not cluster names from config)

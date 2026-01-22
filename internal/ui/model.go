@@ -453,7 +453,7 @@ func (m Model) View() string {
 	case TabMappings:
 		statusText = "q: quit  Tab: nodes  Shift+Tab: workbench  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree view"
 	case TabNodes:
-		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-4: views  ↑↓: scroll"
+		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
 	case TabTasks:
 		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  c: cancel  ↑↓: select"
 	}
