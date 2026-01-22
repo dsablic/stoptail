@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/lipgloss"
+	sitter "github.com/smacker/go-tree-sitter"
 )
 
 type Editor struct {
@@ -50,4 +51,14 @@ func (e Editor) renderGutter(width, height int) string {
 		lines = append(lines, gutterStyle.Render(fmt.Sprintf("%d", i)))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (e Editor) parse() *sitter.Tree {
+	content := e.textarea.Value()
+	if content == "" {
+		return nil
+	}
+	parser := sitter.NewParser()
+	parser.SetLanguage(jsonLanguage)
+	return parser.Parse(nil, []byte(content))
 }

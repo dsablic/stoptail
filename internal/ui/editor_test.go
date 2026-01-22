@@ -26,6 +26,30 @@ func TestRenderLineNumbers(t *testing.T) {
 	}
 }
 
+func TestParseJSON(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantOK  bool
+	}{
+		{"valid simple", "{}", true},
+		{"valid nested", `{"query": {"match": {}}}`, true},
+		{"invalid", `{"query":}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := NewEditor()
+			e.SetContent(tt.content)
+			tree := e.parse()
+			hasError := tree != nil && tree.RootNode().HasError()
+			gotOK := tree != nil && !hasError
+			if gotOK != tt.wantOK {
+				t.Errorf("parse() ok = %v, want %v", gotOK, tt.wantOK)
+			}
+		})
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
