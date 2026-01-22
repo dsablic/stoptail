@@ -242,6 +242,93 @@ func flattenFields(fields []MappingField) []MappingField {
 	return result
 }
 
+func (c *Client) FetchIndexAnalyzers(ctx context.Context, indexName string) ([]AnalyzerInfo, error) {
+	res, err := c.es.Indices.GetSettings(
+		c.es.Indices.GetSettings.WithContext(ctx),
+		c.es.Indices.GetSettings.WithIndex(indexName),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching settings: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading settings response: %w", err)
+	}
+
+	var response map[string]struct {
+		Settings struct {
+			Index struct {
+				Analysis struct {
+					Analyzer  map[string]json.RawMessage `json:"analyzer"`
+					Tokenizer map[string]json.RawMessage `json:"tokenizer"`
+					Filter    map[string]json.RawMessage `json:"filter"`
+				} `json:"analysis"`
+			} `json:"index"`
+		} `json:"settings"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing settings: %w", err)
+	}
+
+	var analyzers []AnalyzerInfo
+	indexData := response[indexName]
+
+	for name, raw := range indexData.Settings.Index.Analysis.Analyzer {
+		analyzers = append(analyzers, parseAnalyzerInfo(name, "analyzer", raw))
+	}
+	for name, raw := range indexData.Settings.Index.Analysis.Tokenizer {
+		analyzers = append(analyzers, parseAnalyzerInfo(name, "tokenizer", raw))
+	}
+	for name, raw := range indexData.Settings.Index.Analysis.Filter {
+		analyzers = append(analyzers, parseAnalyzerInfo(name, "filter", raw))
+	}
+
+	sort.Slice(analyzers, func(i, j int) bool {
+		if analyzers[i].Kind != analyzers[j].Kind {
+			kindOrder := map[string]int{"analyzer": 0, "tokenizer": 1, "filter": 2}
+			return kindOrder[analyzers[i].Kind] < kindOrder[analyzers[j].Kind]
+		}
+		return analyzers[i].Name < analyzers[j].Name
+	})
+
+	return analyzers, nil
+}
+
+func parseAnalyzerInfo(name, kind string, raw json.RawMessage) AnalyzerInfo {
+	var settings map[string]any
+	json.Unmarshal(raw, &settings)
+
+	info := AnalyzerInfo{
+		Name:     name,
+		Kind:     kind,
+		Settings: make(map[string]string),
+	}
+
+	for k, v := range settings {
+		switch val := v.(type) {
+		case string:
+			info.Settings[k] = val
+		case []any:
+			strs := make([]string, len(val))
+			for i, s := range val {
+				strs[i] = fmt.Sprintf("%v", s)
+			}
+			info.Settings[k] = strings.Join(strs, ", ")
+		default:
+			info.Settings[k] = fmt.Sprintf("%v", v)
+		}
+	}
+
+	return info
+}
+
 type ClusterState struct {
 	Indices []IndexInfo
 	Nodes   []NodeInfo
