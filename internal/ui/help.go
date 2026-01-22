@@ -33,6 +33,10 @@ func renderHelp(width, height int) string {
 				{"Enter", "Open index in Workbench"},
 				{"1-9", "Toggle alias filters"},
 				{"U/R/I", "Show Unassigned/Relocating/Initializing"},
+				{"c", "Create index"},
+				{"d", "Delete selected index"},
+				{"a", "Add alias to index"},
+				{"A", "Remove alias from index"},
 			},
 		},
 		{

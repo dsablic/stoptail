@@ -140,6 +140,10 @@ stoptail stores data in `~/.stoptail/`:
 | `R` | Show only RELOCATING shards |
 | `I` | Show only INITIALIZING shards |
 | `Enter` | Open selected index in Workbench |
+| `c` | Create new index |
+| `d` | Delete selected index |
+| `a` | Add alias to selected index |
+| `A` | Remove alias from selected index |
 
 ### Workbench Tab
 
