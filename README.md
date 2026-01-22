@@ -17,11 +17,10 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
-- **Nodes Tab**: Node statistics with 4 switchable views
+- **Nodes Tab**: Node statistics with 3 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
-  - Fielddata by Index: top 20 indices by fielddata memory
-  - Fielddata by Field: field-level fielddata breakdown
+  - Fielddata: per-node/index/field fielddata breakdown
 - **Tasks Tab**: Monitor long-running operations
   - Reindex, update-by-query, delete-by-query tracking
   - Force merge and snapshot operations
@@ -153,8 +152,7 @@ stoptail stores data in `~/.stoptail/`:
 |-----|--------|
 | `1` | Memory view |
 | `2` | Disk view |
-| `3` | Fielddata by Index view |
-| `4` | Fielddata by Field view |
+| `3` | Fielddata view |
 | `Up/Down` | Scroll |
 
 ### Tasks Tab

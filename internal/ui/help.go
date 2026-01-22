@@ -49,7 +49,7 @@ func renderHelp(width, height int) string {
 		{
 			header: "Nodes",
 			keys: [][]string{
-				{"1/2/3/4", "Switch view (Mem/Disk/Idx/Field)"},
+				{"1/2/3", "Switch view (Mem/Disk/Fielddata)"},
 				{"up/down", "Scroll"},
 				{"r", "Refresh"},
 			},

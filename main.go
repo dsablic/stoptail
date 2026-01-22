@@ -27,6 +27,7 @@ var (
 	widthFlag  int
 	heightFlag int
 	bodyFlag   string
+	viewFlag   string
 )
 
 func main() {
@@ -53,6 +54,7 @@ Examples:
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
+	rootCmd.Flags().StringVar(&viewFlag, "view", "", "View for --render nodes (memory, disk, fielddata)")
 
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
@@ -95,7 +97,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	if renderFlag != "" {
-		return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag)
+		return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag)
 	}
 
 	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
@@ -220,7 +222,7 @@ func (m clusterPickerModel) View() string {
 	return b.String()
 }
 
-func renderAndExit(client *es.Client, tab string, width, height int, body string) error {
+func renderAndExit(client *es.Client, tab string, width, height int, body, view string) error {
 	ctx := context.Background()
 
 	switch tab {
@@ -241,6 +243,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body string
 		}
 		nodes := ui.NewNodes()
 		nodes.SetSize(width, height)
+		if view != "" {
+			nodes.SetView(view)
+		}
 		nodes.SetState(state)
 		fmt.Println(nodes.View())
 

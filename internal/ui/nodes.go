@@ -15,8 +15,7 @@ type NodesView int
 const (
 	ViewMemory NodesView = iota
 	ViewDisk
-	ViewFielddataIndex
-	ViewFielddataField
+	ViewFielddata
 )
 
 type NodesModel struct {
@@ -46,6 +45,17 @@ func (m *NodesModel) SetSize(width, height int) {
 	m.height = height
 }
 
+func (m *NodesModel) SetView(view string) {
+	switch view {
+	case "memory":
+		m.activeView = ViewMemory
+	case "disk":
+		m.activeView = ViewDisk
+	case "fielddata":
+		m.activeView = ViewFielddata
+	}
+}
+
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -57,10 +67,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.activeView = ViewDisk
 			m.scrollY = 0
 		case "3":
-			m.activeView = ViewFielddataIndex
-			m.scrollY = 0
-		case "4":
-			m.activeView = ViewFielddataField
+			m.activeView = ViewFielddata
 			m.scrollY = 0
 		case "up", "k":
 			if m.scrollY > 0 {
@@ -89,8 +96,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				}{
 					{"[1:Memory]", ViewMemory},
 					{"[2:Disk]", ViewDisk},
-					{"[3:Index]", ViewFielddataIndex},
-					{"[4:Field]", ViewFielddataField},
+					{"[3:Fielddata]", ViewFielddata},
 				}
 
 				pos := 0
@@ -143,10 +149,8 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderMemoryTable())
 	case ViewDisk:
 		b.WriteString(m.renderDiskTable())
-	case ViewFielddataIndex:
-		b.WriteString(m.renderFielddataByIndex())
-	case ViewFielddataField:
-		b.WriteString(m.renderFielddataByField())
+	case ViewFielddata:
+		b.WriteString(m.renderFielddataTable())
 	}
 
 	b.WriteString("\n\n")
@@ -163,8 +167,7 @@ func (m NodesModel) renderTabs() string {
 	}{
 		{"1", "Memory", ViewMemory},
 		{"2", "Disk", ViewDisk},
-		{"3", "Index", ViewFielddataIndex},
-		{"4", "Field", ViewFielddataField},
+		{"3", "Fielddata", ViewFielddata},
 	}
 
 	var parts []string
@@ -185,27 +188,23 @@ func (m NodesModel) renderMemoryTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 8, 10, 10, 10, 12, 14, 10}
-	headers := []string{"node", "heap%", "heap", "gc.young", "gc.old", "fielddata", "query_cache", "segments"}
+	colWidths := []int{20, 8, 12, 12, 14, 10}
+	headers := []string{"node", "heap%", "heap", "fielddata", "query_cache", "segments"}
 
 	var b strings.Builder
 	b.WriteString(m.renderTableHeader(headers, colWidths))
 
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
-		heapPctStyle := m.heapPercentStyle(node.HeapPercent)
-		gcYoung := fmt.Sprintf("%s/%s", node.GCYoungCount, node.GCYoungTime)
-		gcOld := fmt.Sprintf("%s/%s", node.GCOldCount, node.GCOldTime)
+		heapPctStyle := m.percentStyle(node.HeapPercent)
 
 		row := []string{
 			m.leftAlign(node.Name, colWidths[0]),
 			heapPctStyle.Render(m.rightAlign(node.HeapPercent, colWidths[1])),
 			m.rightAlign(node.HeapCurrent, colWidths[2]),
-			m.rightAlign(gcYoung, colWidths[3]),
-			m.rightAlign(gcOld, colWidths[4]),
-			m.rightAlign(node.FielddataSize, colWidths[5]),
-			m.rightAlign(node.QueryCacheSize, colWidths[6]),
-			m.rightAlign(node.SegmentsCount, colWidths[7]),
+			m.rightAlign(node.FielddataSize, colWidths[3]),
+			m.rightAlign(node.QueryCacheSize, colWidths[4]),
+			m.rightAlign(node.SegmentsCount, colWidths[5]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -219,92 +218,53 @@ func (m NodesModel) renderDiskTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 10, 8, 12, 12, 12, 12, 8, 6, 6, 8, 10}
-	headers := []string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "disk.indices", "shards", "pri", "rep", "heap%", "heap"}
-
-	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths))
-
-	visibleNodes := m.visibleItems(len(m.state.Nodes))
-	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
-		heapPctStyle := m.heapPercentStyle(node.HeapPercent)
-
-		row := []string{
-			m.leftAlign(node.Name, colWidths[0]),
-			m.leftAlign(node.Version, colWidths[1]),
-			m.rightAlign(node.DiskPercent, colWidths[2]),
-			m.rightAlign(node.DiskAvail, colWidths[3]),
-			m.rightAlign(node.DiskTotal, colWidths[4]),
-			m.rightAlign(node.DiskUsed, colWidths[5]),
-			m.rightAlign(node.DiskIndices, colWidths[6]),
-			m.rightAlign(node.Shards, colWidths[7]),
-			m.rightAlign(node.PrimaryShards, colWidths[8]),
-			m.rightAlign(node.ReplicaShards, colWidths[9]),
-			heapPctStyle.Render(m.rightAlign(node.HeapPercent, colWidths[10])),
-			m.rightAlign(node.HeapCurrent, colWidths[11]),
-		}
-		b.WriteString(strings.Join(row, " "))
-		b.WriteString("\n")
-	}
-
-	return b.String()
-}
-
-func (m NodesModel) renderFielddataByIndex() string {
-	if len(m.state.FielddataByIndex) == 0 {
-		return "No fielddata by index found"
-	}
-
-	var total int64
-	for _, fd := range m.state.FielddataByIndex {
-		total += fd.Size
-	}
-
-	colWidths := []int{40, 15, 12}
-	headers := []string{"index", "fielddata", "% of total"}
-
-	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths))
-
-	visibleItems := m.visibleItems(len(m.state.FielddataByIndex))
-	for _, fd := range m.state.FielddataByIndex[visibleItems.start:visibleItems.end] {
-		var pctStr string
-		if total > 0 {
-			pct := float64(fd.Size) / float64(total) * 100
-			pctStr = fmt.Sprintf("%.1f%%", pct)
-		} else {
-			pctStr = "0.0%"
-		}
-
-		row := []string{
-			m.leftAlign(fd.Index, colWidths[0]),
-			m.rightAlign(formatBytes(fd.Size), colWidths[1]),
-			m.rightAlign(pctStr, colWidths[2]),
-		}
-		b.WriteString(strings.Join(row, " "))
-		b.WriteString("\n")
-	}
-
-	return b.String()
-}
-
-func (m NodesModel) renderFielddataByField() string {
-	if len(m.state.FielddataByField) == 0 {
-		return "No fielddata by field found"
-	}
-
-	colWidths := []int{20, 35, 15}
-	headers := []string{"node", "field", "size"}
+	colWidths := []int{20, 10, 8, 12, 12, 12, 8}
+	headers := []string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards"}
 
 	var b strings.Builder
 	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
 
-	visibleItems := m.visibleItems(len(m.state.FielddataByField))
-	for _, fd := range m.state.FielddataByField[visibleItems.start:visibleItems.end] {
+	visibleNodes := m.visibleItems(len(m.state.Nodes))
+	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
+		diskPctStyle := m.percentStyle(node.DiskPercent)
+		row := []string{
+			m.leftAlign(node.Name, colWidths[0]),
+			m.leftAlign(node.Version, colWidths[1]),
+			diskPctStyle.Render(m.rightAlign(node.DiskPercent, colWidths[2])),
+			m.rightAlign(node.DiskAvail, colWidths[3]),
+			m.rightAlign(node.DiskTotal, colWidths[4]),
+			m.rightAlign(node.DiskUsed, colWidths[5]),
+			m.rightAlign(node.Shards, colWidths[6]),
+		}
+		b.WriteString(strings.Join(row, " "))
+		b.WriteString("\n")
+	}
+
+	return b.String()
+}
+
+func (m NodesModel) renderFielddataTable() string {
+	if len(m.state.Fielddata) == 0 {
+		return "No fielddata found"
+	}
+
+	colWidths := []int{18, 25, 25, 12}
+	headers := []string{"node", "index", "field", "size"}
+
+	var b strings.Builder
+	b.WriteString(m.renderTableHeader(headers, colWidths, 3))
+
+	visibleItems := m.visibleItems(len(m.state.Fielddata))
+	for _, fd := range m.state.Fielddata[visibleItems.start:visibleItems.end] {
+		field := fd.Field
+		if field == "" {
+			field = "(all)"
+		}
 		row := []string{
 			m.leftAlign(fd.Node, colWidths[0]),
-			m.leftAlign(fd.Field, colWidths[1]),
-			m.rightAlign(fd.Size, colWidths[2]),
+			m.leftAlign(fd.Index, colWidths[1]),
+			m.leftAlign(field, colWidths[2]),
+			m.rightAlign(formatBytes(fd.Size), colWidths[3]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -334,10 +294,8 @@ func (m NodesModel) renderLegend() string {
 			yellowStyle.Render("75-84") +
 			grayStyle.Render(" | ") +
 			redStyle.Render(">=85")
-	case ViewFielddataIndex:
-		return grayStyle.Render("fielddata size as % of total cluster fielddata")
-	case ViewFielddataField:
-		return grayStyle.Render("fielddata size per node/field")
+	case ViewFielddata:
+		return grayStyle.Render("fielddata size per node/index/field")
 	default:
 		return ""
 	}
@@ -402,16 +360,14 @@ func (m NodesModel) getItemCount() int {
 	switch m.activeView {
 	case ViewMemory, ViewDisk:
 		return len(m.state.Nodes)
-	case ViewFielddataIndex:
-		return len(m.state.FielddataByIndex)
-	case ViewFielddataField:
-		return len(m.state.FielddataByField)
+	case ViewFielddata:
+		return len(m.state.Fielddata)
 	}
 	return 0
 }
 
-func (m NodesModel) heapPercentStyle(heapPct string) lipgloss.Style {
-	pct, err := strconv.Atoi(strings.TrimSpace(heapPct))
+func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {
+	pct, err := strconv.ParseFloat(strings.TrimSpace(pctStr), 64)
 	if err != nil {
 		return lipgloss.NewStyle().Foreground(ColorGray)
 	}

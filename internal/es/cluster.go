@@ -60,10 +60,6 @@ type NodeStats struct {
 	HeapPercent    string `json:"heap.percent"`
 	HeapCurrent    string `json:"heap.current"`
 	HeapMax        string `json:"heap.max"`
-	GCYoungCount   string `json:"gc.young.count"`
-	GCYoungTime    string `json:"gc.young.time"`
-	GCOldCount     string `json:"gc.old.count"`
-	GCOldTime      string `json:"gc.old.time"`
 	FielddataSize  string `json:"fielddata.memory_size"`
 	QueryCacheSize string `json:"query_cache.memory_size"`
 	SegmentsCount  string `json:"segments.count"`
@@ -71,27 +67,19 @@ type NodeStats struct {
 	DiskAvail      string `json:"disk.avail"`
 	DiskTotal      string `json:"disk.total"`
 	DiskUsed       string `json:"disk.used"`
-	DiskIndices    string `json:"disk.indices"`
-	Shards         string `json:"shards"`
-	PrimaryShards  string `json:"pri"`
-	ReplicaShards  string `json:"rep"`
+	Shards         string `json:"shard_stats.total_count"`
 }
 
-type FielddataInfo struct {
-	Node  string `json:"node"`
-	Field string `json:"field"`
-	Size  string `json:"size"`
-}
-
-type FielddataByIndex struct {
+type FielddataEntry struct {
+	Node  string
 	Index string
+	Field string
 	Size  int64
 }
 
 type NodesState struct {
-	Nodes            []NodeStats
-	FielddataByField []FielddataInfo
-	FielddataByIndex []FielddataByIndex
+	Nodes     []NodeStats
+	Fielddata []FielddataEntry
 }
 
 type TaskInfo struct {
@@ -343,10 +331,9 @@ func (c *Client) FetchNodeStats(ctx context.Context) ([]NodeStats, error) {
 		c.es.Cat.Nodes.WithFormat("json"),
 		c.es.Cat.Nodes.WithH(
 			"name", "version", "heap.percent", "heap.current", "heap.max",
-			"gc.young.count", "gc.young.time", "gc.old.count", "gc.old.time",
 			"fielddata.memory_size", "query_cache.memory_size", "segments.count",
-			"disk.used_percent", "disk.avail", "disk.total", "disk.used", "disk.indices",
-			"shards", "pri", "rep",
+			"disk.used_percent", "disk.avail", "disk.total", "disk.used",
+			"shard_stats.total_count",
 		),
 	)
 	if err != nil {
@@ -376,12 +363,13 @@ func (c *Client) FetchNodeStats(ctx context.Context) ([]NodeStats, error) {
 	return nodes, nil
 }
 
-func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, error) {
-	res, err := c.es.Cat.Fielddata(
-		c.es.Cat.Fielddata.WithContext(ctx),
-		c.es.Cat.Fielddata.WithFormat("json"),
-		c.es.Cat.Fielddata.WithFields("*"),
-		c.es.Cat.Fielddata.WithH("node", "field", "size"),
+func (c *Client) FetchFielddata(ctx context.Context) ([]FielddataEntry, error) {
+	res, err := c.es.Nodes.Stats(
+		c.es.Nodes.Stats.WithContext(ctx),
+		c.es.Nodes.Stats.WithMetric("indices"),
+		c.es.Nodes.Stats.WithIndexMetric("fielddata"),
+		c.es.Nodes.Stats.WithLevel("indices"),
+		c.es.Nodes.Stats.WithFields("*"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching fielddata: %w", err)
@@ -398,54 +386,16 @@ func (c *Client) FetchFielddataByField(ctx context.Context) ([]FielddataInfo, er
 		return nil, fmt.Errorf("reading fielddata response: %w", err)
 	}
 
-	var fielddata []FielddataInfo
-	if err := json.Unmarshal(body, &fielddata); err != nil {
-		return nil, fmt.Errorf("parsing fielddata: %w", err)
-	}
-
-	sort.Slice(fielddata, func(i, j int) bool {
-		sizeI := parseSizeToBytes(fielddata[i].Size)
-		sizeJ := parseSizeToBytes(fielddata[j].Size)
-		if sizeI != sizeJ {
-			return sizeI > sizeJ
-		}
-		if fielddata[i].Field != fielddata[j].Field {
-			return fielddata[i].Field < fielddata[j].Field
-		}
-		return fielddata[i].Node < fielddata[j].Node
-	})
-
-	return fielddata, nil
-}
-
-func (c *Client) FetchFielddataByIndex(ctx context.Context) ([]FielddataByIndex, error) {
-	res, err := c.es.Nodes.Stats(
-		c.es.Nodes.Stats.WithContext(ctx),
-		c.es.Nodes.Stats.WithMetric("indices"),
-		c.es.Nodes.Stats.WithIndexMetric("fielddata"),
-		c.es.Nodes.Stats.WithLevel("indices"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetching fielddata by index: %w", err)
-	}
-	defer res.Body.Close()
-
-	if res.IsError() {
-		body, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
-	}
-
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading fielddata by index response: %w", err)
-	}
-
 	var response struct {
 		Nodes map[string]struct {
+			Name    string `json:"name"`
 			Indices struct {
 				Indices map[string]struct {
 					Fielddata struct {
 						MemorySizeInBytes int64 `json:"memory_size_in_bytes"`
+						Fields            map[string]struct {
+							MemorySizeInBytes int64 `json:"memory_size_in_bytes"`
+						} `json:"fields"`
 					} `json:"fielddata"`
 				} `json:"indices"`
 			} `json:"indices"`
@@ -453,34 +403,46 @@ func (c *Client) FetchFielddataByIndex(ctx context.Context) ([]FielddataByIndex,
 	}
 
 	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, fmt.Errorf("parsing fielddata by index: %w", err)
+		return nil, fmt.Errorf("parsing fielddata: %w", err)
 	}
 
-	indexSizes := make(map[string]int64)
+	var result []FielddataEntry
 	for _, node := range response.Nodes {
 		for indexName, indexData := range node.Indices.Indices {
-			indexSizes[indexName] += indexData.Fielddata.MemorySizeInBytes
+			if len(indexData.Fielddata.Fields) > 0 {
+				for fieldName, fieldData := range indexData.Fielddata.Fields {
+					if fieldData.MemorySizeInBytes > 0 {
+						result = append(result, FielddataEntry{
+							Node:  node.Name,
+							Index: indexName,
+							Field: fieldName,
+							Size:  fieldData.MemorySizeInBytes,
+						})
+					}
+				}
+			} else if indexData.Fielddata.MemorySizeInBytes > 0 {
+				result = append(result, FielddataEntry{
+					Node:  node.Name,
+					Index: indexName,
+					Field: "",
+					Size:  indexData.Fielddata.MemorySizeInBytes,
+				})
+			}
 		}
-	}
-
-	var result []FielddataByIndex
-	for indexName, size := range indexSizes {
-		result = append(result, FielddataByIndex{
-			Index: indexName,
-			Size:  size,
-		})
 	}
 
 	sort.Slice(result, func(i, j int) bool {
 		if result[i].Size != result[j].Size {
 			return result[i].Size > result[j].Size
 		}
-		return result[i].Index < result[j].Index
+		if result[i].Index != result[j].Index {
+			return result[i].Index < result[j].Index
+		}
+		if result[i].Field != result[j].Field {
+			return result[i].Field < result[j].Field
+		}
+		return result[i].Node < result[j].Node
 	})
-
-	if len(result) > 20 {
-		result = result[:20]
-	}
 
 	return result, nil
 }
@@ -494,17 +456,11 @@ func (c *Client) FetchNodesState(ctx context.Context) (*NodesState, error) {
 	}
 	state.Nodes = nodes
 
-	fielddata, err := c.FetchFielddataByField(ctx)
+	fielddata, err := c.FetchFielddata(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state.FielddataByField = fielddata
-
-	fielddataByIndex, err := c.FetchFielddataByIndex(ctx)
-	if err != nil {
-		return nil, err
-	}
-	state.FielddataByIndex = fielddataByIndex
+	state.Fielddata = fielddata
 
 	return state, nil
 }
