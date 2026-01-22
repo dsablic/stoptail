@@ -743,14 +743,23 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 		switch sh.State {
 		case "RELOCATING":
 			bgColor = ColorYellow
+			fgColor = lipgloss.Color("#000000")
 		case "UNASSIGNED":
 			bgColor = ColorRed
 		case "INITIALIZING":
 			bgColor = ColorYellow
+			fgColor = lipgloss.Color("#000000")
 		}
 
-		shardText := sh.Shard
-		shardWidth := lipgloss.Width(shardText) + 2
+		styledShard := lipgloss.NewStyle().
+			Foreground(fgColor).
+			Background(bgColor).
+			Bold(true).
+			Width(4).
+			Align(lipgloss.Center).
+			MarginRight(1).
+			Render(sh.Shard)
+		shardWidth := lipgloss.Width(styledShard)
 
 		if currentWidth+shardWidth > width && len(currentLine) > 0 {
 			lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
@@ -758,12 +767,7 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 			currentWidth = 0
 		}
 
-		style := lipgloss.NewStyle().
-			Foreground(fgColor).
-			Background(bgColor).
-			Padding(0, 0).
-			MarginRight(1)
-		currentLine = append(currentLine, style.Render(shardText))
+		currentLine = append(currentLine, styledShard)
 		currentWidth += shardWidth
 	}
 
