@@ -27,6 +27,7 @@ type MappingsModel struct {
 	filterActive  bool
 	filterText    string
 	treeView      bool
+	search        SearchBar
 
 	mappings      *es.IndexMappings
 	analyzers     []es.AnalyzerInfo
@@ -42,6 +43,7 @@ func NewMappings() MappingsModel {
 	return MappingsModel{
 		activePane: PaneIndices,
 		treeView:   false,
+		search:     NewSearchBar(),
 	}
 }
 
@@ -83,11 +85,38 @@ func (m *MappingsModel) SetLoading(indexName string) {
 func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.search.Active() {
+			switch msg.String() {
+			case "esc":
+				m.search.Deactivate()
+				return m, nil
+			case "enter":
+				if match := m.search.NextMatch(); match >= 0 {
+					m.mappingScroll = match
+				}
+				return m, nil
+			case "shift+enter":
+				if match := m.search.PrevMatch(); match >= 0 {
+					m.mappingScroll = match
+				}
+				return m, nil
+			default:
+				cmd := m.search.Update(msg)
+				(&m).updateMappingSearch()
+				return m, cmd
+			}
+		}
+
 		if m.filterActive {
 			return m.handleFilterInput(msg)
 		}
 
 		switch msg.String() {
+		case "ctrl+f":
+			if !m.filterActive {
+				m.search.Activate()
+				return m, nil
+			}
 		case "/":
 			if m.activePane == PaneIndices {
 				m.filterActive = true
@@ -436,6 +465,11 @@ func (m MappingsModel) renderMappingsPane(width int) string {
 		b.WriteString("\n")
 	}
 
+	if m.search.Active() {
+		b.WriteString(m.search.View(width - 4))
+		b.WriteString("\n")
+	}
+
 	return paneStyle.Render(b.String())
 }
 
@@ -557,6 +591,26 @@ func (m MappingsModel) flattenMappingFields(fields []es.MappingField) []es.Mappi
 		}
 	}
 	return result
+}
+
+func (m *MappingsModel) updateMappingSearch() {
+	if m.mappings == nil {
+		return
+	}
+	var lines []string
+	if len(m.analyzers) > 0 {
+		lines = append(lines, m.renderAnalyzers(1000)...)
+		lines = append(lines, "")
+	}
+	if m.treeView {
+		lines = append(lines, m.renderFieldsTree(m.mappings.Fields, 0, 1000)...)
+	} else {
+		lines = append(lines, m.renderFieldsFlat(1000)...)
+	}
+	m.search.FindMatches(lines)
+	if match := m.search.CurrentMatch(); match >= 0 {
+		m.mappingScroll = match
+	}
 }
 
 func (m MappingsModel) formatFieldAttrs(f es.MappingField) string {
