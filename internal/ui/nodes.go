@@ -297,7 +297,7 @@ func (m NodesModel) renderFielddataByField() string {
 	headers := []string{"node", "field", "size"}
 
 	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths))
+	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
 
 	visibleItems := m.visibleItems(len(m.state.FielddataByField))
 	for _, fd := range m.state.FielddataByField[visibleItems.start:visibleItems.end] {
@@ -319,22 +319,39 @@ func (m NodesModel) renderLegend() string {
 	redStyle := lipgloss.NewStyle().Foreground(ColorRed)
 	grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
 
-	legend := grayStyle.Render("heap%: ") +
-		greenStyle.Render("<75") +
-		grayStyle.Render(" | ") +
-		yellowStyle.Render("75-84") +
-		grayStyle.Render(" | ") +
-		redStyle.Render(">=85") +
-		grayStyle.Render("    fielddata: % of total (by index), raw size (by field)")
-
-	return legend
+	switch m.activeView {
+	case ViewMemory:
+		return grayStyle.Render("heap%: ") +
+			greenStyle.Render("<75") +
+			grayStyle.Render(" | ") +
+			yellowStyle.Render("75-84") +
+			grayStyle.Render(" | ") +
+			redStyle.Render(">=85")
+	case ViewDisk:
+		return grayStyle.Render("disk%: ") +
+			greenStyle.Render("<75") +
+			grayStyle.Render(" | ") +
+			yellowStyle.Render("75-84") +
+			grayStyle.Render(" | ") +
+			redStyle.Render(">=85")
+	case ViewFielddataIndex:
+		return grayStyle.Render("fielddata size as % of total cluster fielddata")
+	case ViewFielddataField:
+		return grayStyle.Render("fielddata size per node/field")
+	default:
+		return ""
+	}
 }
 
-func (m NodesModel) renderTableHeader(headers []string, widths []int) string {
+func (m NodesModel) renderTableHeader(headers []string, widths []int, leftAlignCols ...int) string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+	numLeftAlign := 1
+	if len(leftAlignCols) > 0 {
+		numLeftAlign = leftAlignCols[0]
+	}
 	var headerParts []string
 	for i, h := range headers {
-		if i == 0 {
+		if i < numLeftAlign {
 			headerParts = append(headerParts, headerStyle.Render(m.leftAlign(h, widths[i])))
 		} else {
 			headerParts = append(headerParts, headerStyle.Render(m.rightAlign(h, widths[i])))
