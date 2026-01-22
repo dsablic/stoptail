@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestOffsetToLineCol(t *testing.T) {
 	tests := []struct {
@@ -56,5 +59,24 @@ func TestOverlayErrorMarker(t *testing.T) {
 				t.Errorf("expected modified view, got unchanged")
 			}
 		})
+	}
+}
+
+func TestWorkbenchEditorIntegration(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+
+	view := w.View()
+
+	if !strings.Contains(view, "1") {
+		t.Error("expected line numbers in view")
+	}
+
+	if !strings.Contains(view, "\x1b[") {
+		t.Error("expected ANSI color codes (syntax highlighting) in view")
+	}
+
+	if !strings.Contains(view, "Body") {
+		t.Error("expected Body header in view")
 	}
 }
