@@ -779,6 +779,42 @@ func (c *Client) DeleteIndex(ctx context.Context, name string) error {
 	return nil
 }
 
+func (c *Client) AddAlias(ctx context.Context, index, alias string) error {
+	body := fmt.Sprintf(`{"actions":[{"add":{"index":"%s","alias":"%s"}}]}`, index, alias)
+	res, err := c.es.Indices.UpdateAliases(
+		strings.NewReader(body),
+		c.es.Indices.UpdateAliases.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("adding alias: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
+func (c *Client) RemoveAlias(ctx context.Context, index, alias string) error {
+	body := fmt.Sprintf(`{"actions":[{"remove":{"index":"%s","alias":"%s"}}]}`, index, alias)
+	res, err := c.es.Indices.UpdateAliases(
+		strings.NewReader(body),
+		c.es.Indices.UpdateAliases.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("removing alias: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
 func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 	var response struct {
 		Nodes map[string]struct {
