@@ -26,6 +26,26 @@ Add a new tab to browse and explore index mappings:
 - Show field details (type, analyzer, index options)
 - Possibly allow expanding/collapsing nested objects
 
+## Index Management
+
+Add the ability to create and remove indices:
+
+- Create index with interactive prompts:
+  - Index name (required)
+  - Number of shards (default: 1)
+  - Number of replicas (default: 1)
+- Delete index with confirmation prompt
+- Keyboard shortcut from overview (e.g., `c` to create, `d` to delete selected)
+
+## Alias Management
+
+Add the ability to create and remove aliases:
+
+- Create alias linking an index to an alias name
+- Remove alias from an index
+- Bulk alias operations (add/remove multiple)
+- Keyboard shortcuts from overview
+
 ## UI Eye-Candy Improvements
 
 Enhance the UI using more Charm ecosystem features:
