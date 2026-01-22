@@ -579,21 +579,14 @@ func (m OverviewModel) renderGrid() string {
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
 		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			healthColor := ColorGreen
-			switch idx.Health {
-			case "yellow":
-				healthColor = ColorYellow
-			case "red":
-				healthColor = ColorRed
-			}
 			nameStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
-				Foreground(healthColor).
+				Foreground(HealthColor(idx.Health)).
 				Bold(true)
 			if i == m.selectedIndex {
 				nameStyle = nameStyle.Reverse(true)
 			}
-			b.WriteString(nameStyle.Render(truncate(idx.Name, indexColWidth-2)))
+			b.WriteString(nameStyle.Render(Truncate(idx.Name, indexColWidth-2)))
 		}
 	}
 	b.WriteString("\n")
@@ -605,7 +598,7 @@ func (m OverviewModel) renderGrid() string {
 				Width(indexColWidth).
 				Foreground(ColorGray)
 			stats := idx.StoreSize + " · " + idx.DocsCount
-			b.WriteString(statsStyle.Render(truncate(stats, indexColWidth-2)))
+			b.WriteString(statsStyle.Render(Truncate(stats, indexColWidth-2)))
 		}
 	}
 	b.WriteString("\n")
@@ -621,7 +614,7 @@ func (m OverviewModel) renderGrid() string {
 			if len(aliases) > 0 {
 				aliasText = "[" + strings.Join(aliases, ",") + "]"
 			}
-			b.WriteString(aliasStyle.Render(truncate(aliasText, indexColWidth-2)))
+			b.WriteString(aliasStyle.Render(Truncate(aliasText, indexColWidth-2)))
 		}
 	}
 	b.WriteString("\n")
@@ -663,7 +656,7 @@ func (m OverviewModel) renderGrid() string {
 
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
 			if lineIdx == 0 {
-				b.WriteString(nodeStyle.Render(truncate(node.Name, nodeColWidth-2)))
+				b.WriteString(nodeStyle.Render(Truncate(node.Name, nodeColWidth-2)))
 				b.WriteString("│ ")
 			} else {
 				b.WriteString(nodeStyle.Render(""))
@@ -780,13 +773,3 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 	return lines
 }
 
-func truncate(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	if max <= 3 {
-		return string(r[:max])
-	}
-	return string(r[:max-3]) + "..."
-}

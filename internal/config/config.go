@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/labtiva/stoptail/internal/storage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -68,12 +69,11 @@ type ClustersConfig struct {
 }
 
 func EnsureConfigDir() error {
-	home, err := os.UserHomeDir()
+	dir, err := storage.StoptailDir()
 	if err != nil {
 		return err
 	}
 
-	dir := filepath.Join(home, ".stoptail")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -98,15 +98,16 @@ func EnsureConfigDir() error {
 }
 
 func LoadClustersConfig() (*ClustersConfig, error) {
-	home, err := os.UserHomeDir()
+	dir, err := storage.StoptailDir()
 	if err != nil {
 		return nil, err
 	}
 
-	path := filepath.Join(home, ".stoptail", "config.yaml")
+	path := filepath.Join(dir, "config.yaml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			home, _ := os.UserHomeDir()
 			path = filepath.Join(home, ".stoptail.yaml")
 			data, err = os.ReadFile(path)
 			if err != nil {

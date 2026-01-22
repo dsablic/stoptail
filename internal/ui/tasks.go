@@ -210,8 +210,8 @@ func (m TasksModel) View() string {
 
 		row := fmt.Sprintf("%-*s %-*s %-*s %*s %*s",
 			colWidths[0], action,
-			colWidths[1], m.truncate(task.Node, colWidths[1]),
-			colWidths[2], m.truncate(desc, colWidths[2]),
+			colWidths[1], Truncate(task.Node, colWidths[1]),
+			colWidths[2], Truncate(desc, colWidths[2]),
 			colWidths[3], task.RunningTime,
 			colWidths[4], cancelText,
 		)
@@ -259,13 +259,3 @@ func (m TasksModel) truncateAction(action string) string {
 	return action
 }
 
-func (m TasksModel) truncate(s string, maxLen int) string {
-	r := []rune(s)
-	if len(r) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return string(r[:maxLen])
-	}
-	return string(r[:maxLen-3]) + "..."
-}

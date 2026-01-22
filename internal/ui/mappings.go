@@ -316,14 +316,6 @@ func (m MappingsModel) View() string {
 
 	maxLines := max(len(leftLines), len(rightLines))
 
-	trimANSI := func(s string) string {
-		for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") {
-			s = strings.TrimSuffix(s, " ")
-			s = strings.TrimSuffix(s, "\x1b[0m")
-		}
-		return s + "\x1b[0m"
-	}
-
 	var paneLines []string
 	for i := range maxLines {
 		left := ""
@@ -334,7 +326,7 @@ func (m MappingsModel) View() string {
 		if i < len(rightLines) {
 			right = rightLines[i]
 		}
-		paneLines = append(paneLines, trimANSI(left)+" "+trimANSI(right))
+		paneLines = append(paneLines, TrimANSI(left)+" "+TrimANSI(right))
 	}
 
 	return strings.Join(paneLines, "\n")
@@ -380,15 +372,14 @@ func (m MappingsModel) renderIndexList(width int) string {
 		idx := filtered[i]
 		isSelected := i == m.selectedIndex
 
-		name := m.truncate(idx.Name, width-4)
+		name := Truncate(idx.Name, width-4)
 
 		rowStyle := lipgloss.NewStyle()
 		if isSelected {
 			rowStyle = rowStyle.Background(ColorBlue).Foreground(ColorOnAccent)
 		}
 
-		healthColor := m.healthColor(idx.Health)
-		healthDot := lipgloss.NewStyle().Foreground(healthColor).Render("*")
+		healthDot := lipgloss.NewStyle().Foreground(HealthColor(idx.Health)).Render("*")
 
 		if isSelected {
 			b.WriteString(rowStyle.Render(healthDot + " " + name))
@@ -485,7 +476,7 @@ func (m MappingsModel) renderFieldsFlat(width int) []string {
 	typeWidth := 12
 
 	for _, f := range fields {
-		name := m.truncate(f.Name, nameWidth)
+		name := Truncate(f.Name, nameWidth)
 		fieldType := f.Type
 		if fieldType == "" {
 			fieldType = "object"
@@ -639,26 +630,3 @@ func (m MappingsModel) typeColor(fieldType string) lipgloss.Color {
 	}
 }
 
-func (m MappingsModel) healthColor(health string) lipgloss.Color {
-	switch health {
-	case "green":
-		return ColorGreen
-	case "yellow":
-		return ColorYellow
-	case "red":
-		return ColorRed
-	default:
-		return ColorGray
-	}
-}
-
-func (m MappingsModel) truncate(s string, maxLen int) string {
-	r := []rune(s)
-	if len(r) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return string(r[:maxLen])
-	}
-	return string(r[:maxLen-3]) + "..."
-}

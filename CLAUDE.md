@@ -69,6 +69,7 @@ go test -v ./...
 - Use table-driven tests where appropriate
 - **No emojis** - Do not use emojis in code, commit messages, or documentation
 - **No comments** - Write self-documenting code; do not add comments to the code
+- **DRY** - Extract shared logic into utility functions (see Shared Utilities section below)
 
 ## Important Guidelines
 
@@ -126,6 +127,24 @@ if len(r) > max {
 }
 ```
 
+### Shared Utilities
+
+Common utility functions are in `internal/ui/utils.go` to avoid duplication:
+
+**UI utilities** (`internal/ui/utils.go`):
+- `Truncate(s string, maxLen int) string` - Unicode-safe string truncation with ellipsis
+- `TrimANSI(s string) string` - Trim trailing spaces and ANSI reset codes for side-by-side panes
+- `HealthColor(health string) lipgloss.Color` - Map ES health status to colors
+
+**ES utilities** (`internal/es/cluster.go`):
+- `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first
+- `sortShardsByShardPrimary(shards []ShardInfo)` - Sort shards by shard number, primary first (for single-index queries)
+
+**Storage utilities** (`internal/storage/history.go`):
+- `StoptailDir() (string, error)` - Get the stoptail config directory (`~/.stoptail`)
+
+When adding new functionality, check if a utility already exists before creating inline code. If the same logic appears in multiple places, extract it to the appropriate utilities file.
+
 ### Bubble Tea Patterns
 
 - Models are immutable - return new model from Update()
@@ -151,18 +170,11 @@ if focused {
 style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
 ```
 
-**Manual line joining for side-by-side panes** - `lipgloss.JoinHorizontal` with `Height()` causes excessive padding. Join lines manually with ANSI-aware trimming:
+**Manual line joining for side-by-side panes** - `lipgloss.JoinHorizontal` with `Height()` causes excessive padding. Join lines manually using `TrimANSI()` from `internal/ui/utils.go`:
 
 ```go
-trimANSI := func(s string) string {
-    for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") {
-        s = strings.TrimSuffix(s, " ")
-        s = strings.TrimSuffix(s, "\x1b[0m")
-    }
-    return s + "\x1b[0m"
-}
 for i := 0; i < maxLines; i++ {
-    paneLines = append(paneLines, trimANSI(leftLines[i])+" "+trimANSI(rightLines[i]))
+    paneLines = append(paneLines, TrimANSI(leftLines[i])+" "+TrimANSI(rightLines[i]))
 }
 ```
 

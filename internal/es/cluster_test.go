@@ -486,31 +486,3 @@ func TestParseMappingResponse(t *testing.T) {
 	}
 }
 
-func TestParseSizeToBytes(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected int64
-	}{
-		{"1b", 1},
-		{"100b", 100},
-		{"1kb", 1024},
-		{"1.5kb", 1536},
-		{"1mb", 1024 * 1024},
-		{"2.5mb", int64(2.5 * 1024 * 1024)},
-		{"1gb", 1024 * 1024 * 1024},
-		{"1tb", 1024 * 1024 * 1024 * 1024},
-		{"", 0},
-		{"-", 0},
-		{"invalid", 0},
-		{"1024", 1024},
-		{" 1mb ", 1024 * 1024},
-		{"1MB", 1024 * 1024},
-	}
-
-	for _, tt := range tests {
-		got := parseSizeToBytes(tt.input)
-		if got != tt.expected {
-			t.Errorf("parseSizeToBytes(%q) = %d, want %d", tt.input, got, tt.expected)
-		}
-	}
-}

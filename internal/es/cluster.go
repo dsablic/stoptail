@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -111,6 +110,27 @@ type IndexMappings struct {
 	FieldCount int
 	Fields     []MappingField
 	Analyzers  []AnalyzerInfo
+}
+
+func sortShardsByIndexShardPrimary(shards []ShardInfo) {
+	sort.Slice(shards, func(i, j int) bool {
+		if shards[i].Index != shards[j].Index {
+			return shards[i].Index < shards[j].Index
+		}
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
+}
+
+func sortShardsByShardPrimary(shards []ShardInfo) {
+	sort.Slice(shards, func(i, j int) bool {
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
 }
 
 func parseMappingProperties(props map[string]json.RawMessage, prefix string) []MappingField {
@@ -458,15 +478,7 @@ func (c *Client) fetchShards(ctx context.Context) ([]ShardInfo, error) {
 		return nil, fmt.Errorf("parsing shards: %w", err)
 	}
 
-	sort.Slice(shards, func(i, j int) bool {
-		if shards[i].Index != shards[j].Index {
-			return shards[i].Index < shards[j].Index
-		}
-		if shards[i].Shard != shards[j].Shard {
-			return shards[i].Shard < shards[j].Shard
-		}
-		return shards[i].Primary && !shards[j].Primary
-	})
+	sortShardsByIndexShardPrimary(shards)
 
 	return shards, nil
 }
@@ -524,12 +536,7 @@ func (s *ClusterState) GetShardsForIndexAndNode(index, node string) []ShardInfo 
 			shards = append(shards, sh)
 		}
 	}
-	sort.Slice(shards, func(i, j int) bool {
-		if shards[i].Shard != shards[j].Shard {
-			return shards[i].Shard < shards[j].Shard
-		}
-		return shards[i].Primary && !shards[j].Primary
-	})
+	sortShardsByShardPrimary(shards)
 	return shards
 }
 
@@ -540,12 +547,7 @@ func (s *ClusterState) GetUnassignedShardsForIndex(index string) []ShardInfo {
 			shards = append(shards, sh)
 		}
 	}
-	sort.Slice(shards, func(i, j int) bool {
-		if shards[i].Shard != shards[j].Shard {
-			return shards[i].Shard < shards[j].Shard
-		}
-		return shards[i].Primary && !shards[j].Primary
-	})
+	sortShardsByShardPrimary(shards)
 	return shards
 }
 
@@ -944,49 +946,15 @@ func (c *Client) FetchMapping(ctx context.Context, index string) ([]string, erro
 	}
 	defer res.Body.Close()
 
-	if res.IsError() {
-		return nil, fmt.Errorf("ES error %s", res.Status())
-	}
-
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, fmt.Errorf("reading mapping response: %w", err)
 	}
 
+	if res.IsError() {
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
 	return parseMappingResponse(body)
 }
 
-func parseSizeToBytes(size string) int64 {
-	size = strings.TrimSpace(strings.ToLower(size))
-	if size == "" || size == "-" {
-		return 0
-	}
-
-	suffixes := []struct {
-		suffix string
-		mult   int64
-	}{
-		{"tb", 1024 * 1024 * 1024 * 1024},
-		{"gb", 1024 * 1024 * 1024},
-		{"mb", 1024 * 1024},
-		{"kb", 1024},
-		{"b", 1},
-	}
-
-	for _, s := range suffixes {
-		if strings.HasSuffix(size, s.suffix) {
-			numStr := strings.TrimSuffix(size, s.suffix)
-			num, err := strconv.ParseFloat(numStr, 64)
-			if err != nil {
-				return 0
-			}
-			return int64(num * float64(s.mult))
-		}
-	}
-
-	num, err := strconv.ParseInt(size, 10, 64)
-	if err != nil {
-		return 0
-	}
-	return num
-}

@@ -16,36 +16,6 @@ Implementation approach:
 
 This requires custom selection handling since terminal native selection spans full lines across the entire terminal width.
 
-## Mappings Tab
-
-Add a new tab to browse and explore index mappings:
-
-- List all indices with their mapping structure
-- Tree view of field types and properties
-- Search/filter fields by name or type
-- Show field details (type, analyzer, index options)
-- Possibly allow expanding/collapsing nested objects
-
-## Index Management
-
-Add the ability to create and remove indices:
-
-- Create index with interactive prompts:
-  - Index name (required)
-  - Number of shards (default: 1)
-  - Number of replicas (default: 1)
-- Delete index with confirmation prompt
-- Keyboard shortcut from overview (e.g., `c` to create, `d` to delete selected)
-
-## Alias Management
-
-Add the ability to create and remove aliases:
-
-- Create alias linking an index to an alias name
-- Remove alias from an index
-- Bulk alias operations (add/remove multiple)
-- Keyboard shortcuts from overview
-
 ## UI Eye-Candy Improvements
 
 Enhance the UI using more Charm ecosystem features:

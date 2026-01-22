@@ -13,6 +13,22 @@ type JSONContext struct {
 	InValue bool
 }
 
+var aggKeywords = []CompletionItem{
+	{Text: "terms", Kind: "keyword"},
+	{Text: "avg", Kind: "keyword"},
+	{Text: "sum", Kind: "keyword"},
+	{Text: "min", Kind: "keyword"},
+	{Text: "max", Kind: "keyword"},
+	{Text: "cardinality", Kind: "keyword"},
+	{Text: "value_count", Kind: "keyword"},
+	{Text: "stats", Kind: "keyword"},
+	{Text: "date_histogram", Kind: "keyword"},
+	{Text: "histogram", Kind: "keyword"},
+	{Text: "range", Kind: "keyword"},
+	{Text: "filter", Kind: "keyword"},
+	{Text: "nested", Kind: "keyword"},
+}
+
 var dslKeywords = map[string][]CompletionItem{
 	"": {
 		{Text: "query", Kind: "keyword"},
@@ -50,36 +66,8 @@ var dslKeywords = map[string][]CompletionItem{
 		{Text: "minimum_should_match", Kind: "keyword"},
 		{Text: "boost", Kind: "keyword"},
 	},
-	"aggs": {
-		{Text: "terms", Kind: "keyword"},
-		{Text: "avg", Kind: "keyword"},
-		{Text: "sum", Kind: "keyword"},
-		{Text: "min", Kind: "keyword"},
-		{Text: "max", Kind: "keyword"},
-		{Text: "cardinality", Kind: "keyword"},
-		{Text: "value_count", Kind: "keyword"},
-		{Text: "stats", Kind: "keyword"},
-		{Text: "date_histogram", Kind: "keyword"},
-		{Text: "histogram", Kind: "keyword"},
-		{Text: "range", Kind: "keyword"},
-		{Text: "filter", Kind: "keyword"},
-		{Text: "nested", Kind: "keyword"},
-	},
-	"aggregations": {
-		{Text: "terms", Kind: "keyword"},
-		{Text: "avg", Kind: "keyword"},
-		{Text: "sum", Kind: "keyword"},
-		{Text: "min", Kind: "keyword"},
-		{Text: "max", Kind: "keyword"},
-		{Text: "cardinality", Kind: "keyword"},
-		{Text: "value_count", Kind: "keyword"},
-		{Text: "stats", Kind: "keyword"},
-		{Text: "date_histogram", Kind: "keyword"},
-		{Text: "histogram", Kind: "keyword"},
-		{Text: "range", Kind: "keyword"},
-		{Text: "filter", Kind: "keyword"},
-		{Text: "nested", Kind: "keyword"},
-	},
+	"aggs":         aggKeywords,
+	"aggregations": aggKeywords,
 	"match": {
 		{Text: "query", Kind: "keyword"},
 		{Text: "operator", Kind: "keyword"},

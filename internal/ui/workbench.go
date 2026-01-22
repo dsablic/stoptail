@@ -812,13 +812,6 @@ func (m WorkbenchModel) View() string {
 		Height(m.height - 6).
 		Render(responsePaneContent)
 
-	trimANSI := func(s string) string {
-		for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") {
-			s = strings.TrimSuffix(s, " ")
-			s = strings.TrimSuffix(s, "\x1b[0m")
-		}
-		return s + "\x1b[0m"
-	}
 	bodyLines := strings.Split(bodyPane, "\n")
 	responseLines := strings.Split(responsePane, "\n")
 	maxLines := len(bodyLines)
@@ -830,10 +823,10 @@ func (m WorkbenchModel) View() string {
 		bl := ""
 		rl := ""
 		if i < len(bodyLines) {
-			bl = trimANSI(bodyLines[i])
+			bl = TrimANSI(bodyLines[i])
 		}
 		if i < len(responseLines) {
-			rl = trimANSI(responseLines[i])
+			rl = TrimANSI(responseLines[i])
 		}
 		paneLines = append(paneLines, bl+" "+rl)
 	}
