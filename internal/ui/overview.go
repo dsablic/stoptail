@@ -128,6 +128,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				if idx < len(aliases) {
 					alias := aliases[idx]
 					m.aliasFilters[alias] = !m.aliasFilters[alias]
+					m.selectedIndex = 0
+					m.scrollX = 0
 				}
 			}
 		}
