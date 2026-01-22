@@ -397,7 +397,7 @@ func (m Model) View() string {
 	}
 
 	if m.showHelp {
-		return renderHelp(m.width, m.height)
+		return renderHelp(m.width, m.height, m.activeTab)
 	}
 
 	// Header

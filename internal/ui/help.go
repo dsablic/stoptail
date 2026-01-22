@@ -1,16 +1,81 @@
 package ui
 
 import (
-	_ "embed"
-
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
-//go:embed help.md
-var helpMarkdown string
+var helpGlobal = `## Global
 
-func renderHelp(width, height int) string {
+| Key | Action |
+|-----|--------|
+| Tab / Shift+Tab | Switch tabs |
+| q / Ctrl+C | Quit |
+| ? | Toggle help |
+| r | Refresh |
+`
+
+var helpOverview = `## Overview
+
+| Key | Action |
+|-----|--------|
+| / | Filter indices |
+| Esc | Clear filters |
+| arrows | Navigate |
+| Enter | Open in Workbench |
+| 1-9 | Toggle alias |
+| U/R/I | Shard states |
+| c | Create index |
+| d | Delete index |
+| a/A | Add/remove alias |
+`
+
+var helpWorkbench = `## Workbench
+
+| Key | Action |
+|-----|--------|
+| Enter | Edit |
+| Tab | Autocomplete / next |
+| Ctrl+R | Execute |
+| Ctrl+Y | Copy |
+| Up/Down | Navigate |
+| Esc | Cancel |
+`
+
+var helpMappings = `## Mappings
+
+| Key | Action |
+|-----|--------|
+| / | Filter |
+| Ctrl+F | Search |
+| left/right | Switch panes |
+| Enter | Load mappings |
+| t | Toggle tree view |
+| up/down | Scroll |
+`
+
+var helpNodes = `## Nodes
+
+| Key | Action |
+|-----|--------|
+| 1/2/3 | Switch view |
+| Ctrl+F | Search |
+| up/down | Scroll |
+| r | Refresh |
+`
+
+var helpTasks = `## Tasks
+
+| Key | Action |
+|-----|--------|
+| Ctrl+F | Search |
+| c | Cancel task |
+| y/n | Confirm |
+| up/down | Select |
+| r | Refresh |
+`
+
+func renderHelp(width, height, activeTab int) string {
 	styleName := "dark"
 	if !lipgloss.HasDarkBackground() {
 		styleName = "light"
@@ -18,10 +83,24 @@ func renderHelp(width, height int) string {
 
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styleName),
-		glamour.WithWordWrap(46),
+		glamour.WithWordWrap(40),
 	)
 
-	content, _ := r.Render(helpMarkdown)
+	var tabHelp string
+	switch activeTab {
+	case TabOverview:
+		tabHelp = helpOverview
+	case TabWorkbench:
+		tabHelp = helpWorkbench
+	case TabMappings:
+		tabHelp = helpMappings
+	case TabNodes:
+		tabHelp = helpNodes
+	case TabTasks:
+		tabHelp = helpTasks
+	}
+
+	content, _ := r.Render(helpGlobal + tabHelp + "\n*Press ? to close*")
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
