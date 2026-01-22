@@ -225,6 +225,15 @@ Always verify UI changes using the render flag before committing:
 
 This renders the UI to stdout without starting the full TUI, allowing visual verification of layout, borders, and styling.
 
+### Update Demo GIF When UI Changes
+
+When making UI changes (new tabs, new keybindings, layout changes), update `demo.tape` and regenerate `demo.gif`:
+
+1. **Build first**: `go build .`
+2. **Update demo.tape** to showcase the new functionality
+3. **Regenerate**: `vhs demo.tape`
+4. **Verify and commit** both `demo.tape` and `demo.gif`
+
 ### Verify Demo GIF Before Committing
 
 When modifying `demo.tape`, always verify the generated `demo.gif` before committing:
