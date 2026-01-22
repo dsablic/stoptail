@@ -57,6 +57,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				return m, nil
 			}
 			m.filter, cmd = m.filter.Update(msg)
+			m.selectedIndex = 0
+			m.scrollX = 0
 			return m, cmd
 		}
 
