@@ -1,6 +1,9 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestRenderLineNumbers(t *testing.T) {
 	tests := []struct {
@@ -47,6 +50,15 @@ func TestParseJSON(t *testing.T) {
 				t.Errorf("parse() ok = %v, want %v", gotOK, tt.wantOK)
 			}
 		})
+	}
+}
+
+func TestHighlightContent(t *testing.T) {
+	e := NewEditor()
+	e.SetContent(`{"key": "value"}`)
+	highlighted := e.highlightContent()
+	if !strings.Contains(highlighted, "\x1b[") {
+		t.Error("expected ANSI color codes in highlighted output")
 	}
 }
 
