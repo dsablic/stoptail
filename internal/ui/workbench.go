@@ -135,6 +135,7 @@ func NewWorkbench() WorkbenchModel {
 
 func (m *WorkbenchModel) SetClient(client *es.Client) {
 	m.client = client
+	m.editor.SetClient(client)
 }
 
 func (m WorkbenchModel) HasActiveInput() bool {
@@ -263,6 +264,21 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			items[i] = CompletionItem{Text: f, Kind: "field"}
 		}
 		m.fieldCache[msg.index] = items
+		return m, nil
+
+	case validateTickMsg:
+		return m, m.editor.executeValidation(context.Background())
+
+	case validateMsg:
+		if msg.err != nil {
+			m.editor.validationState = ValidationIdle
+		} else if msg.result.Valid {
+			m.editor.validationState = ValidationValid
+			m.editor.validationError = ""
+		} else {
+			m.editor.validationState = ValidationInvalid
+			m.editor.validationError = msg.result.Error
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -395,8 +411,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmd = m.editor.Update(msg)
 			cmds = append(cmds, cmd)
 
+			key := msg.String()
+			if len(key) == 1 || key == "backspace" || key == "enter" || key == "delete" {
+				m.editor.validationState = ValidationPending
+				cmds = append(cmds, m.editor.triggerValidation())
+			}
+
 			if m.completion.Active {
-				key := msg.String()
 				if len(key) == 1 || key == "backspace" {
 					col := m.editor.LineInfo().CharOffset
 					if col > m.completion.TriggerCol {
@@ -666,6 +687,7 @@ func (m *WorkbenchModel) checkIndexChange() tea.Cmd {
 	index := m.extractIndexFromPath()
 	if index != "" && index != m.lastIndex {
 		m.lastIndex = index
+		m.editor.SetIndex(index)
 		if _, ok := m.fieldCache[index]; !ok {
 			return m.fetchMapping(index)
 		}
@@ -727,11 +749,25 @@ func (m WorkbenchModel) View() string {
 
 	bodyHeaderText := "Body"
 	var bodyValidation string
-	if errMsg == "" {
-		bodyValidation = lipgloss.NewStyle().Foreground(ColorGreen).Render("✓")
-	} else {
+	if errMsg != "" {
 		bodyValidation = lipgloss.NewStyle().Foreground(ColorRed).Render(
 			fmt.Sprintf("✗ %d:%d", errLine, errCol))
+	} else {
+		jsonValid := lipgloss.NewStyle().Foreground(ColorGreen).Render("✓")
+		switch m.editor.validationState {
+		case ValidationPending:
+			bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorYellow).Render("⋯")
+		case ValidationValid:
+			bodyValidation = jsonValid
+		case ValidationInvalid:
+			esErr := m.editor.validationError
+			if len(esErr) > 30 {
+				esErr = esErr[:30] + "..."
+			}
+			bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorRed).Render("✗ "+esErr)
+		default:
+			bodyValidation = jsonValid
+		}
 	}
 	bodyHeader := lipgloss.NewStyle().Bold(true).Render(bodyHeaderText) + "  " + bodyValidation
 
