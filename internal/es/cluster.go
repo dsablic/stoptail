@@ -187,6 +187,61 @@ func parseMappingProperties(props map[string]json.RawMessage, prefix string) []M
 	return fields
 }
 
+func (c *Client) FetchIndexMappings(ctx context.Context, indexName string) (*IndexMappings, error) {
+	res, err := c.es.Indices.GetMapping(
+		c.es.Indices.GetMapping.WithContext(ctx),
+		c.es.Indices.GetMapping.WithIndex(indexName),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching mappings: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading mappings response: %w", err)
+	}
+
+	var response map[string]struct {
+		Mappings struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"mappings"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing mappings: %w", err)
+	}
+
+	indexData, ok := response[indexName]
+	if !ok {
+		return nil, fmt.Errorf("index %s not found in response", indexName)
+	}
+
+	fields := parseMappingProperties(indexData.Mappings.Properties, "")
+	flatFields := flattenFields(fields)
+
+	return &IndexMappings{
+		IndexName:  indexName,
+		FieldCount: len(flatFields),
+		Fields:     fields,
+	}, nil
+}
+
+func flattenFields(fields []MappingField) []MappingField {
+	var result []MappingField
+	for _, f := range fields {
+		result = append(result, f)
+		if len(f.Children) > 0 {
+			result = append(result, flattenFields(f.Children)...)
+		}
+	}
+	return result
+}
+
 type ClusterState struct {
 	Indices []IndexInfo
 	Nodes   []NodeInfo
