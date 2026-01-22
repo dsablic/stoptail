@@ -335,3 +335,111 @@ func (e *Editor) setCursorPosition(line, col int) {
 	}
 	e.textarea.SetCursor(offset)
 }
+
+func (e Editor) renderWithSelection(content string) string {
+	if !e.selection.Active {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	selStyle := lipgloss.NewStyle().Reverse(true)
+
+	startLine, startCol := e.selection.StartLine, e.selection.StartCol
+	endLine, endCol := e.selection.EndLine, e.selection.EndCol
+
+	if startLine > endLine || (startLine == endLine && startCol > endCol) {
+		startLine, endLine = endLine, startLine
+		startCol, endCol = endCol, startCol
+	}
+
+	var result []string
+	for i, line := range lines {
+		if i < startLine || i > endLine {
+			result = append(result, line)
+			continue
+		}
+
+		runes := []rune(line)
+		selStart := 0
+		selEnd := len(runes)
+
+		if i == startLine {
+			selStart = startCol
+		}
+		if i == endLine {
+			selEnd = endCol
+		}
+
+		if selStart > len(runes) {
+			selStart = len(runes)
+		}
+		if selEnd > len(runes) {
+			selEnd = len(runes)
+		}
+
+		var lineResult string
+		if selStart > 0 {
+			lineResult += string(runes[:selStart])
+		}
+		if selEnd > selStart {
+			lineResult += selStyle.Render(string(runes[selStart:selEnd]))
+		}
+		if selEnd < len(runes) {
+			lineResult += string(runes[selEnd:])
+		}
+
+		result = append(result, lineResult)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+func (e Editor) GetSelectedText() string {
+	if !e.selection.Active {
+		return ""
+	}
+
+	content := e.textarea.Value()
+	lines := strings.Split(content, "\n")
+
+	startLine, startCol := e.selection.StartLine, e.selection.StartCol
+	endLine, endCol := e.selection.EndLine, e.selection.EndCol
+
+	if startLine > endLine || (startLine == endLine && startCol > endCol) {
+		startLine, endLine = endLine, startLine
+		startCol, endCol = endCol, startCol
+	}
+
+	if startLine == endLine {
+		if startLine >= len(lines) {
+			return ""
+		}
+		runes := []rune(lines[startLine])
+		if startCol > len(runes) {
+			startCol = len(runes)
+		}
+		if endCol > len(runes) {
+			endCol = len(runes)
+		}
+		return string(runes[startCol:endCol])
+	}
+
+	var result []string
+	for i := startLine; i <= endLine && i < len(lines); i++ {
+		runes := []rune(lines[i])
+		if i == startLine {
+			if startCol < len(runes) {
+				result = append(result, string(runes[startCol:]))
+			}
+		} else if i == endLine {
+			if endCol > len(runes) {
+				endCol = len(runes)
+			}
+			result = append(result, string(runes[:endCol]))
+		} else {
+			result = append(result, lines[i])
+		}
+	}
+
+	return strings.Join(result, "\n")
+}

@@ -127,6 +127,20 @@ func TestScreenToPosition(t *testing.T) {
 	}
 }
 
+func TestRenderSelection(t *testing.T) {
+	e := NewEditor()
+	e.SetContent("hello world")
+	e.selection = Selection{
+		StartLine: 0, StartCol: 0,
+		EndLine: 0, EndCol: 5,
+		Active: true,
+	}
+	rendered := e.renderWithSelection("hello world")
+	if !strings.Contains(rendered, "\x1b[") {
+		t.Error("expected ANSI codes for selection highlight")
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
