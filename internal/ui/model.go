@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -37,12 +38,14 @@ type Model struct {
 	err          error
 	quitting     bool
 	showHelp     bool
+	tabPulse     int
 }
 
 type connectedMsg struct{ state *es.ClusterState }
 type nodesStateMsg struct{ state *es.NodesState }
 type tasksMsg struct{ tasks []es.TaskInfo }
 type taskCancelledMsg struct{ err error }
+type pulseTickMsg struct{}
 type mappingsMsg struct {
 	mappings  *es.IndexMappings
 	analyzers []es.AnalyzerInfo
@@ -77,6 +80,18 @@ func New(client *es.Client, cfg *config.Config) Model {
 
 func (m Model) overviewAcceptsGlobalKeys() bool {
 	return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
+}
+
+func pulseTick() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return pulseTickMsg{}
+	})
+}
+
+func (m *Model) switchTab(tab int) tea.Cmd {
+	m.activeTab = tab
+	m.tabPulse = 4
+	return pulseTick()
 }
 
 func (m Model) Init() tea.Cmd {
@@ -157,6 +172,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	case pulseTickMsg:
+		if m.tabPulse > 0 {
+			m.tabPulse--
+			return m, pulseTick()
+		}
+		return m, nil
 	case connectedMsg:
 		m.connected = true
 		m.loading = false
@@ -231,67 +252,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			if m.overviewAcceptsGlobalKeys() {
-				m.activeTab = TabWorkbench
 				m.workbench.Blur()
-				return m, nil
+				return m, m.switchTab(TabWorkbench)
 			}
 			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
-				m.activeTab = TabMappings
 				m.workbench.Blur()
 				if m.cluster != nil {
 					m.mappings.SetIndices(m.cluster.Indices)
 				}
-				return m, nil
+				return m, m.switchTab(TabMappings)
 			}
 			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				m.activeTab = TabNodes
 				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
+				return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
-				m.activeTab = TabTasks
 				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+				return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
 			}
 			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				m.activeTab = TabOverview
-				return m, nil
+				return m, m.switchTab(TabOverview)
 			}
 		case "shift+tab":
 			if m.activeTab == TabWorkbench {
-				m.activeTab = TabOverview
 				m.workbench.Blur()
-				return m, nil
+				return m, m.switchTab(TabOverview)
 			}
 			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				m.activeTab = TabWorkbench
-				return m, nil
+				return m, m.switchTab(TabWorkbench)
 			}
 			if m.overviewAcceptsGlobalKeys() {
-				m.activeTab = TabTasks
 				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+				return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
 			}
 			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				m.activeTab = TabNodes
 				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
+				return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
-				m.activeTab = TabMappings
 				if m.cluster != nil {
 					m.mappings.SetIndices(m.cluster.Indices)
 				}
-				return m, nil
+				return m, m.switchTab(TabMappings)
 			}
 		case "m":
 			if m.overviewAcceptsGlobalKeys() || (m.activeTab != TabWorkbench || !m.workbench.HasActiveInput()) && m.activeTab != TabOverview {
-				m.activeTab = TabMappings
 				m.workbench.Blur()
 				if m.cluster != nil {
 					m.mappings.SetIndices(m.cluster.Indices)
 				}
-				return m, nil
+				return m, m.switchTab(TabMappings)
 			}
 		case "r":
 			if m.overviewAcceptsGlobalKeys() {
@@ -419,6 +429,11 @@ func (m Model) View() string {
 	headerText := fmt.Sprintf("stoptail · %s [%s]", m.cfg.MaskedURL(), status)
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
+	activeStyle := ActiveTabStyle
+	if m.tabPulse > 0 && m.tabPulse%2 == 0 {
+		activeStyle = PulseTabStyle
+	}
+
 	overviewTab := InactiveTabStyle.Render("Overview")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
 	mappingsTab := InactiveTabStyle.Render("Mappings")
@@ -426,15 +441,15 @@ func (m Model) View() string {
 	tasksTab := InactiveTabStyle.Render("Tasks")
 	switch m.activeTab {
 	case TabOverview:
-		overviewTab = ActiveTabStyle.Render("Overview")
+		overviewTab = activeStyle.Render("Overview")
 	case TabWorkbench:
-		workbenchTab = ActiveTabStyle.Render("Workbench")
+		workbenchTab = activeStyle.Render("Workbench")
 	case TabMappings:
-		mappingsTab = ActiveTabStyle.Render("Mappings")
+		mappingsTab = activeStyle.Render("Mappings")
 	case TabNodes:
-		nodesTab = ActiveTabStyle.Render("Nodes")
+		nodesTab = activeStyle.Render("Nodes")
 	case TabTasks:
-		tasksTab = ActiveTabStyle.Render("Tasks")
+		tasksTab = activeStyle.Render("Tasks")
 	}
 	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, mappingsTab, nodesTab, tasksTab)
 

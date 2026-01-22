@@ -16,14 +16,3 @@ Implementation approach:
 
 This requires custom selection handling since terminal native selection spans full lines across the entire terminal width.
 
-## UI Eye-Candy Improvements
-
-Enhance the UI using more Charm ecosystem features:
-
-- [x] Glamour for markdown rendering (help text)
-- [x] Huh for interactive forms (create/delete index, add/remove alias)
-- [x] Progress spinners for ES operations
-- [x] Bar charts for metrics visualization (heap%, disk%)
-- [x] Better table styling with alternating row backgrounds
-- [x] Gradient bars with color transitions
-- Animations/transitions for tab switching (limited in terminal UIs)
