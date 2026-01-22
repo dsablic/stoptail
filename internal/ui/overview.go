@@ -543,6 +543,10 @@ func (m OverviewModel) View() string {
 	// Shard grid
 	b.WriteString(m.renderGrid())
 
+	if m.modal != nil {
+		return m.modal.View(m.width, m.height)
+	}
+
 	return b.String()
 }
 
