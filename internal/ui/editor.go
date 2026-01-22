@@ -142,6 +142,72 @@ func (e Editor) highlightContent() string {
 	return e.applyHighlighting(content, tree.RootNode())
 }
 
+func (e Editor) getASTPath(cursorOffset int) []string {
+	tree := e.parse()
+	if tree == nil {
+		return nil
+	}
+
+	content := []byte(e.textarea.Value())
+
+	row, col := e.offsetToRowCol(cursorOffset)
+
+	root := tree.RootNode()
+	node := root.NamedDescendantForPointRange(
+		sitter.Point{Row: uint32(row), Column: uint32(col)},
+		sitter.Point{Row: uint32(row), Column: uint32(col)},
+	)
+
+	var path []string
+	cursorNode := node
+	for node != nil {
+		if node.Type() == "pair" {
+			keyNode := node.ChildByFieldName("key")
+			if keyNode == nil && node.ChildCount() > 0 {
+				keyNode = node.Child(0)
+			}
+			if keyNode != nil && keyNode.Type() == "string" {
+				if !nodeContains(keyNode, cursorNode) {
+					start := keyNode.StartByte() + 1
+					end := keyNode.EndByte() - 1
+					if start < end && int(end) <= len(content) {
+						key := string(content[start:end])
+						path = append([]string{key}, path...)
+					}
+				}
+			}
+		}
+		node = node.Parent()
+	}
+
+	return path
+}
+
+func nodeContains(ancestor, descendant *sitter.Node) bool {
+	for n := descendant; n != nil; n = n.Parent() {
+		if n.Equal(ancestor) {
+			return true
+		}
+	}
+	return false
+}
+
+func (e Editor) offsetToRowCol(offset int) (row, col int) {
+	content := e.textarea.Value()
+	for i, ch := range content {
+		if i >= offset {
+			break
+		}
+		if ch == '\n' {
+			row++
+			col = 0
+		} else {
+			col++
+		}
+	}
+	return row, col
+}
+
 func (e Editor) applyHighlighting(content string, root *sitter.Node) string {
 	type highlight struct {
 		start, end int

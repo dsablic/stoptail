@@ -72,6 +72,36 @@ func TestValidationDebounce(t *testing.T) {
 	}
 }
 
+func TestGetASTPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		cursor   int
+		wantPath []string
+	}{
+		{"root", `{""}`, 2, []string{}},
+		{"in query", `{"query": {""}}`, 12, []string{"query"}},
+		{"in bool", `{"query": {"bool": {""}}}`, 21, []string{"query", "bool"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := NewEditor()
+			e.SetContent(tt.content)
+			path := e.getASTPath(tt.cursor)
+			if len(path) != len(tt.wantPath) {
+				t.Errorf("got path %v, want %v", path, tt.wantPath)
+				return
+			}
+			for i, p := range path {
+				if p != tt.wantPath[i] {
+					t.Errorf("got path %v, want %v", path, tt.wantPath)
+					return
+				}
+			}
+		})
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
