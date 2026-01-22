@@ -93,6 +93,26 @@ type TaskInfo struct {
 	Cancellable   bool
 }
 
+type MappingField struct {
+	Name       string
+	Type       string
+	Properties map[string]string
+	Children   []MappingField
+}
+
+type AnalyzerInfo struct {
+	Name     string
+	Kind     string
+	Settings map[string]string
+}
+
+type IndexMappings struct {
+	IndexName  string
+	FieldCount int
+	Fields     []MappingField
+	Analyzers  []AnalyzerInfo
+}
+
 type ClusterState struct {
 	Indices []IndexInfo
 	Nodes   []NodeInfo
