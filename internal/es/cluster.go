@@ -743,6 +743,42 @@ func (c *Client) CancelTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
+func (c *Client) CreateIndex(ctx context.Context, name string, shards, replicas int) error {
+	body := fmt.Sprintf(`{"settings":{"number_of_shards":%d,"number_of_replicas":%d}}`, shards, replicas)
+	res, err := c.es.Indices.Create(
+		name,
+		c.es.Indices.Create.WithContext(ctx),
+		c.es.Indices.Create.WithBody(strings.NewReader(body)),
+	)
+	if err != nil {
+		return fmt.Errorf("creating index: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
+func (c *Client) DeleteIndex(ctx context.Context, name string) error {
+	res, err := c.es.Indices.Delete(
+		[]string{name},
+		c.es.Indices.Delete.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("deleting index: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
 func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 	var response struct {
 		Nodes map[string]struct {
