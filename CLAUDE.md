@@ -69,7 +69,12 @@ go test -v ./...
 - Use table-driven tests where appropriate
 - **No emojis** - Do not use emojis in code, commit messages, or documentation
 - **No comments** - Write self-documenting code; do not add comments to the code
-- **DRY** - Extract shared logic into utility functions (see Shared Utilities section below)
+- **DRY** - Don't Repeat Yourself:
+  - Extract repeated conditions into helper methods (e.g., `overviewAcceptsGlobalKeys()`)
+  - Extract shared logic into utility functions (see Shared Utilities section)
+  - If the same check appears 2+ times, create a helper
+  - If the same string/value appears 2+ times, use a constant
+  - Before writing new code, check if similar logic already exists
 
 ## Important Guidelines
 
