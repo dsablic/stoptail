@@ -1,48 +1,187 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
+	"fmt"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
 
+type ModalType int
+
+const (
+	ModalNone ModalType = iota
+	ModalCreateIndex
+	ModalDeleteIndex
+	ModalAddAlias
+	ModalRemoveAlias
+	ModalError
+)
+
 type Modal struct {
-	title     string
-	prompt    string
-	input     textinput.Model
+	modalType ModalType
+	form      *huh.Form
 	err       string
 	done      bool
 	cancelled bool
+
+	indexName string
+	shards    string
+	replicas  string
+	aliasName string
+	confirmed bool
+	aliases   []string
 }
 
-func NewModal(title, prompt string) *Modal {
-	ti := textinput.New()
-	ti.Placeholder = ""
-	ti.Focus()
-	ti.CharLimit = 100
-	ti.Width = 30
-
-	return &Modal{
-		title:  title,
-		prompt: prompt,
-		input:  ti,
+func NewCreateIndexModal() *Modal {
+	m := &Modal{
+		modalType: ModalCreateIndex,
+		shards:    "1",
+		replicas:  "1",
 	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Index name").
+				Value(&m.indexName).
+				Validate(huh.ValidateNotEmpty()),
+			huh.NewInput().
+				Title("Shards").
+				Value(&m.shards),
+			huh.NewInput().
+				Title("Replicas").
+				Value(&m.replicas),
+		),
+	).WithShowHelp(false).WithShowErrors(true)
+
+	return m
 }
 
-func (m *Modal) SetError(err string) {
-	m.err = err
+func NewDeleteIndexModal(indexName string) *Modal {
+	m := &Modal{
+		modalType: ModalDeleteIndex,
+		indexName: indexName,
+	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(fmt.Sprintf("Delete index '%s'?", indexName)).
+				Description("This action cannot be undone.").
+				Affirmative("Delete").
+				Negative("Cancel").
+				Value(&m.confirmed),
+		),
+	).WithShowHelp(false)
+
+	return m
 }
 
-func (m *Modal) ClearError() {
-	m.err = ""
+func NewAddAliasModal(indexName string) *Modal {
+	m := &Modal{
+		modalType: ModalAddAlias,
+		indexName: indexName,
+	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title(fmt.Sprintf("Add alias to '%s'", indexName)).
+				Placeholder("alias-name").
+				Value(&m.aliasName).
+				Validate(huh.ValidateNotEmpty()),
+		),
+	).WithShowHelp(false).WithShowErrors(true)
+
+	return m
 }
 
-func (m *Modal) Value() string {
-	return m.input.Value()
+func NewRemoveAliasModal(indexName string, aliases []string) *Modal {
+	m := &Modal{
+		modalType: ModalRemoveAlias,
+		indexName: indexName,
+		aliases:   aliases,
+	}
+
+	if len(aliases) == 0 {
+		m.form = huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("No aliases").
+					Description(fmt.Sprintf("Index '%s' has no aliases to remove.", indexName)),
+			),
+		).WithShowHelp(false)
+	} else {
+		options := make([]huh.Option[string], len(aliases))
+		for i, a := range aliases {
+			options[i] = huh.NewOption(a, a)
+		}
+
+		m.form = huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title(fmt.Sprintf("Remove alias from '%s'", indexName)).
+					Options(options...).
+					Value(&m.aliasName),
+			),
+		).WithShowHelp(false)
+	}
+
+	return m
 }
 
-func (m *Modal) SetValue(v string) {
-	m.input.SetValue(v)
+func NewErrorModal(errMsg string) *Modal {
+	m := &Modal{
+		modalType: ModalError,
+		err:       errMsg,
+		confirmed: true,
+	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Error").
+				Description(errMsg),
+			huh.NewConfirm().
+				Affirmative("OK").
+				Negative("").
+				Value(&m.confirmed),
+		),
+	).WithShowHelp(false)
+
+	return m
+}
+
+func (m *Modal) Type() ModalType {
+	return m.modalType
+}
+
+func (m *Modal) IndexName() string {
+	return m.indexName
+}
+
+func (m *Modal) Shards() string {
+	if m.shards == "" {
+		return "1"
+	}
+	return m.shards
+}
+
+func (m *Modal) Replicas() string {
+	if m.replicas == "" {
+		return "1"
+	}
+	return m.replicas
+}
+
+func (m *Modal) AliasName() string {
+	return m.aliasName
+}
+
+func (m *Modal) Confirmed() bool {
+	return m.confirmed
 }
 
 func (m *Modal) Done() bool {
@@ -53,67 +192,38 @@ func (m *Modal) Cancelled() bool {
 	return m.cancelled
 }
 
-func (m *Modal) SetDone(d bool) {
-	m.done = d
+func (m *Modal) HasAliases() bool {
+	return len(m.aliases) > 0
 }
 
-func (m *Modal) Reset(title, prompt string) {
-	m.title = title
-	m.prompt = prompt
-	m.input.SetValue("")
-	m.err = ""
-	m.done = false
-	m.cancelled = false
-	m.input.Focus()
+func (m *Modal) Init() tea.Cmd {
+	return m.form.Init()
 }
 
 func (m *Modal) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "enter":
-			m.done = true
-			return nil
-		case "esc":
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if keyMsg.String() == "esc" {
 			m.cancelled = true
 			return nil
 		}
 	}
 
-	var cmd tea.Cmd
-	m.input, cmd = m.input.Update(msg)
+	form, cmd := m.form.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.form = f
+	}
+
+	if m.form.State == huh.StateCompleted {
+		m.done = true
+	}
+
 	return cmd
 }
 
 func (m *Modal) View(width, height int) string {
 	boxWidth := 50
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(ColorBlue).
-		MarginBottom(1)
-
-	promptStyle := lipgloss.NewStyle().
-		MarginBottom(1)
-
-	errorStyle := lipgloss.NewStyle().
-		Foreground(ColorRed).
-		MarginTop(1)
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(ColorGray).
-		MarginTop(1)
-
-	var content string
-	content += titleStyle.Render(m.title) + "\n"
-	content += promptStyle.Render(m.prompt) + "\n"
-	content += m.input.View() + "\n"
-
-	if m.err != "" {
-		content += errorStyle.Render(m.err) + "\n"
-	}
-
-	content += helpStyle.Render("Enter: confirm | Esc: cancel")
+	formView := m.form.View()
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -121,7 +231,7 @@ func (m *Modal) View(width, height int) string {
 		Padding(1, 2).
 		Width(boxWidth)
 
-	box := boxStyle.Render(content)
+	box := boxStyle.Render(formView)
 
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
 }

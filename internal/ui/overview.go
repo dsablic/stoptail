@@ -7,11 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/es"
 )
+
+type ModalInitMsg struct{}
 
 type IndexCreatedMsg struct{ Err error }
 type IndexDeletedMsg struct{ Err error }
@@ -31,10 +34,8 @@ type OverviewModel struct {
 	width            int
 	height           int
 	modal            *Modal
-	modalAction      string
-	modalStep        int
-	createName       string
-	createShards     string
+	spinner          spinner.Model
+	operationMsg     string
 }
 
 func NewOverview() OverviewModel {
@@ -42,9 +43,14 @@ func NewOverview() OverviewModel {
 	ti.Placeholder = "Filter indices..."
 	ti.CharLimit = 50
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
+
 	return OverviewModel{
 		filter:       ti,
 		aliasFilters: make(map[string]bool),
+		spinner:      s,
 	}
 }
 
@@ -64,12 +70,14 @@ func (m *OverviewModel) SetClient(client *es.Client) {
 func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	var cmd tea.Cmd
 
+	if _, ok := msg.(ModalInitMsg); ok && m.modal != nil {
+		return m, m.modal.Init()
+	}
+
 	if m.modal != nil {
 		cmd := m.modal.Update(msg)
-		if m.modal.Cancelled() || (m.modal.Done() && m.modalAction == "error") {
+		if m.modal.Cancelled() {
 			m.modal = nil
-			m.modalAction = ""
-			m.modalStep = 0
 			return m, nil
 		}
 		if m.modal.Done() {
@@ -79,6 +87,11 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.operationMsg != "" {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
 	case tea.KeyMsg:
 		if m.filterActive {
 			switch msg.String() {
@@ -164,27 +177,23 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				}
 			}
 		case "c":
-			m.modal = NewModal("Create Index", "Index name:")
-			m.modalAction = "create"
-			m.modalStep = 1
-			return m, textinput.Blink
+			m.modal = NewCreateIndexModal()
+			return m, func() tea.Msg { return ModalInitMsg{} }
 		case "d":
 			if m.SelectedIndex() != "" {
-				m.modal = NewModal("Delete Index", "Type '"+m.SelectedIndex()+"' to confirm:")
-				m.modalAction = "delete"
-				return m, textinput.Blink
+				m.modal = NewDeleteIndexModal(m.SelectedIndex())
+				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
 		case "a":
 			if m.SelectedIndex() != "" {
-				m.modal = NewModal("Add Alias", "Alias name:")
-				m.modalAction = "addAlias"
-				return m, textinput.Blink
+				m.modal = NewAddAliasModal(m.SelectedIndex())
+				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
 		case "A":
-			if m.SelectedIndex() != "" {
-				m.modal = NewModal("Remove Alias", "Alias name:")
-				m.modalAction = "removeAlias"
-				return m, textinput.Blink
+			if m.SelectedIndex() != "" && m.cluster != nil {
+				aliases := m.cluster.GetAliasesForIndex(m.SelectedIndex())
+				m.modal = NewRemoveAliasModal(m.SelectedIndex(), aliases)
+				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
 		}
 	case tea.MouseMsg:
@@ -203,28 +212,32 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			}
 		}
 	case IndexCreatedMsg:
+		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewModal("Error", msg.Err.Error())
-			m.modalAction = "error"
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		return m, nil
 	case IndexDeletedMsg:
+		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewModal("Error", msg.Err.Error())
-			m.modalAction = "error"
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		m.selectedIndex = 0
 		return m, nil
 	case AliasAddedMsg:
+		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewModal("Error", msg.Err.Error())
-			m.modalAction = "error"
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		return m, nil
 	case AliasRemovedMsg:
+		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewModal("Error", msg.Err.Error())
-			m.modalAction = "error"
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		return m, nil
 	}
@@ -232,76 +245,51 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 }
 
 func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
-	value := m.modal.Value()
+	modalType := m.modal.Type()
 
-	switch m.modalAction {
-	case "create":
-		switch m.modalStep {
-		case 1:
-			if value == "" {
-				m.modal.SetError("Index name required")
-				m.modal.SetDone(false)
-				return m, nil
-			}
-			m.createName = value
-			m.modal.Reset("Create Index", "Number of shards (default 1):")
-			m.modalStep = 2
-			return m, textinput.Blink
-		case 2:
-			m.createShards = value
-			if m.createShards == "" {
-				m.createShards = "1"
-			}
-			m.modal.Reset("Create Index", "Number of replicas (default 1):")
-			m.modalStep = 3
-			return m, textinput.Blink
-		case 3:
-			replicas := value
-			if replicas == "" {
-				replicas = "1"
-			}
+	switch modalType {
+	case ModalCreateIndex:
+		name := m.modal.IndexName()
+		shards := m.modal.Shards()
+		replicas := m.modal.Replicas()
+		m.modal = nil
+		m.operationMsg = "Creating index..."
+		return m, tea.Batch(m.spinner.Tick, m.createIndexCmd(name, shards, replicas))
+
+	case ModalDeleteIndex:
+		if !m.modal.Confirmed() {
 			m.modal = nil
-			m.modalAction = ""
-			m.modalStep = 0
-			return m, m.createIndexCmd(m.createName, m.createShards, replicas)
-		}
-
-	case "delete":
-		if value != m.SelectedIndex() {
-			m.modal.SetError("Name does not match")
-			m.modal.SetDone(false)
 			return m, nil
 		}
-		indexName := m.SelectedIndex()
+		indexName := m.modal.IndexName()
 		m.modal = nil
-		m.modalAction = ""
-		return m, m.deleteIndexCmd(indexName)
+		m.operationMsg = "Deleting index..."
+		return m, tea.Batch(m.spinner.Tick, m.deleteIndexCmd(indexName))
 
-	case "addAlias":
-		if value == "" {
-			m.modal.SetError("Alias name required")
-			m.modal.SetDone(false)
+	case ModalAddAlias:
+		aliasName := m.modal.AliasName()
+		indexName := m.modal.IndexName()
+		m.modal = nil
+		m.operationMsg = "Adding alias..."
+		return m, tea.Batch(m.spinner.Tick, m.addAliasCmd(indexName, aliasName))
+
+	case ModalRemoveAlias:
+		if !m.modal.HasAliases() {
+			m.modal = nil
 			return m, nil
 		}
-		indexName := m.SelectedIndex()
+		aliasName := m.modal.AliasName()
+		indexName := m.modal.IndexName()
 		m.modal = nil
-		m.modalAction = ""
-		return m, m.addAliasCmd(indexName, value)
+		m.operationMsg = "Removing alias..."
+		return m, tea.Batch(m.spinner.Tick, m.removeAliasCmd(indexName, aliasName))
 
-	case "removeAlias":
-		if value == "" {
-			m.modal.SetError("Alias name required")
-			m.modal.SetDone(false)
-			return m, nil
-		}
-		indexName := m.SelectedIndex()
+	case ModalError:
 		m.modal = nil
-		m.modalAction = ""
-		return m, m.removeAliasCmd(indexName, value)
+		return m, nil
 	}
 
 	m.modal = nil
-	m.modalAction = ""
 	return m, nil
 }
 
@@ -545,6 +533,16 @@ func (m OverviewModel) View() string {
 
 	if m.modal != nil {
 		return m.modal.View(m.width, m.height)
+	}
+
+	if m.operationMsg != "" {
+		content := m.spinner.View() + " " + m.operationMsg
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorBlue).
+			Padding(1, 3)
+		box := boxStyle.Render(content)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 	}
 
 	return b.String()

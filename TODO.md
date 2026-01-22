@@ -20,10 +20,10 @@ This requires custom selection handling since terminal native selection spans fu
 
 Enhance the UI using more Charm ecosystem features:
 
-- Glamour for markdown rendering (help text, documentation)
-- Huh for interactive forms (cluster selection, filters)
-- Animations/transitions for tab switching
-- Better color themes and gradients
-- Progress bars for long operations (reindex, etc.)
-- Sparklines for metrics visualization
-- Better table styling with lipgloss
+- [x] Glamour for markdown rendering (help text)
+- [x] Huh for interactive forms (create/delete index, add/remove alias)
+- [x] Progress spinners for ES operations
+- [x] Bar charts for metrics visualization (heap%, disk%)
+- [x] Better table styling with alternating row backgrounds
+- [x] Gradient bars with color transitions
+- Animations/transitions for tab switching (limited in terminal UIs)

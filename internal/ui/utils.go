@@ -37,3 +37,39 @@ func HealthColor(health string) lipgloss.Color {
 		return ColorGray
 	}
 }
+
+func RenderBar(percent float64, width int) string {
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+
+	filled := int(percent / 100 * float64(width))
+	empty := width - filled
+
+	var b strings.Builder
+	b.WriteString("[")
+
+	for i := 0; i < filled; i++ {
+		posPercent := float64(i+1) / float64(width) * 100
+		var color lipgloss.Color
+		switch {
+		case posPercent >= 85:
+			color = ColorRed
+		case posPercent >= 70:
+			color = ColorYellow
+		default:
+			color = ColorGreen
+		}
+		style := lipgloss.NewStyle().Foreground(color)
+		b.WriteString(style.Render("█"))
+	}
+
+	emptyStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	b.WriteString(emptyStyle.Render(strings.Repeat("░", empty)))
+	b.WriteString("]")
+
+	return b.String()
+}

@@ -11,11 +11,11 @@ var (
 	ColorGray   lipgloss.Color
 	ColorWhite  lipgloss.Color
 
-	HeaderBg     lipgloss.Color
-	ActiveBg     lipgloss.Color
-	SpinnerClr   lipgloss.Color
-	TextBg       lipgloss.Color
-	ColorOnAccent lipgloss.Color // Always light - for text on colored backgrounds
+	HeaderBg      lipgloss.Color
+	ActiveBg      lipgloss.Color
+	SpinnerClr    lipgloss.Color
+	TextBg        lipgloss.Color
+	ColorOnAccent lipgloss.Color
 
 	// Base styles
 	HeaderStyle      lipgloss.Style

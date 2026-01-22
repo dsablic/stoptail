@@ -182,6 +182,11 @@ func (m NodesModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderLegend())
 
+	if m.activeView != ViewFielddata && len(m.state.Nodes) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(m.renderDetailPanel())
+	}
+
 	content := b.String()
 	if m.search.Active() {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
@@ -219,8 +224,8 @@ func (m NodesModel) renderMemoryTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 8, 12, 12, 14, 10}
-	headers := []string{"node", "heap%", "heap", "fielddata", "query_cache", "segments"}
+	colWidths := []int{20, 8, 12, 12, 12, 14, 10}
+	headers := []string{"node", "heap%", "", "heap", "fielddata", "query_cache", "segments"}
 
 	var b strings.Builder
 	b.WriteString(m.renderTableHeader(headers, colWidths))
@@ -228,14 +233,16 @@ func (m NodesModel) renderMemoryTable() string {
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
 		heapPctStyle := m.percentStyle(node.HeapPercent)
+		heapPct := m.parsePercent(node.HeapPercent)
 
 		row := []string{
 			m.leftAlign(node.Name, colWidths[0]),
 			heapPctStyle.Render(m.rightAlign(node.HeapPercent, colWidths[1])),
-			m.rightAlign(node.HeapCurrent, colWidths[2]),
-			m.rightAlign(node.FielddataSize, colWidths[3]),
-			m.rightAlign(node.QueryCacheSize, colWidths[4]),
-			m.rightAlign(node.SegmentsCount, colWidths[5]),
+			RenderBar(heapPct, 10),
+			m.rightAlign(node.HeapCurrent, colWidths[3]),
+			m.rightAlign(node.FielddataSize, colWidths[4]),
+			m.rightAlign(node.QueryCacheSize, colWidths[5]),
+			m.rightAlign(node.SegmentsCount, colWidths[6]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -249,8 +256,8 @@ func (m NodesModel) renderDiskTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 10, 8, 12, 12, 12, 8}
-	headers := []string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards"}
+	colWidths := []int{20, 10, 8, 12, 12, 12, 12, 8}
+	headers := []string{"node", "version", "disk%", "", "disk.avail", "disk.total", "disk.used", "shards"}
 
 	var b strings.Builder
 	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
@@ -258,14 +265,16 @@ func (m NodesModel) renderDiskTable() string {
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
 		diskPctStyle := m.percentStyle(node.DiskPercent)
+		diskPct := m.parsePercent(node.DiskPercent)
 		row := []string{
 			m.leftAlign(node.Name, colWidths[0]),
 			m.leftAlign(node.Version, colWidths[1]),
 			diskPctStyle.Render(m.rightAlign(node.DiskPercent, colWidths[2])),
-			m.rightAlign(node.DiskAvail, colWidths[3]),
-			m.rightAlign(node.DiskTotal, colWidths[4]),
-			m.rightAlign(node.DiskUsed, colWidths[5]),
-			m.rightAlign(node.Shards, colWidths[6]),
+			RenderBar(diskPct, 10),
+			m.rightAlign(node.DiskAvail, colWidths[4]),
+			m.rightAlign(node.DiskTotal, colWidths[5]),
+			m.rightAlign(node.DiskUsed, colWidths[6]),
+			m.rightAlign(node.Shards, colWidths[7]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -330,6 +339,61 @@ func (m NodesModel) renderLegend() string {
 	default:
 		return ""
 	}
+}
+
+func (m NodesModel) renderDetailPanel() string {
+	if len(m.state.Nodes) == 0 {
+		return ""
+	}
+
+	idx := m.scrollY
+	if idx >= len(m.state.Nodes) {
+		idx = len(m.state.Nodes) - 1
+	}
+	node := m.state.Nodes[idx]
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+
+	var b strings.Builder
+	b.WriteString(titleStyle.Render(node.Name))
+	b.WriteString("\n")
+
+	switch m.activeView {
+	case ViewMemory:
+		heapPct := m.parsePercent(node.HeapPercent)
+		b.WriteString(labelStyle.Render("heap: "))
+		b.WriteString(RenderBar(heapPct, 30))
+		b.WriteString(fmt.Sprintf(" %s (%s)\n", node.HeapPercent, node.HeapCurrent))
+
+		b.WriteString(labelStyle.Render("fielddata:   "))
+		b.WriteString(node.FielddataSize)
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("query_cache: "))
+		b.WriteString(node.QueryCacheSize)
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("segments:    "))
+		b.WriteString(node.SegmentsCount)
+
+	case ViewDisk:
+		diskPct := m.parsePercent(node.DiskPercent)
+		b.WriteString(labelStyle.Render("disk: "))
+		b.WriteString(RenderBar(diskPct, 30))
+		b.WriteString(fmt.Sprintf(" %s\n", node.DiskPercent))
+
+		b.WriteString(labelStyle.Render("used:  "))
+		b.WriteString(node.DiskUsed)
+		b.WriteString(" / ")
+		b.WriteString(node.DiskTotal)
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("avail: "))
+		b.WriteString(node.DiskAvail)
+		b.WriteString("\n")
+		b.WriteString(labelStyle.Render("shards: "))
+		b.WriteString(node.Shards)
+	}
+
+	return b.String()
 }
 
 func (m NodesModel) renderTableHeader(headers []string, widths []int, leftAlignCols ...int) string {
@@ -425,6 +489,14 @@ func (m NodesModel) rightAlign(s string, width int) string {
 		return string(r[:width])
 	}
 	return strings.Repeat(" ", width-len(r)) + s
+}
+
+func (m NodesModel) parsePercent(pctStr string) float64 {
+	pct, err := strconv.ParseFloat(strings.TrimSpace(pctStr), 64)
+	if err != nil {
+		return 0
+	}
+	return pct
 }
 
 func (m *NodesModel) updateNodeSearch() {
