@@ -30,6 +30,13 @@ type validateMsg struct {
 
 type validateTickMsg struct{}
 
+type Selection struct {
+	StartLine, StartCol int
+	EndLine, EndCol     int
+	Active              bool
+	Dragging            bool
+}
+
 type Editor struct {
 	textarea        textarea.Model
 	width           int
@@ -39,6 +46,7 @@ type Editor struct {
 	index           string
 	validationState ValidationState
 	validationError string
+	selection       Selection
 }
 
 func NewEditor() Editor {
@@ -266,4 +274,64 @@ func (e Editor) applyHighlighting(content string, root *sitter.Node) string {
 		result.WriteString(content[lastEnd:])
 	}
 	return result.String()
+}
+
+func (e *Editor) SetSize(width, height int) {
+	e.width = width
+	e.height = height
+	e.textarea.SetWidth(width - e.gutterWidth - 2)
+	e.textarea.SetHeight(height)
+}
+
+func (e Editor) screenToPosition(x, y int) (line, col int) {
+	adjustedX := x - e.gutterWidth - 1
+	if adjustedX < 0 {
+		adjustedX = 0
+	}
+	return y, adjustedX
+}
+
+func (e *Editor) HandleClick(x, y int) {
+	line, col := e.screenToPosition(x, y)
+	e.setCursorPosition(line, col)
+	e.selection.Active = false
+}
+
+func (e *Editor) HandleDragStart(x, y int) {
+	line, col := e.screenToPosition(x, y)
+	e.selection.StartLine = line
+	e.selection.StartCol = col
+	e.selection.EndLine = line
+	e.selection.EndCol = col
+	e.selection.Active = true
+	e.selection.Dragging = true
+}
+
+func (e *Editor) HandleDrag(x, y int) {
+	if !e.selection.Dragging {
+		return
+	}
+	line, col := e.screenToPosition(x, y)
+	e.selection.EndLine = line
+	e.selection.EndCol = col
+}
+
+func (e *Editor) HandleDragEnd() {
+	e.selection.Dragging = false
+}
+
+func (e *Editor) setCursorPosition(line, col int) {
+	lines := strings.Split(e.textarea.Value(), "\n")
+	offset := 0
+	for i := 0; i < line && i < len(lines); i++ {
+		offset += len(lines[i]) + 1
+	}
+	if line < len(lines) {
+		lineLen := len(lines[line])
+		if col > lineLen {
+			col = lineLen
+		}
+		offset += col
+	}
+	e.textarea.SetCursor(offset)
 }

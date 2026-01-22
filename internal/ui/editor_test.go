@@ -102,6 +102,31 @@ func TestGetASTPath(t *testing.T) {
 	}
 }
 
+func TestScreenToPosition(t *testing.T) {
+	e := NewEditor()
+	e.SetContent("{\n  \"key\": 1\n}")
+	e.SetSize(40, 10)
+
+	tests := []struct {
+		name     string
+		x, y     int
+		wantLine int
+		wantCol  int
+	}{
+		{"first char", 5, 0, 0, 0},
+		{"second line", 5, 1, 1, 0},
+		{"with offset", 7, 1, 1, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			line, col := e.screenToPosition(tt.x, tt.y)
+			if line != tt.wantLine || col != tt.wantCol {
+				t.Errorf("got (%d,%d), want (%d,%d)", line, col, tt.wantLine, tt.wantCol)
+			}
+		})
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
