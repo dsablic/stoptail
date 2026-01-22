@@ -1,19 +1,44 @@
 package ui
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/labtiva/stoptail/internal/es"
 	sitter "github.com/smacker/go-tree-sitter"
 )
 
+type ValidationState int
+
+const (
+	ValidationIdle ValidationState = iota
+	ValidationPending
+	ValidationValid
+	ValidationInvalid
+)
+
+type validateMsg struct {
+	result *es.ValidateResult
+	err    error
+}
+
+type validateTickMsg struct{}
+
 type Editor struct {
-	textarea    textarea.Model
-	width       int
-	height      int
-	gutterWidth int
+	textarea        textarea.Model
+	width           int
+	height          int
+	gutterWidth     int
+	client          *es.Client
+	index           string
+	validationState ValidationState
+	validationError string
 }
 
 func NewEditor() Editor {
@@ -32,6 +57,46 @@ func (e *Editor) SetContent(content string) {
 
 func (e *Editor) Content() string {
 	return e.textarea.Value()
+}
+
+func (e *Editor) SetClient(client *es.Client) {
+	e.client = client
+}
+
+func (e *Editor) SetIndex(index string) {
+	e.index = index
+}
+
+func (e Editor) triggerValidation() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
+		return validateTickMsg{}
+	})
+}
+
+func (e Editor) executeValidation(ctx context.Context) tea.Cmd {
+	if e.client == nil || e.index == "" {
+		return nil
+	}
+	content := e.textarea.Value()
+	if content == "" {
+		return nil
+	}
+
+	var query map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &query); err != nil {
+		return nil
+	}
+
+	queryPart, ok := query["query"]
+	if !ok {
+		return nil
+	}
+
+	queryBytes, _ := json.Marshal(queryPart)
+	return func() tea.Msg {
+		result, err := e.client.ValidateQuery(ctx, e.index, queryBytes)
+		return validateMsg{result: result, err: err}
+	}
 }
 
 func (e Editor) renderGutter(width, height int) string {

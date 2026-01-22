@@ -62,6 +62,16 @@ func TestHighlightContent(t *testing.T) {
 	}
 }
 
+func TestValidationDebounce(t *testing.T) {
+	e := NewEditor()
+	e.SetContent(`{"query": {}}`)
+
+	cmd := e.triggerValidation()
+	if cmd == nil {
+		t.Error("expected validation command")
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}
