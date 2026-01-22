@@ -17,6 +17,11 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
+- **Mappings Tab**: Index mapping explorer
+  - Browse field mappings for any index
+  - Toggle between tree and flat view
+  - View field types and properties (analyzer, index, doc_values, etc.)
+  - See custom analyzers, tokenizers, and filters
 - **Nodes Tab**: Node statistics with 3 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
@@ -116,7 +121,8 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Nodes) |
+| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Mappings, Nodes, Tasks) |
+| `m` | Jump to Mappings tab |
 | `r` | Refresh data |
 | `?` | Toggle help overlay |
 | `q` / `Ctrl+C` | Quit |
@@ -145,6 +151,16 @@ stoptail stores data in `~/.stoptail/`:
 | `Ctrl+Y` | Copy body or response to clipboard |
 | `Up/Down` | Navigate completions (when open) |
 | `Esc` | Dismiss completions / deactivate editor |
+
+### Mappings Tab
+
+| Key | Action |
+|-----|--------|
+| `/` | Filter indices |
+| `Left/Right` | Switch between index list and mapping panes |
+| `Enter` | Load mappings for selected index |
+| `t` | Toggle tree/flat view |
+| `Up/Down` | Scroll |
 
 ### Nodes Tab
 

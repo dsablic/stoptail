@@ -47,6 +47,16 @@ func renderHelp(width, height int) string {
 			},
 		},
 		{
+			header: "Mappings",
+			keys: [][]string{
+				{"/", "Filter indices"},
+				{"left/right", "Switch panes"},
+				{"Enter", "Load mappings for selected index"},
+				{"t", "Toggle tree/flat view"},
+				{"up/down", "Scroll"},
+			},
+		},
+		{
 			header: "Nodes",
 			keys: [][]string{
 				{"1/2/3", "Switch view (Mem/Disk/Fielddata)"},

@@ -50,7 +50,7 @@ Examples:
 	}
 
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
-	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, nodes, workbench)")
+	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, mappings, nodes)")
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
@@ -258,8 +258,18 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		}
 		fmt.Println(workbench.View())
 
+	case "mappings":
+		state, err := client.FetchClusterState(ctx)
+		if err != nil {
+			return fmt.Errorf("fetching cluster state: %w", err)
+		}
+		mappings := ui.NewMappings()
+		mappings.SetSize(width, height)
+		mappings.SetIndices(state.Indices)
+		fmt.Println(mappings.View())
+
 	default:
-		return fmt.Errorf("unknown tab: %s (use: overview, nodes, workbench)", tab)
+		return fmt.Errorf("unknown tab: %s (use: overview, workbench, mappings, nodes)", tab)
 	}
 	return nil
 }

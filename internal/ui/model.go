@@ -14,6 +14,7 @@ import (
 const (
 	TabOverview = iota
 	TabWorkbench
+	TabMappings
 	TabNodes
 	TabTasks
 )
@@ -24,6 +25,7 @@ type Model struct {
 	cluster      *es.ClusterState
 	overview     OverviewModel
 	workbench    WorkbenchModel
+	mappings     MappingsModel
 	nodes        NodesModel
 	tasks        TasksModel
 	spinner      spinner.Model
@@ -41,6 +43,11 @@ type connectedMsg struct{ state *es.ClusterState }
 type nodesStateMsg struct{ state *es.NodesState }
 type tasksMsg struct{ tasks []es.TaskInfo }
 type taskCancelledMsg struct{ err error }
+type mappingsMsg struct {
+	mappings  *es.IndexMappings
+	analyzers []es.AnalyzerInfo
+	err       error
+}
 type errMsg struct{ err error }
 
 func New(client *es.Client, cfg *config.Config) Model {
@@ -56,6 +63,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		cfg:       cfg,
 		overview:  NewOverview(),
 		workbench: wb,
+		mappings:  NewMappings(),
 		nodes:     NewNodes(),
 		tasks:     NewTasks(),
 		spinner:   s,
@@ -104,6 +112,18 @@ func (m Model) fetchTasks() tea.Cmd {
 	}
 }
 
+func (m Model) fetchMappings(indexName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		mappings, err := m.client.FetchIndexMappings(ctx, indexName)
+		if err != nil {
+			return mappingsMsg{err: err}
+		}
+		analyzers, _ := m.client.FetchIndexAnalyzers(ctx, indexName)
+		return mappingsMsg{mappings: mappings, analyzers: analyzers}
+	}
+}
+
 func (m Model) cancelTask(taskID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -131,6 +151,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tasksMsg:
 		m.loading = false
 		m.tasks.SetTasks(msg.tasks)
+	case mappingsMsg:
+		m.loading = false
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.mappings.SetMappings(msg.mappings, msg.analyzers)
+		}
+	case fetchMappingsMsg:
+		m.mappings.SetLoading(msg.indexName)
+		m.loading = true
+		return m, tea.Batch(m.spinner.Tick, m.fetchMappings(msg.indexName))
 	case taskCancelledMsg:
 		m.tasks.ClearConfirming()
 		if msg.err != nil {
@@ -158,12 +189,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.quitting = true
 			return m, tea.Quit
 		case "q":
-			// Only quit if not in a focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				m.quitting = true
 				return m, tea.Quit
 			}
 			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
+				m.quitting = true
+				return m, tea.Quit
+			}
+			if m.activeTab == TabMappings && !m.mappings.filterActive {
 				m.quitting = true
 				return m, tea.Quit
 			}
@@ -176,15 +210,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "tab":
-			// Global tab to switch views, unless in focused input
 			if m.activeTab == TabOverview && !m.overview.filterActive {
 				m.activeTab = TabWorkbench
 				m.workbench.Blur()
 				return m, nil
 			}
 			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
-				m.activeTab = TabNodes
+				m.activeTab = TabMappings
 				m.workbench.Blur()
+				if m.cluster != nil {
+					m.mappings.SetIndices(m.cluster.Indices)
+				}
+				return m, nil
+			}
+			if m.activeTab == TabMappings && !m.mappings.filterActive {
+				m.activeTab = TabNodes
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
@@ -198,10 +238,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "shift+tab":
-			// Switch backward through tabs
 			if m.activeTab == TabWorkbench {
 				m.activeTab = TabOverview
 				m.workbench.Blur()
+				return m, nil
+			}
+			if m.activeTab == TabMappings && !m.mappings.filterActive {
+				m.activeTab = TabWorkbench
 				return m, nil
 			}
 			if m.activeTab == TabOverview && !m.overview.filterActive {
@@ -215,12 +258,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
 			}
 			if m.activeTab == TabNodes {
-				m.activeTab = TabWorkbench
+				m.activeTab = TabMappings
+				if m.cluster != nil {
+					m.mappings.SetIndices(m.cluster.Indices)
+				}
+				return m, nil
+			}
+		case "m":
+			if m.activeTab != TabWorkbench || !m.workbench.HasActiveInput() {
+				m.activeTab = TabMappings
 				m.workbench.Blur()
+				if m.cluster != nil {
+					m.mappings.SetIndices(m.cluster.Indices)
+				}
 				return m, nil
 			}
 		case "r":
 			if m.activeTab == TabOverview && !m.overview.filterActive {
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, m.connect())
+			}
+			if m.activeTab == TabMappings && !m.mappings.filterActive {
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, m.connect())
 			}
@@ -248,6 +306,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.overview.SetSize(msg.Width, msg.Height-4)
 		m.workbench.SetSize(msg.Width, msg.Height-4)
+		m.mappings.SetSize(msg.Width, msg.Height-4)
 		m.nodes.SetSize(msg.Width, msg.Height-4)
 		m.tasks.SetSize(msg.Width, msg.Height-4)
 	case tea.MouseMsg:
@@ -255,6 +314,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
 				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
+				mappingsWidth := lipgloss.Width(InactiveTabStyle.Render("Mappings"))
 				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Nodes"))
 
 				if msg.X < overviewWidth {
@@ -262,7 +322,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.workbench.Blur()
 				} else if msg.X < overviewWidth+workbenchWidth {
 					m.activeTab = TabWorkbench
-				} else if msg.X < overviewWidth+workbenchWidth+nodesWidth {
+				} else if msg.X < overviewWidth+workbenchWidth+mappingsWidth {
+					m.activeTab = TabMappings
+					m.workbench.Blur()
+					if m.cluster != nil {
+						m.mappings.SetIndices(m.cluster.Indices)
+					}
+				} else if msg.X < overviewWidth+workbenchWidth+mappingsWidth+nodesWidth {
 					m.activeTab = TabNodes
 					m.workbench.Blur()
 					m.loading = true
@@ -278,7 +344,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Delegate to active tab
 	if m.connected {
 		delegateMsg := msg
 		if mouseMsg, ok := msg.(tea.MouseMsg); ok {
@@ -290,6 +355,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overview, cmd = m.overview.Update(delegateMsg)
 		case TabWorkbench:
 			m.workbench, cmd = m.workbench.Update(delegateMsg)
+		case TabMappings:
+			m.mappings, cmd = m.mappings.Update(delegateMsg)
 		case TabNodes:
 			m.nodes, cmd = m.nodes.Update(delegateMsg)
 		case TabTasks:
@@ -327,9 +394,9 @@ func (m Model) View() string {
 	headerText := fmt.Sprintf("stoptail · %s [%s]", m.cfg.MaskedURL(), status)
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
-	// Tabs
 	overviewTab := InactiveTabStyle.Render("Overview")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
+	mappingsTab := InactiveTabStyle.Render("Mappings")
 	nodesTab := InactiveTabStyle.Render("Nodes")
 	tasksTab := InactiveTabStyle.Render("Tasks")
 	switch m.activeTab {
@@ -337,12 +404,14 @@ func (m Model) View() string {
 		overviewTab = ActiveTabStyle.Render("Overview")
 	case TabWorkbench:
 		workbenchTab = ActiveTabStyle.Render("Workbench")
+	case TabMappings:
+		mappingsTab = ActiveTabStyle.Render("Mappings")
 	case TabNodes:
 		nodesTab = ActiveTabStyle.Render("Nodes")
 	case TabTasks:
 		tasksTab = ActiveTabStyle.Render("Tasks")
 	}
-	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, nodesTab, tasksTab)
+	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, mappingsTab, nodesTab, tasksTab)
 
 	// Content
 	contentHeight := m.height - 4
@@ -366,6 +435,8 @@ func (m Model) View() string {
 			content = m.overview.View()
 		case TabWorkbench:
 			content = m.workbench.View()
+		case TabMappings:
+			content = m.mappings.View()
 		case TabNodes:
 			content = m.nodes.View()
 		case TabTasks:
@@ -373,15 +444,16 @@ func (m Model) View() string {
 		}
 	}
 
-	// Status bar
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
 		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select index  ↑↓: scroll  Enter: open"
 	case TabWorkbench:
-		statusText = "q: quit  Tab: autocomplete  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+		statusText = "q: quit  Tab: mappings  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+	case TabMappings:
+		statusText = "q: quit  Tab: nodes  Shift+Tab: workbench  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree view"
 	case TabNodes:
-		statusText = "q: quit  Tab: tasks  Shift+Tab: workbench  r: refresh  1-4: views  ↑↓: scroll"
+		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-4: views  ↑↓: scroll"
 	case TabTasks:
 		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  c: cancel  ↑↓: select"
 	}

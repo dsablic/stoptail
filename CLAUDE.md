@@ -44,6 +44,7 @@ go build .
 ./stoptail --render overview --width 120 --height 40 [cluster]
 ./stoptail --render workbench --width 120 --height 30 [cluster]
 ./stoptail --render workbench --width 120 --height 20 --body '{"invalid": json}' [cluster]
+./stoptail --render mappings --width 120 --height 40 [cluster]
 ./stoptail --render nodes --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view memory --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
@@ -216,6 +217,7 @@ Always verify UI changes using the render flag before committing:
 ```bash
 ./stoptail --render overview --width 120 --height 40 [cluster]
 ./stoptail --render workbench --width 120 --height 30 [cluster]
+./stoptail --render mappings --width 120 --height 40 [cluster]
 ./stoptail --render nodes --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view fielddata --width 120 --height 40 [cluster]
