@@ -17,11 +17,13 @@ type TasksModel struct {
 	height      int
 	loading     bool
 	confirming  string
+	search      SearchBar
 }
 
 func NewTasks() TasksModel {
 	return TasksModel{
 		loading: true,
+		search:  NewSearchBar(),
 	}
 }
 
@@ -52,6 +54,30 @@ func (m *TasksModel) ClearConfirming() {
 func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.search.Active() {
+			switch msg.String() {
+			case "esc":
+				m.search.Deactivate()
+				return m, nil
+			case "enter":
+				if match := m.search.NextMatch(); match >= 0 {
+					m.selectedRow = match
+					m.scrollY = max(0, match-5)
+				}
+				return m, nil
+			case "shift+enter":
+				if match := m.search.PrevMatch(); match >= 0 {
+					m.selectedRow = match
+					m.scrollY = max(0, match-5)
+				}
+				return m, nil
+			default:
+				cmd := m.search.Update(msg)
+				(&m).updateTaskSearch()
+				return m, cmd
+			}
+		}
+
 		if m.confirming != "" {
 			switch msg.String() {
 			case "y", "Y":
@@ -86,6 +112,11 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
 				m.confirming = m.tasks[m.selectedRow].ID
 			}
+		case "ctrl+f":
+			if m.confirming == "" {
+				m.search.Activate()
+				return m, nil
+			}
 		}
 	case tea.MouseMsg:
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
@@ -115,6 +146,18 @@ func (m TasksModel) maxScroll() int {
 		return 0
 	}
 	return maxScroll
+}
+
+func (m *TasksModel) updateTaskSearch() {
+	var lines []string
+	for _, task := range m.tasks {
+		lines = append(lines, task.Action+" "+task.Description+" "+task.Index+" "+task.Node)
+	}
+	m.search.FindMatches(lines)
+	if match := m.search.CurrentMatch(); match >= 0 {
+		m.selectedRow = match
+		m.scrollY = max(0, match-5)
+	}
 }
 
 type taskCancelRequestMsg struct {
@@ -182,7 +225,13 @@ func (m TasksModel) View() string {
 		b.WriteString(lipgloss.NewStyle().Foreground(ColorYellow).Render("Cancel this task? Press 'y' to confirm, 'n' or Esc to abort"))
 	}
 
-	return b.String()
+	content := b.String()
+
+	if m.search.Active() {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
+	}
+
+	return content
 }
 
 func (m TasksModel) renderHeader(headers []string, widths []int) string {
