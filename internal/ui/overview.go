@@ -531,6 +531,10 @@ func (m OverviewModel) View() string {
 	// Shard grid
 	b.WriteString(m.renderGrid())
 
+	// Shard color legend
+	b.WriteString("\n\n")
+	b.WriteString(m.renderShardLegend())
+
 	if m.modal != nil {
 		return m.modal.View(m.width, m.height)
 	}
@@ -720,6 +724,40 @@ func (m OverviewModel) renderGrid() string {
 	}
 
 	return b.String()
+}
+
+func (m OverviewModel) renderShardLegend() string {
+	greenBadge := lipgloss.NewStyle().
+		Background(ColorGreen).
+		Foreground(ColorOnAccent).
+		Padding(0, 1).
+		Render("P")
+	blueBadge := lipgloss.NewStyle().
+		Background(ColorBlue).
+		Foreground(ColorOnAccent).
+		Padding(0, 1).
+		Render("R")
+	yellowBadge := lipgloss.NewStyle().
+		Background(ColorYellow).
+		Foreground(lipgloss.Color("#000000")).
+		Padding(0, 1).
+		Render("R")
+	redBadge := lipgloss.NewStyle().
+		Background(ColorRed).
+		Foreground(ColorOnAccent).
+		Padding(0, 1).
+		Render("U")
+
+	grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
+
+	return grayStyle.Render("Shards: ") +
+		greenBadge + grayStyle.Render(" Primary") +
+		grayStyle.Render(" | ") +
+		blueBadge + grayStyle.Render(" Replica") +
+		grayStyle.Render(" | ") +
+		yellowBadge + grayStyle.Render(" Relocating/Initializing") +
+		grayStyle.Render(" | ") +
+		redBadge + grayStyle.Render(" Unassigned")
 }
 
 func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []string {

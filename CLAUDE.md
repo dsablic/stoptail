@@ -172,6 +172,27 @@ case "r":
 
 Sub-models with modals should expose a `HasModal() bool` method. The modal itself handles Esc for cancellation. Apply this pattern to any tab that can have modals or input states that capture keys.
 
+**Creating modals with huh** - When creating modals using `huh.NewForm()`, always use pointer receivers to avoid value copy issues:
+
+```go
+func newModal() *MyModal {
+    m := &MyModal{}  // Pointer, not value
+    m.form = huh.NewForm(
+        huh.NewGroup(
+            huh.NewSelect[string]().
+                Value(&m.selected),  // Form binds to field via pointer
+        ),
+    )
+    return m  // Return pointer
+}
+
+func (m *MyModal) Init() tea.Cmd { /* pointer receiver */ }
+func (m *MyModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) { /* pointer receiver */ }
+func (m *MyModal) View() string { /* pointer receiver */ }
+```
+
+If you create a value (`MyModal{}`) and return it, the form's pointer to `&m.selected` becomes invalid because you're returning a copy. Always use pointers for huh-based modals. See `internal/ui/modal.go` and the cluster picker in `main.go` for examples.
+
 ### Lipgloss Layout Patterns
 
 **Width() excludes borders** - When using `Width(n)` on a bordered style, the border adds 2 chars to the total. For two side-by-side bordered panes:
