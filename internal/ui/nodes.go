@@ -63,6 +63,19 @@ func (m *NodesModel) selectView(view NodesView) {
 	m.scrollY = 0
 }
 
+func (m NodesModel) getMaxScroll() int {
+	total := m.getItemCount()
+	maxVisible := m.height - 8
+	if maxVisible < 1 {
+		maxVisible = 10
+	}
+	maxScroll := total - maxVisible
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
+}
+
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -95,16 +108,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				m.scrollY--
 			}
 		case "down", "j":
-			total := m.getItemCount()
-			maxVisible := m.height - 8
-			if maxVisible < 1 {
-				maxVisible = 10
-			}
-			maxScroll := total - maxVisible
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-			if m.scrollY < maxScroll {
+			if m.scrollY < m.getMaxScroll() {
 				m.scrollY++
 			}
 		}
@@ -134,20 +138,10 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
 			scrollAmount := 3
-			total := m.getItemCount()
-			maxVisible := m.height - 8
-			if maxVisible < 1 {
-				maxVisible = 10
-			}
-			maxScroll := total - maxVisible
-			if maxScroll < 0 {
-				maxScroll = 0
-			}
-
 			if msg.Button == tea.MouseButtonWheelUp {
 				m.scrollY = max(0, m.scrollY-scrollAmount)
 			} else {
-				m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
+				m.scrollY = min(m.getMaxScroll(), m.scrollY+scrollAmount)
 			}
 		}
 	}

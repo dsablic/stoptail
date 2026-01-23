@@ -155,6 +155,39 @@ if res.IsError() {
 }
 ```
 
+### Shared Action Methods
+
+When keyboard shortcuts and mouse clicks perform the same action, extract the logic into a shared helper method:
+
+```go
+// Helper method encapsulates the action
+func (m *WorkbenchModel) startExecution() tea.Cmd {
+    if m.client == nil || m.executing {
+        return nil
+    }
+    m.prettyPrintBody()
+    m.executing = true
+    return tea.Batch(m.spinner.Tick, m.execute())
+}
+
+// Keyboard handler
+case "ctrl+r":
+    if cmd := m.startExecution(); cmd != nil {
+        return m, cmd
+    }
+
+// Mouse handler (Run button click)
+} else if msg.X < execEnd {
+    if cmd := m.startExecution(); cmd != nil {
+        return m, cmd
+    }
+}
+```
+
+Examples in codebase:
+- `workbench.go`: `startExecution()` for Ctrl+R and Run button
+- `nodes.go`: `selectView()` for 1/2/3 keys and tab clicks, `getMaxScroll()` for scroll bounds
+
 ### Unicode Safety
 
 Use rune-based operations for string manipulation that may contain non-ASCII:
