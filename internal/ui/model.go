@@ -481,12 +481,28 @@ func (m Model) View() string {
 	case TabWorkbench:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
 	case TabMappings:
-		statusText = "q: quit  Tab: nodes  Shift+Tab: workbench  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree view"
+		statusText = "q: quit  Tab: nodes  Shift+Tab: workbench  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  Ctrl+Y: copy  Ctrl+F: search"
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
 	case TabTasks:
 		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  c: cancel  ↑↓: select"
 	}
+
+	var clipboardMsg string
+	switch m.activeTab {
+	case TabWorkbench:
+		clipboardMsg = m.workbench.ClipboardMessage()
+	case TabMappings:
+		clipboardMsg = m.mappings.ClipboardMessage()
+	}
+	if clipboardMsg != "" {
+		msgStyle := lipgloss.NewStyle().Foreground(ColorGreen)
+		if clipboardMsg != "Copied!" {
+			msgStyle = msgStyle.Foreground(ColorYellow)
+		}
+		statusText = msgStyle.Render(clipboardMsg) + "  " + statusText
+	}
+
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, tabs, content, statusBar)

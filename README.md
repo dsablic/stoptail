@@ -170,6 +170,7 @@ stoptail stores data in `~/.stoptail/`:
 |-----|--------|
 | `/` | Filter indices |
 | `Ctrl+F` | Search fields |
+| `Ctrl+Y` | Copy mappings to clipboard |
 | `Enter` / `n` | Next search match |
 | `Shift+Enter` / `N` | Previous search match |
 | `Left/Right` | Switch between index list and mapping panes |

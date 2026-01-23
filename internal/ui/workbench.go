@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
@@ -59,8 +57,8 @@ type WorkbenchModel struct {
 	search       SearchBar
 	completion   CompletionState
 	fieldCache   map[string][]CompletionItem
-	lastIndex    string
-	copyMsg      string
+	lastIndex string
+	clipboard Clipboard
 }
 
 type executeResultMsg struct {
@@ -122,6 +120,7 @@ func NewWorkbench() WorkbenchModel {
 		spinner:    s,
 		search:     NewSearchBar(),
 		fieldCache: make(map[string][]CompletionItem),
+		clipboard:  NewClipboard(),
 	}
 }
 
@@ -132,6 +131,10 @@ func (m *WorkbenchModel) SetClient(client *es.Client) {
 
 func (m WorkbenchModel) HasActiveInput() bool {
 	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active()
+}
+
+func (m WorkbenchModel) ClipboardMessage() string {
+	return m.clipboard.Message()
 }
 
 func (m *WorkbenchModel) SetSize(width, height int) {
@@ -166,22 +169,6 @@ func (m *WorkbenchModel) Blur() {
 
 func (m *WorkbenchModel) SetBody(body string) {
 	m.editor.SetContent(body)
-}
-
-func (m *WorkbenchModel) copyToClipboard(text string) bool {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	case "windows":
-		cmd = exec.Command("clip")
-	default:
-		return false
-	}
-	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run() == nil
 }
 
 func (m WorkbenchModel) jsonError() (line, col int, msg string) {
@@ -279,7 +266,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		m.copyMsg = ""
+		m.clipboard.ClearMessage()
 		if m.search.Active() {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
@@ -320,23 +307,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			case FocusResponse:
 				text = m.responseText
 			}
-			if text != "" {
-				if m.copyToClipboard(text) {
-					m.copyMsg = "Copied!"
-				} else {
-					m.copyMsg = "Copy failed"
-				}
-			}
+			m.clipboard.Copy(text)
 			return m, nil
 		case "ctrl+c":
 			if m.focus == FocusBody && m.editor.selection.Active {
 				text := m.editor.GetSelectedText()
 				if text != "" {
-					if m.copyToClipboard(text) {
-						m.copyMsg = "Copied!"
-					} else {
-						m.copyMsg = "Copy failed"
-					}
+					m.clipboard.Copy(text)
 					m.editor.selection.Active = false
 				}
 				return m, nil

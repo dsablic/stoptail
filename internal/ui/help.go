@@ -55,6 +55,7 @@ var helpMappings = `## Mappings
 |-----|--------|
 | / | Filter |
 | Ctrl+F | Search |
+| Ctrl+Y | Copy mappings |
 | Enter/n | Next match |
 | Shift+Enter/N | Prev match |
 | left/right | Switch panes |

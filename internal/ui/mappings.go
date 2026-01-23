@@ -33,6 +33,7 @@ type MappingsModel struct {
 	analyzers     []es.AnalyzerInfo
 	mappingScroll int
 	loadingIndex  string
+	clipboard     Clipboard
 }
 
 type fetchMappingsMsg struct {
@@ -44,6 +45,7 @@ func NewMappings() MappingsModel {
 		activePane: PaneIndices,
 		treeView:   false,
 		search:     NewSearchBar(),
+		clipboard:  NewClipboard(),
 	}
 }
 
@@ -85,6 +87,7 @@ func (m *MappingsModel) SetLoading(indexName string) {
 func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		m.clipboard.ClearMessage()
 		if m.search.Active() {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
@@ -110,6 +113,9 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				m.search.Activate()
 				return m, nil
 			}
+		case "ctrl+y":
+			m.clipboard.Copy(m.copyableContent())
+			return m, nil
 		case "/":
 			if m.activePane == PaneIndices {
 				m.filterActive = true
@@ -575,6 +581,39 @@ func (m MappingsModel) flattenMappingFields(fields []es.MappingField) []es.Mappi
 		}
 	}
 	return result
+}
+
+func (m MappingsModel) copyableContent() string {
+	if m.mappings == nil {
+		return ""
+	}
+	var lines []string
+	if m.treeView {
+		lines = m.copyableTree(m.mappings.Fields, 0)
+	} else {
+		for _, f := range m.flattenMappingFields(m.mappings.Fields) {
+			lines = append(lines, fmt.Sprintf("%s: %s", f.Name, f.Type))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m MappingsModel) copyableTree(fields []es.MappingField, depth int) []string {
+	var lines []string
+	indent := strings.Repeat("  ", depth)
+	for _, f := range fields {
+		if f.Type == "object" || f.Type == "nested" {
+			lines = append(lines, fmt.Sprintf("%s%s (%s)", indent, f.Name, f.Type))
+			lines = append(lines, m.copyableTree(f.Children, depth+1)...)
+		} else {
+			lines = append(lines, fmt.Sprintf("%s%s: %s", indent, f.Name, f.Type))
+		}
+	}
+	return lines
+}
+
+func (m MappingsModel) ClipboardMessage() string {
+	return m.clipboard.Message()
 }
 
 func (m *MappingsModel) updateMappingSearch() {

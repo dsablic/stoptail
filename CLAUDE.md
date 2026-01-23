@@ -254,6 +254,8 @@ Components should:
 
 See `internal/ui/search.go` for the SearchBar component used by both workbench and mappings views.
 
+See `internal/ui/clipboard.go` for the Clipboard component used for cross-platform copy functionality (Ctrl+Y).
+
 **Global keyboard handling** - When any input is active (search, filter, editor, modal), global keybindings (q, r, tab, ?, m, etc.) must be disabled so users can type. Use the consolidated `hasActiveInput()` helper:
 
 ```go
