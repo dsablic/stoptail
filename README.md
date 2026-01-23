@@ -17,6 +17,11 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
+- **Browser Tab**: Document browser
+  - Browse documents in any index
+  - Three-pane layout: indices, document list, document detail
+  - Auto-loads more documents on scroll
+  - JSON syntax highlighting for document source
 - **Mappings Tab**: Index mapping explorer
   - Browse field mappings for any index
   - Toggle between tree and flat view
@@ -121,7 +126,8 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Mappings, Nodes, Tasks) |
+| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Browser, Mappings, Nodes, Tasks) |
+| `b` | Jump to Browser tab |
 | `m` | Jump to Mappings tab |
 | `r` | Refresh data |
 | `?` | Toggle help overlay |
@@ -163,6 +169,16 @@ stoptail stores data in `~/.stoptail/`:
 | `Up/Down` | Navigate completions (when open) |
 | `Esc` | Dismiss completions / deactivate editor / close search |
 | Mouse drag | Select text in editor |
+
+### Browser Tab
+
+| Key | Action |
+|-----|--------|
+| `/` | Filter indices |
+| `Left/Right` | Switch between panes |
+| `Up/Down` | Navigate / scroll |
+| `Enter` | Load documents for selected index |
+| `Ctrl+Y` | Copy document JSON |
 
 ### Mappings Tab
 

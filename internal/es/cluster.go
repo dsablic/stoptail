@@ -959,3 +959,87 @@ func (c *Client) FetchMapping(ctx context.Context, index string) ([]string, erro
 	return parseMappingResponse(body)
 }
 
+type DocumentHit struct {
+	ID     string
+	Index  string
+	Source string
+	Sort   []interface{}
+}
+
+type SearchResult struct {
+	Hits  []DocumentHit
+	Total int64
+}
+
+func (c *Client) SearchDocuments(ctx context.Context, index string, after []interface{}, size int) (*SearchResult, error) {
+	query := map[string]interface{}{
+		"size": size,
+		"sort": []map[string]string{{"_doc": "asc"}},
+		"query": map[string]interface{}{
+			"match_all": map[string]interface{}{},
+		},
+	}
+	if len(after) > 0 {
+		query["search_after"] = after
+	}
+
+	queryBytes, err := json.Marshal(query)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling query: %w", err)
+	}
+
+	res, err := c.es.Search(
+		c.es.Search.WithContext(ctx),
+		c.es.Search.WithIndex(index),
+		c.es.Search.WithBody(strings.NewReader(string(queryBytes))),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("searching documents: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading search response: %w", err)
+	}
+
+	var response struct {
+		Hits struct {
+			Total struct {
+				Value int64 `json:"value"`
+			} `json:"total"`
+			Hits []struct {
+				ID     string          `json:"_id"`
+				Index  string          `json:"_index"`
+				Source json.RawMessage `json:"_source"`
+				Sort   []interface{}   `json:"sort"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing search response: %w", err)
+	}
+
+	result := &SearchResult{
+		Total: response.Hits.Total.Value,
+		Hits:  make([]DocumentHit, len(response.Hits.Hits)),
+	}
+
+	for i, hit := range response.Hits.Hits {
+		result.Hits[i] = DocumentHit{
+			ID:     hit.ID,
+			Index:  hit.Index,
+			Source: string(hit.Source),
+			Sort:   hit.Sort,
+		}
+	}
+
+	return result, nil
+}
+

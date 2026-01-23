@@ -15,6 +15,7 @@ import (
 const (
 	TabOverview = iota
 	TabWorkbench
+	TabBrowser
 	TabMappings
 	TabNodes
 	TabTasks
@@ -26,6 +27,7 @@ type Model struct {
 	cluster      *es.ClusterState
 	overview     OverviewModel
 	workbench    WorkbenchModel
+	browser      BrowserModel
 	mappings     MappingsModel
 	nodes        NodesModel
 	tasks        TasksModel
@@ -59,6 +61,9 @@ func New(client *es.Client, cfg *config.Config) Model {
 	ov := NewOverview()
 	ov.SetClient(client)
 
+	br := NewBrowser()
+	br.SetClient(client)
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
@@ -68,6 +73,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		cfg:       cfg,
 		overview:  ov,
 		workbench: wb,
+		browser:   br,
 		mappings:  NewMappings(),
 		nodes:     NewNodes(),
 		tasks:     NewTasks(),
@@ -87,6 +93,8 @@ func (m Model) hasActiveInput() bool {
 		return m.overview.filterActive || m.overview.HasModal()
 	case TabWorkbench:
 		return m.workbench.HasActiveInput()
+	case TabBrowser:
+		return m.browser.HasActiveInput()
 	case TabMappings:
 		return m.mappings.filterActive || m.mappings.search.Active()
 	case TabTasks:
@@ -250,6 +258,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
 				}
+			case "b":
+				m.workbench.Blur()
+				if m.cluster != nil {
+					m.browser.SetIndices(m.cluster.Indices)
+				}
+				return m, m.switchTab(TabBrowser)
 			case "m":
 				m.workbench.Blur()
 				if m.cluster != nil {
@@ -266,6 +280,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.switchTab(TabWorkbench)
 				case TabWorkbench:
 					m.workbench.Blur()
+					if m.cluster != nil {
+						m.browser.SetIndices(m.cluster.Indices)
+					}
+					return m, m.switchTab(TabBrowser)
+				case TabBrowser:
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
@@ -287,8 +306,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabWorkbench:
 					m.workbench.Blur()
 					return m, m.switchTab(TabOverview)
-				case TabMappings:
+				case TabBrowser:
 					return m, m.switchTab(TabWorkbench)
+				case TabMappings:
+					if m.cluster != nil {
+						m.browser.SetIndices(m.cluster.Indices)
+					}
+					return m, m.switchTab(TabBrowser)
 				case TabOverview:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
@@ -332,6 +356,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.overview.SetSize(msg.Width, msg.Height-4)
 		m.workbench.SetSize(msg.Width, msg.Height-4)
+		m.browser.SetSize(msg.Width, msg.Height-4)
 		m.mappings.SetSize(msg.Width, msg.Height-4)
 		m.nodes.SetSize(msg.Width, msg.Height-4)
 		m.tasks.SetSize(msg.Width, msg.Height-4)
@@ -340,6 +365,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
 				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
+				browserWidth := lipgloss.Width(InactiveTabStyle.Render("Browser"))
 				mappingsWidth := lipgloss.Width(InactiveTabStyle.Render("Mappings"))
 				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Nodes"))
 
@@ -348,13 +374,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.workbench.Blur()
 				} else if msg.X < overviewWidth+workbenchWidth {
 					m.activeTab = TabWorkbench
-				} else if msg.X < overviewWidth+workbenchWidth+mappingsWidth {
+				} else if msg.X < overviewWidth+workbenchWidth+browserWidth {
+					m.activeTab = TabBrowser
+					m.workbench.Blur()
+					if m.cluster != nil {
+						m.browser.SetIndices(m.cluster.Indices)
+					}
+				} else if msg.X < overviewWidth+workbenchWidth+browserWidth+mappingsWidth {
 					m.activeTab = TabMappings
 					m.workbench.Blur()
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
-				} else if msg.X < overviewWidth+workbenchWidth+mappingsWidth+nodesWidth {
+				} else if msg.X < overviewWidth+workbenchWidth+browserWidth+mappingsWidth+nodesWidth {
 					m.activeTab = TabNodes
 					m.workbench.Blur()
 					m.loading = true
@@ -381,6 +413,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overview, cmd = m.overview.Update(delegateMsg)
 		case TabWorkbench:
 			m.workbench, cmd = m.workbench.Update(delegateMsg)
+		case TabBrowser:
+			m.browser, cmd = m.browser.Update(delegateMsg)
 		case TabMappings:
 			m.mappings, cmd = m.mappings.Update(delegateMsg)
 		case TabNodes:
@@ -423,6 +457,7 @@ func (m Model) View() string {
 
 	overviewTab := InactiveTabStyle.Render("Overview")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
+	browserTab := InactiveTabStyle.Render("Browser")
 	mappingsTab := InactiveTabStyle.Render("Mappings")
 	nodesTab := InactiveTabStyle.Render("Nodes")
 	tasksTab := InactiveTabStyle.Render("Tasks")
@@ -431,6 +466,8 @@ func (m Model) View() string {
 		overviewTab = activeStyle.Render("Overview")
 	case TabWorkbench:
 		workbenchTab = activeStyle.Render("Workbench")
+	case TabBrowser:
+		browserTab = activeStyle.Render("Browser")
 	case TabMappings:
 		mappingsTab = activeStyle.Render("Mappings")
 	case TabNodes:
@@ -438,7 +475,7 @@ func (m Model) View() string {
 	case TabTasks:
 		tasksTab = activeStyle.Render("Tasks")
 	}
-	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, mappingsTab, nodesTab, tasksTab)
+	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, browserTab, mappingsTab, nodesTab, tasksTab)
 
 	// Content
 	contentHeight := m.height - 4
@@ -462,6 +499,8 @@ func (m Model) View() string {
 			content = m.overview.View()
 		case TabWorkbench:
 			content = m.workbench.View()
+		case TabBrowser:
+			content = m.browser.View()
 		case TabMappings:
 			content = m.mappings.View()
 		case TabNodes:
@@ -479,9 +518,11 @@ func (m Model) View() string {
 			statusText += " [on]"
 		}
 	case TabWorkbench:
-		statusText = "q: quit  Tab: mappings  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+		statusText = "q: quit  Tab: browser  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+	case TabBrowser:
+		statusText = "q: quit  Tab: mappings  Shift+Tab: workbench  /: filter  ←→: panes  ↑↓: scroll  Ctrl+Y: copy"
 	case TabMappings:
-		statusText = "q: quit  Tab: nodes  Shift+Tab: workbench  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  Ctrl+Y: copy  Ctrl+F: search"
+		statusText = "q: quit  Tab: nodes  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  Ctrl+Y: copy  Ctrl+F: search"
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
 	case TabTasks:
@@ -492,6 +533,8 @@ func (m Model) View() string {
 	switch m.activeTab {
 	case TabWorkbench:
 		clipboardMsg = m.workbench.ClipboardMessage()
+	case TabBrowser:
+		clipboardMsg = m.browser.ClipboardMessage()
 	case TabMappings:
 		clipboardMsg = m.mappings.ClipboardMessage()
 	}

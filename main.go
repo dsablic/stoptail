@@ -52,7 +52,7 @@ Examples:
 	}
 
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
-	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, mappings, nodes)")
+	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, browser, mappings, nodes)")
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
@@ -393,8 +393,19 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		mappings.SetIndices(state.Indices)
 		fmt.Println(mappings.View())
 
+	case "browser":
+		state, err := client.FetchClusterState(ctx)
+		if err != nil {
+			return fmt.Errorf("fetching cluster state: %w", err)
+		}
+		browser := ui.NewBrowser()
+		browser.SetClient(client)
+		browser.SetSize(width, height)
+		browser.SetIndices(state.Indices)
+		fmt.Println(browser.View())
+
 	default:
-		return fmt.Errorf("unknown tab: %s (use: overview, workbench, mappings, nodes)", tab)
+		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, nodes)", tab)
 	}
 	return nil
 }

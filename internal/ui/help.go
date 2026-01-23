@@ -10,10 +10,11 @@ var helpGlobal = `## Global
 | Key | Action |
 |-----|--------|
 | Tab / Shift+Tab | Switch tabs |
+| b | Browser tab |
+| m | Mappings tab |
 | q / Ctrl+C | Quit |
 | ? | Toggle help |
 | r | Refresh |
-| Alt+drag | Terminal text selection |
 `
 
 var helpOverview = `## Overview
@@ -47,6 +48,17 @@ var helpWorkbench = `## Workbench
 | Shift+Arrow | Select text |
 | Up/Down | Navigate |
 | Esc | Cancel |
+`
+
+var helpBrowser = `## Browser
+
+| Key | Action |
+|-----|--------|
+| / | Filter indices |
+| left/right | Switch panes |
+| up/down | Scroll / select |
+| Enter | Load documents |
+| Ctrl+Y | Copy document |
 `
 
 var helpMappings = `## Mappings
@@ -102,6 +114,8 @@ func renderHelp(width, height, activeTab int) string {
 		tabHelp = helpOverview
 	case TabWorkbench:
 		tabHelp = helpWorkbench
+	case TabBrowser:
+		tabHelp = helpBrowser
 	case TabMappings:
 		tabHelp = helpMappings
 	case TabNodes:

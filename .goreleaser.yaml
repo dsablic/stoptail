@@ -9,7 +9,8 @@ before:
 
 builds:
   - env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
+      - CC={{if eq .Os "darwin"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-macos-none{{else}}zig cc -target aarch64-macos-none{{end}}{{else if eq .Os "linux"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-linux-gnu{{else}}zig cc -target aarch64-linux-gnu{{end}}{{else if eq .Os "windows"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-windows-gnu{{else}}zig cc -target aarch64-windows-gnu{{end}}{{end}}
     goos:
       - linux
       - windows
