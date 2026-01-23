@@ -68,31 +68,11 @@ Sleep 2s
 Type "?"
 Sleep 500ms
 
-# Go back to Workbench (Shift+Tab twice: Nodes -> Mappings -> Workbench)
+# Go to Workbench (Shift+Tab twice: Nodes -> Mappings -> Workbench)
 Shift+Tab
 Sleep 500ms
 Shift+Tab
-Sleep 500ms
-
-# Type a path
-Ctrl+a
-Ctrl+k
-Type "/products/_search"
-Sleep 500ms
-
-# Tab to body
-Tab
-Sleep 300ms
-
-# Type a query
-Ctrl+a
-Ctrl+k
-Type@75ms '{"query":{"match_all":{}},"size":5}'
-Sleep 500ms
-
-# Execute
-Ctrl+Enter
-Sleep 1.5s
+Sleep 2s
 
 # Quit - hide the exit
 Hide
