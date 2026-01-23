@@ -251,6 +251,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		case "tab":
+			if m.showHelp {
+				break
+			}
 			if m.overviewAcceptsGlobalKeys() {
 				m.workbench.Blur()
 				return m, m.switchTab(TabWorkbench)
@@ -274,6 +277,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.switchTab(TabOverview)
 			}
 		case "shift+tab":
+			if m.showHelp {
+				break
+			}
 			if m.activeTab == TabWorkbench {
 				m.workbench.Blur()
 				return m, m.switchTab(TabOverview)
@@ -408,7 +414,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.quitting {
-		return ""
+		return "Goodbye!\n"
 	}
 
 	if m.showHelp {

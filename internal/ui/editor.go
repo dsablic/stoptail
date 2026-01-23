@@ -410,6 +410,13 @@ func (e Editor) View() string {
 		highlighted = e.renderWithSelection(highlighted)
 	}
 
+	cursorLine := e.textarea.Line()
+	cursorCol := e.textarea.LineInfo().CharOffset
+
+	if e.textarea.Focused() && !e.selection.Active {
+		highlighted = e.renderWithCursor(highlighted, cursorLine, cursorCol)
+	}
+
 	highlightedLines := strings.Split(highlighted, "\n")
 
 	gutterStyle := lipgloss.NewStyle().
@@ -439,6 +446,85 @@ func (e Editor) View() string {
 	}
 
 	return strings.Join(resultLines, "\n")
+}
+
+func (e Editor) renderWithCursor(content string, cursorLine, cursorCol int) string {
+	lines := strings.Split(content, "\n")
+	if cursorLine < 0 || cursorLine >= len(lines) {
+		return content
+	}
+
+	line := lines[cursorLine]
+	runes := []rune(stripAnsi(line))
+
+	if cursorCol > len(runes) {
+		cursorCol = len(runes)
+	}
+
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+
+	var newLine string
+	if cursorCol < len(runes) {
+		before := e.substringWithAnsi(line, 0, cursorCol)
+		cursorChar := string(runes[cursorCol])
+		after := e.substringWithAnsi(line, cursorCol+1, len(runes))
+		newLine = before + cursorStyle.Render(cursorChar) + after
+	} else {
+		newLine = line + cursorStyle.Render(" ")
+	}
+
+	lines[cursorLine] = newLine
+	return strings.Join(lines, "\n")
+}
+
+func stripAnsi(s string) string {
+	var result strings.Builder
+	inEscape := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			continue
+		}
+		if inEscape {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+			}
+			continue
+		}
+		result.WriteRune(r)
+	}
+	return result.String()
+}
+
+func (e Editor) substringWithAnsi(s string, start, end int) string {
+	var result strings.Builder
+	var ansiBuffer strings.Builder
+	inEscape := false
+	charIndex := 0
+
+	for _, r := range s {
+		if r == '\x1b' {
+			inEscape = true
+			ansiBuffer.WriteRune(r)
+			continue
+		}
+		if inEscape {
+			ansiBuffer.WriteRune(r)
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+				inEscape = false
+				if charIndex >= start && charIndex < end {
+					result.WriteString(ansiBuffer.String())
+				}
+				ansiBuffer.Reset()
+			}
+			continue
+		}
+		if charIndex >= start && charIndex < end {
+			result.WriteRune(r)
+		}
+		charIndex++
+	}
+	return result.String()
 }
 
 func (e Editor) GetSelectedText() string {
