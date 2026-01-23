@@ -23,5 +23,5 @@ jobs:
             -w "/go/src/github.com/${{ github.repository }}" \
             -e GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}" \
             -e CGO_ENABLED=1 \
-            ghcr.io/goreleaser/goreleaser-cross:v1.23 \
+            ghcr.io/goreleaser/goreleaser-cross:v1.24 \
             release --clean
