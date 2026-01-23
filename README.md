@@ -139,6 +139,7 @@ stoptail stores data in `~/.stoptail/`:
 | `U` | Show only UNASSIGNED shards |
 | `R` | Show only RELOCATING shards |
 | `I` | Show only INITIALIZING shards |
+| `.` | Toggle system indices (starting with .) |
 | `Enter` | Open selected index in Workbench |
 | `c` | Create new index |
 | `d` | Delete selected index |

@@ -474,7 +474,10 @@ func (m Model) View() string {
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
-		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select index  ↑↓: scroll  Enter: open"
+		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select index  ↑↓: scroll  Enter: open  .: system"
+		if m.overview.showSystem {
+			statusText += " [on]"
+		}
 	case TabWorkbench:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
 	case TabMappings:

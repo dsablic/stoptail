@@ -25,6 +25,7 @@ var helpOverview = `## Overview
 | Enter | Open in Workbench |
 | 1-9 | Toggle alias |
 | U/R/I | Shard states |
+| . | Toggle system indices |
 | c | Create index |
 | d | Delete index |
 | a/A | Add/remove alias |

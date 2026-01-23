@@ -28,6 +28,7 @@ type OverviewModel struct {
 	filterActive     bool
 	aliasFilters     map[string]bool
 	shardStateFilter string
+	showSystem       bool
 	scrollX          int
 	scrollY          int
 	selectedIndex    int
@@ -138,6 +139,10 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			} else {
 				m.shardStateFilter = "INITIALIZING"
 			}
+			m.selectedIndex = 0
+			m.scrollX = 0
+		case ".":
+			m.showSystem = !m.showSystem
 			m.selectedIndex = 0
 			m.scrollX = 0
 		case "up", "k":
@@ -346,6 +351,10 @@ func (m OverviewModel) filteredIndices() []es.IndexInfo {
 	filterText := strings.ToLower(m.filter.Value())
 
 	for _, idx := range m.cluster.Indices {
+		if !m.showSystem && strings.HasPrefix(idx.Name, ".") {
+			continue
+		}
+
 		if filterText != "" {
 			match := false
 			if strings.Contains(strings.ToLower(idx.Name), filterText) {
