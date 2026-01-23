@@ -39,9 +39,39 @@ Sleep 500ms
 Escape
 Sleep 1s
 
-# Go to Nodes tab (Tab 3 times: Overview -> Workbench -> Mappings -> Nodes)
+# Go to Browser tab (Tab twice: Overview -> Workbench -> Browser)
 Tab
 Sleep 500ms
+Tab
+Sleep 1s
+
+# Select an index and load documents
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Type "j"
+Sleep 300ms
+Enter
+Sleep 1.5s
+
+# Navigate through documents
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+Type "j"
+Sleep 400ms
+
+# Move to detail pane
+Type "l"
+Sleep 1s
+
+# Back to doc list
+Type "h"
+Sleep 500ms
+
+# Go to Nodes tab (Tab twice: Browser -> Mappings -> Nodes)
 Tab
 Sleep 500ms
 Tab
@@ -67,12 +97,6 @@ Type "?"
 Sleep 2s
 Type "?"
 Sleep 500ms
-
-# Go to Workbench (Shift+Tab twice: Nodes -> Mappings -> Workbench)
-Shift+Tab
-Sleep 500ms
-Shift+Tab
-Sleep 2s
 
 # Quit - hide the exit
 Hide
