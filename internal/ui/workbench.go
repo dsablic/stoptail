@@ -427,6 +427,10 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 						m.completion.Close()
 					}
 				}
+			} else if key == "\"" {
+				if m.shouldAutoComplete() {
+					m.triggerCompletion()
+				}
 			}
 		case FocusResponse:
 			m.response, cmd = m.response.Update(msg)
@@ -900,6 +904,40 @@ func (m *WorkbenchModel) triggerCompletion() {
 	m.completion.SelectedIdx = 0
 	m.completion.TriggerCol = col
 	m.completion.Query = ""
+}
+
+func (m *WorkbenchModel) shouldAutoComplete() bool {
+	content := m.editor.Content()
+	lines := strings.Split(content, "\n")
+	row := m.editor.Line()
+	col := m.editor.LineInfo().CharOffset
+
+	if row >= len(lines) {
+		return false
+	}
+
+	line := lines[row]
+	if col < 1 || col > len(line) {
+		return false
+	}
+
+	beforeQuote := strings.TrimRight(line[:col-1], " \t")
+	if len(beforeQuote) == 0 {
+		for i := row - 1; i >= 0; i-- {
+			trimmed := strings.TrimRight(lines[i], " \t")
+			if len(trimmed) > 0 {
+				beforeQuote = trimmed
+				break
+			}
+		}
+	}
+
+	if len(beforeQuote) == 0 {
+		return false
+	}
+
+	lastChar := beforeQuote[len(beforeQuote)-1]
+	return lastChar == '{' || lastChar == ',' || lastChar == '['
 }
 
 func (m *WorkbenchModel) getCompletionQuery() string {
