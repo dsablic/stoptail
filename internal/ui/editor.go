@@ -512,29 +512,141 @@ func (e Editor) renderWithSelection(content string) string {
 }
 
 func (e Editor) renderPlainWithCursor(content string, cursorLine, cursorCol int) string {
-	lines := strings.Split(content, "\n")
+	highlighted := e.highlightContent()
+	if highlighted == "" {
+		highlighted = content
+	}
+
+	lines := strings.Split(highlighted, "\n")
 	if cursorLine < 0 || cursorLine >= len(lines) {
-		return content
+		return highlighted
 	}
 
-	line := lines[cursorLine]
-	runes := []rune(line)
-
-	if cursorCol > len(runes) {
-		cursorCol = len(runes)
+	contentLines := strings.Split(content, "\n")
+	if cursorLine >= len(contentLines) {
+		return highlighted
 	}
 
+	plainLine := contentLines[cursorLine]
+	plainRunes := []rune(plainLine)
+	if cursorCol > len(plainRunes) {
+		cursorCol = len(plainRunes)
+	}
+
+	highlightedLine := lines[cursorLine]
+	lines[cursorLine] = insertCursorInHighlightedLine(highlightedLine, plainRunes, cursorCol)
+	return strings.Join(lines, "\n")
+}
+
+func insertCursorInHighlightedLine(highlighted string, plainRunes []rune, cursorCol int) string {
 	cursorStyle := lipgloss.NewStyle().Reverse(true)
 
-	var newLine string
-	if cursorCol < len(runes) {
-		newLine = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
-	} else {
-		newLine = line + cursorStyle.Render(" ")
+	if cursorCol >= len(plainRunes) {
+		return highlighted + cursorStyle.Render(" ")
 	}
 
-	lines[cursorLine] = newLine
-	return strings.Join(lines, "\n")
+	charAtCursor := string(plainRunes[cursorCol])
+	startPos, endPos := findCharBounds(highlighted, cursorCol)
+
+	before := highlighted[:startPos]
+	after := highlighted[endPos:]
+
+	activeColor := extractActiveColor(before)
+	var cursorChar string
+	if activeColor != "" {
+		cursorChar = "\x1b[7;" + activeColor + "m" + charAtCursor + "\x1b[0m"
+	} else {
+		cursorChar = cursorStyle.Render(charAtCursor)
+	}
+
+	return before + cursorChar + after
+}
+
+func findCharBounds(s string, visualCol int) (start, end int) {
+	visualPos := 0
+	i := 0
+
+	for i < len(s) && visualPos < visualCol {
+		if s[i] == '\x1b' {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		_, size := utf8DecodeRune(s[i:])
+		visualPos++
+		i += size
+	}
+
+	for i < len(s) && s[i] == '\x1b' {
+		for i < len(s) && s[i] != 'm' {
+			i++
+		}
+		if i < len(s) {
+			i++
+		}
+	}
+	start = i
+
+	if i < len(s) {
+		_, size := utf8DecodeRune(s[i:])
+		end = i + size
+	} else {
+		end = i
+	}
+
+	for end < len(s) && s[end] == '\x1b' {
+		for end < len(s) && s[end] != 'm' {
+			end++
+		}
+		if end < len(s) {
+			end++
+		}
+	}
+
+	return start, end
+}
+
+func extractActiveColor(s string) string {
+	lastColor := ""
+	i := 0
+	for i < len(s) {
+		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
+			start := i + 2
+			end := start
+			for end < len(s) && s[end] != 'm' {
+				end++
+			}
+			if end < len(s) {
+				code := s[start:end]
+				if code == "0" {
+					lastColor = ""
+				} else {
+					lastColor = code
+				}
+			}
+			i = end + 1
+		} else {
+			i++
+		}
+	}
+	return lastColor
+}
+
+func utf8DecodeRune(s string) (rune, int) {
+	if len(s) == 0 {
+		return 0, 0
+	}
+	for i := 1; i <= 4 && i <= len(s); i++ {
+		r := []rune(s[:i])
+		if len(r) == 1 {
+			return r[0], i
+		}
+	}
+	return rune(s[0]), 1
 }
 
 func (e Editor) View() string {
