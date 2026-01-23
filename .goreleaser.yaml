@@ -10,14 +10,37 @@ before:
 builds:
   - env:
       - CGO_ENABLED=1
-      - CC={{if eq .Os "darwin"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-macos-none{{else}}zig cc -target aarch64-macos-none{{end}}{{else if eq .Os "linux"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-linux-gnu{{else}}zig cc -target aarch64-linux-gnu{{end}}{{else if eq .Os "windows"}}{{if eq .Arch "amd64"}}zig cc -target x86_64-windows-gnu{{else}}zig cc -target aarch64-windows-gnu{{end}}{{end}}
+    overrides:
+      - goos: darwin
+        goarch: amd64
+        env:
+          - CC=o64-clang
+          - CXX=o64-clang++
+      - goos: darwin
+        goarch: arm64
+        env:
+          - CC=oa64-clang
+          - CXX=oa64-clang++
+      - goos: linux
+        goarch: arm64
+        env:
+          - CC=aarch64-linux-gnu-gcc
+          - CXX=aarch64-linux-gnu-g++
+      - goos: windows
+        goarch: amd64
+        env:
+          - CC=x86_64-w64-mingw32-gcc
+          - CXX=x86_64-w64-mingw32-g++
     goos:
       - linux
-      - windows
       - darwin
+      - windows
     goarch:
       - amd64
       - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
