@@ -976,6 +976,18 @@ func (m *WorkbenchModel) acceptCompletion() {
 	insertion := selected.Text[len(query):]
 	suffix := `": `
 
+	content := m.editor.Content()
+	lines := strings.Split(content, "\n")
+	row := m.editor.Line()
+	col := m.editor.LineInfo().CharOffset
+
+	if row < len(lines) {
+		line := lines[row]
+		if col < len(line) && line[col] == '"' {
+			m.editor.Update(tea.KeyMsg{Type: tea.KeyDelete})
+		}
+	}
+
 	m.editor.InsertString(insertion + suffix)
 	m.completion.Close()
 }

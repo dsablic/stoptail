@@ -106,6 +106,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if _, err := p.Run(); err != nil {
 		return err
 	}
+	fmt.Print("\033[?1000l\033[?1002l\033[?1003l\033[?1006l")
 	return nil
 }
 
