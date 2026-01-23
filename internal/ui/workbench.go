@@ -350,6 +350,19 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				}
 			}
 			return m, nil
+		case "ctrl+c":
+			if m.focus == FocusBody && m.editor.selection.Active {
+				text := m.editor.GetSelectedText()
+				if text != "" {
+					if m.copyToClipboard(text) {
+						m.copyMsg = "Copied!"
+					} else {
+						m.copyMsg = "Copy failed"
+					}
+					m.editor.selection.Active = false
+				}
+				return m, nil
+			}
 		case "tab":
 			if m.focus == FocusNone {
 				break
@@ -436,11 +449,37 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case tea.MouseMsg:
+		paneInnerWidth := (m.width - 5) / 2
+		topRowHeight := 3
+		bodyPaneTop := topRowHeight + 2
+
+		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
+			editorX := msg.X - 1
+			editorY := msg.Y - bodyPaneTop - 1
+
+			switch msg.Action {
+			case tea.MouseActionPress:
+				if msg.Button == tea.MouseButtonLeft {
+					m.editor.HandleDragStart(editorX, editorY)
+				}
+			case tea.MouseActionMotion:
+				m.editor.HandleDrag(editorX, editorY)
+			case tea.MouseActionRelease:
+				if msg.Button == tea.MouseButtonLeft {
+					if m.editor.selection.Dragging {
+						m.editor.HandleDragEnd()
+					} else {
+						m.editor.HandleClick(editorX, editorY)
+					}
+					m.path.Blur()
+					m.editor.Focus()
+					m.focus = FocusBody
+					return m, nil
+				}
+			}
+		}
+
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-			paneInnerWidth := (m.width - 5) / 2
-
-			topRowHeight := 3
-
 			if msg.Y < topRowHeight+1 {
 				btnStyle := lipgloss.NewStyle().Padding(0, 1)
 				methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
@@ -529,8 +568,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			paneInnerWidth := (m.width - 5) / 2
-			topRowHeight := 3
 			scrollAmount := 3
 
 			if msg.Y > topRowHeight {
