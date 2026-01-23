@@ -13,6 +13,7 @@ var helpGlobal = `## Global
 | q / Ctrl+C | Quit |
 | ? | Toggle help |
 | r | Refresh |
+| Alt+drag | Terminal text selection |
 `
 
 var helpOverview = `## Overview

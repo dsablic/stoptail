@@ -78,12 +78,12 @@ go run cmd/editor-test/main.go -test
 This tests:
 - Syntax highlighting in unfocused/focused states
 - Cursor rendering with syntax highlighting preserved
-- Selection highlighting
-- Shift+arrow selection
-- Mouse coordinate conversion
+- Selection highlighting (Shift+arrow)
 - GetSelectedText functionality
 
-For interactive testing of cursor positioning, mouse clicks, and visual appearance:
+Note: Mouse text selection uses terminal-native selection (Alt+drag on Linux/Windows, Option+drag on macOS).
+
+For interactive testing of cursor positioning and visual appearance:
 
 ```bash
 go run cmd/editor-test/main.go
@@ -92,8 +92,7 @@ go run cmd/editor-test/main.go
 **Update the tests** in `cmd/editor-test/main.go` when:
 - Changing cursor rendering or positioning
 - Modifying syntax highlighting
-- Changing mouse coordinate calculations (gutter width, separator)
-- Adding new selection features
+- Adding new Shift+arrow selection features
 
 ## Code Style
 

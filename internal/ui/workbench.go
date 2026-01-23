@@ -449,29 +449,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		bodyHeaderHeight := 1
 
 		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
-			editorX := msg.X - 1
-			editorY := msg.Y - bodyPaneTop - 1 - bodyHeaderHeight
-
-			switch msg.Action {
-			case tea.MouseActionPress:
-				if msg.Button == tea.MouseButtonLeft {
-					m.editor.HandleDragStart(editorX, editorY)
-				}
-			case tea.MouseActionMotion:
-				m.editor.HandleDrag(editorX, editorY)
-			case tea.MouseActionRelease:
-				if msg.Button == tea.MouseButtonLeft {
-					wasDragging := m.editor.selection.Dragging
-					hasSelection := m.editor.selection.Active
-					m.editor.HandleDragEnd()
-					m.path.Blur()
-					m.editor.Focus()
-					m.focus = FocusBody
-					if !wasDragging || !hasSelection {
-						m.editor.HandleClick(editorX, editorY)
-					}
-					return m, nil
-				}
+			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+				editorX := msg.X - 1
+				editorY := msg.Y - bodyPaneTop - 1 - bodyHeaderHeight
+				m.path.Blur()
+				m.editor.Focus()
+				m.focus = FocusBody
+				m.editor.HandleClick(editorX, editorY)
+				return m, nil
 			}
 		}
 

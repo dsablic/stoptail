@@ -35,7 +35,6 @@ type Selection struct {
 	EndLine, EndCol       int
 	AnchorLine, AnchorCol int
 	Active                bool
-	Dragging              bool
 }
 
 type Editor struct {
@@ -393,34 +392,6 @@ func (e *Editor) HandleClick(x, y int) {
 	line, col := e.screenToPosition(x, y)
 	e.setCursorPosition(line, col)
 	e.selection.Active = false
-}
-
-func (e *Editor) HandleDragStart(x, y int) {
-	line, col := e.screenToPosition(x, y)
-	e.selection.StartLine = line
-	e.selection.StartCol = col
-	e.selection.EndLine = line
-	e.selection.EndCol = col
-	e.selection.AnchorLine = line
-	e.selection.AnchorCol = col
-	e.selection.Active = false
-	e.selection.Dragging = true
-}
-
-func (e *Editor) HandleDrag(x, y int) {
-	if !e.selection.Dragging {
-		return
-	}
-	line, col := e.screenToPosition(x, y)
-	e.selection.EndLine = line
-	e.selection.EndCol = col
-	if line != e.selection.StartLine || col != e.selection.StartCol {
-		e.selection.Active = true
-	}
-}
-
-func (e *Editor) HandleDragEnd() {
-	e.selection.Dragging = false
 }
 
 func (e *Editor) setCursorPosition(line, col int) {
@@ -855,7 +826,6 @@ func (e *Editor) SetCursor(pos int) {
 
 func (e *Editor) ClearSelection() {
 	e.selection.Active = false
-	e.selection.Dragging = false
 }
 
 func (e Editor) GetSelection() Selection {
@@ -868,5 +838,4 @@ func (e *Editor) SetSelection(startLine, startCol, endLine, endCol int) {
 	e.selection.EndLine = endLine
 	e.selection.EndCol = endCol
 	e.selection.Active = true
-	e.selection.Dragging = false
 }

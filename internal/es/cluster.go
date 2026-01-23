@@ -390,6 +390,7 @@ func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
 	res, err := c.es.Cat.Indices(
 		c.es.Cat.Indices.WithContext(ctx),
 		c.es.Cat.Indices.WithFormat("json"),
+		c.es.Cat.Indices.WithExpandWildcards("all"),
 		c.es.Cat.Indices.WithH("index", "health", "docs.count", "store.size", "pri", "rep"),
 	)
 	if err != nil {
