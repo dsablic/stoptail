@@ -151,7 +151,7 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	}
 
 	picker := newClusterPickerModal(names)
-	p := tea.NewProgram(picker)
+	p := tea.NewProgram(picker, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {
 		return "", err
@@ -335,7 +335,7 @@ func resolveURLWithProgress(clusters *config.ClustersConfig, name string) (strin
 	}
 
 	m := newURLResolver(clusters, name)
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {
 		return "", err
