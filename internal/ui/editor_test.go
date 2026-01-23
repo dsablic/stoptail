@@ -113,9 +113,9 @@ func TestScreenToPosition(t *testing.T) {
 		wantLine int
 		wantCol  int
 	}{
-		{"first char", 5, 0, 0, 0},
-		{"second line", 5, 1, 1, 0},
-		{"with offset", 7, 1, 1, 2},
+		{"first char", 6, 0, 0, 0},
+		{"second line", 6, 1, 1, 0},
+		{"with offset", 8, 1, 1, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -208,4 +208,45 @@ func splitLines(s string) []string {
 	}
 	lines = append(lines, s[start:])
 	return lines
+}
+
+func TestIsKeyCompletionPosition(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"after open brace", "{", true},
+		{"after comma in object", `{"a": 1,`, true},
+		{"after colon", `{"a":`, false},
+		{"after value", `{"a": 1`, false},
+		{"after close brace", `{"a": 1}`, false},
+		{"after open bracket", "[", false},
+		{"inside array", `["a",`, false},
+		{"after bracket then brace", "[{", true},
+		{"in object inside array", `[{"a": 1,`, true},
+		{"after object in array", `[{}`, false},
+		{"between objects in array", `[{},`, false},
+		{"new object in array", `[{}, {`, true},
+		{"after close bracket", `[1, 2]`, false},
+		{"nested array", `{"a": [`, false},
+		{"nested array with object", `{"a": [{`, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := NewEditor()
+			e.SetContent(tt.content)
+			lines := strings.Split(tt.content, "\n")
+			lastLine := len(lines) - 1
+			lastCol := len(lines[lastLine])
+			e.textarea.SetCursor(len(tt.content))
+			e.cursorLine = lastLine
+			e.cursorCol = lastCol
+			e.cursorSet = true
+			got := e.IsKeyCompletionPosition()
+			if got != tt.want {
+				t.Errorf("IsKeyCompletionPosition() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

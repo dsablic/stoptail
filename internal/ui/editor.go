@@ -48,6 +48,9 @@ type Editor struct {
 	validationState ValidationState
 	validationError string
 	selection       Selection
+	cursorLine      int
+	cursorCol       int
+	cursorSet       bool
 }
 
 func NewEditor() Editor {
@@ -201,6 +204,90 @@ func nodeContains(ancestor, descendant *sitter.Node) bool {
 	return false
 }
 
+func (e Editor) IsKeyCompletionPosition() bool {
+	content := e.textarea.Value()
+	cursorOffset := e.getCursorOffset()
+	if cursorOffset > len(content) {
+		cursorOffset = len(content)
+	}
+
+	lastNonWhitespace := byte(0)
+	for i := cursorOffset - 1; i >= 0; i-- {
+		ch := content[i]
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+			continue
+		}
+		lastNonWhitespace = ch
+		break
+	}
+
+	if lastNonWhitespace == '[' || lastNonWhitespace == ':' ||
+		lastNonWhitespace == '"' || lastNonWhitespace == '}' ||
+		lastNonWhitespace == ']' || lastNonWhitespace == 0 {
+		return false
+	}
+
+	if lastNonWhitespace != '{' && lastNonWhitespace != ',' {
+		return false
+	}
+
+	var bracketStack []byte
+	inString := false
+
+	for i := 0; i < cursorOffset; i++ {
+		ch := content[i]
+		if inString {
+			if ch == '"' && (i == 0 || content[i-1] != '\\') {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{', '[':
+			bracketStack = append(bracketStack, ch)
+		case '}':
+			if len(bracketStack) > 0 && bracketStack[len(bracketStack)-1] == '{' {
+				bracketStack = bracketStack[:len(bracketStack)-1]
+			}
+		case ']':
+			if len(bracketStack) > 0 && bracketStack[len(bracketStack)-1] == '[' {
+				bracketStack = bracketStack[:len(bracketStack)-1]
+			}
+		}
+	}
+
+	if len(bracketStack) == 0 {
+		return false
+	}
+	return bracketStack[len(bracketStack)-1] == '{'
+}
+
+func (e Editor) getCursorOffset() int {
+	content := e.textarea.Value()
+	lines := strings.Split(content, "\n")
+
+	var row, col int
+	if e.cursorSet {
+		row = e.cursorLine
+		col = e.cursorCol
+	} else {
+		row = e.Line()
+		col = e.LineInfo().CharOffset
+	}
+
+	offset := 0
+	for i := 0; i < row && i < len(lines); i++ {
+		offset += len(lines[i]) + 1
+	}
+	if row < len(lines) && col > len(lines[row]) {
+		col = len(lines[row])
+	}
+	offset += col
+	return offset
+}
+
 func (e Editor) offsetToRowCol(offset int) (row, col int) {
 	content := e.textarea.Value()
 	for i, ch := range content {
@@ -285,9 +372,19 @@ func (e *Editor) SetSize(width, height int) {
 }
 
 func (e Editor) screenToPosition(x, y int) (line, col int) {
-	adjustedX := x - e.gutterWidth - 1
+	content := e.textarea.Value()
+	lines := strings.Split(content, "\n")
+	gutterWidth := 3
+	if len(lines) >= 100 {
+		gutterWidth = 4
+	}
+	separatorWidth := 3
+	adjustedX := x - gutterWidth - separatorWidth
 	if adjustedX < 0 {
 		adjustedX = 0
+	}
+	if y < 0 {
+		y = 0
 	}
 	return y, adjustedX
 }
@@ -304,7 +401,9 @@ func (e *Editor) HandleDragStart(x, y int) {
 	e.selection.StartCol = col
 	e.selection.EndLine = line
 	e.selection.EndCol = col
-	e.selection.Active = true
+	e.selection.AnchorLine = line
+	e.selection.AnchorCol = col
+	e.selection.Active = false
 	e.selection.Dragging = true
 }
 
@@ -315,6 +414,9 @@ func (e *Editor) HandleDrag(x, y int) {
 	line, col := e.screenToPosition(x, y)
 	e.selection.EndLine = line
 	e.selection.EndCol = col
+	if line != e.selection.StartLine || col != e.selection.StartCol {
+		e.selection.Active = true
+	}
 }
 
 func (e *Editor) HandleDragEnd() {
@@ -323,17 +425,31 @@ func (e *Editor) HandleDragEnd() {
 
 func (e *Editor) setCursorPosition(line, col int) {
 	lines := strings.Split(e.textarea.Value(), "\n")
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(lines) {
+		line = len(lines) - 1
+	}
+	if line < 0 {
+		return
+	}
+	lineLen := len(lines[line])
+	if col < 0 {
+		col = 0
+	}
+	if col > lineLen {
+		col = lineLen
+	}
+	e.cursorLine = line
+	e.cursorCol = col
+	e.cursorSet = true
+
 	offset := 0
 	for i := 0; i < line && i < len(lines); i++ {
 		offset += len(lines[i]) + 1
 	}
-	if line < len(lines) {
-		lineLen := len(lines[line])
-		if col > lineLen {
-			col = lineLen
-		}
-		offset += col
-	}
+	offset += col
 	e.textarea.SetCursor(offset)
 }
 
@@ -431,8 +547,14 @@ func (e Editor) View() string {
 		gutterWidth = 4
 	}
 
-	cursorLine := e.textarea.Line()
-	cursorCol := e.textarea.LineInfo().CharOffset
+	var cursorLine, cursorCol int
+	if e.cursorSet {
+		cursorLine = e.cursorLine
+		cursorCol = e.cursorCol
+	} else {
+		cursorLine = e.textarea.Line()
+		cursorCol = e.textarea.LineInfo().CharOffset
+	}
 
 	var displayContent string
 	if e.selection.Active {
@@ -538,6 +660,7 @@ func (e Editor) Focused() bool {
 
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		e.cursorSet = false
 		switch keyMsg.String() {
 		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
 			return e.handleShiftArrow(keyMsg)

@@ -362,7 +362,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					m.completion.MoveDown()
 					return m, nil
 				}
-				m.triggerCompletion()
+				if m.editor.IsKeyCompletionPosition() {
+					m.triggerCompletion()
+					return m, nil
+				}
+				m.editor.InsertString("  ")
 				return m, nil
 			}
 			m.cycleFocus()
@@ -442,10 +446,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		paneInnerWidth := (m.width - 5) / 2
 		topRowHeight := 3
 		bodyPaneTop := topRowHeight + 2
+		bodyHeaderHeight := 1
 
 		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
 			editorX := msg.X - 1
-			editorY := msg.Y - bodyPaneTop - 1
+			editorY := msg.Y - bodyPaneTop - 1 - bodyHeaderHeight
 
 			switch msg.Action {
 			case tea.MouseActionPress:
@@ -456,14 +461,15 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.editor.HandleDrag(editorX, editorY)
 			case tea.MouseActionRelease:
 				if msg.Button == tea.MouseButtonLeft {
-					if m.editor.selection.Dragging {
-						m.editor.HandleDragEnd()
-					} else {
-						m.editor.HandleClick(editorX, editorY)
-					}
+					wasDragging := m.editor.selection.Dragging
+					hasSelection := m.editor.selection.Active
+					m.editor.HandleDragEnd()
 					m.path.Blur()
 					m.editor.Focus()
 					m.focus = FocusBody
+					if !wasDragging || !hasSelection {
+						m.editor.HandleClick(editorX, editorY)
+					}
 					return m, nil
 				}
 			}
@@ -915,7 +921,7 @@ func (m *WorkbenchModel) shouldAutoComplete() bool {
 	}
 
 	lastChar := beforeQuote[len(beforeQuote)-1]
-	return lastChar == '{' || lastChar == ',' || lastChar == '['
+	return lastChar == '{' || lastChar == ','
 }
 
 func (m *WorkbenchModel) getCompletionQuery() string {
@@ -960,14 +966,24 @@ func (m *WorkbenchModel) acceptCompletion() {
 	row := m.editor.Line()
 	col := m.editor.LineInfo().CharOffset
 
+	needsOpenQuote := true
 	if row < len(lines) {
 		line := lines[row]
+		if m.completion.TriggerCol > 0 && m.completion.TriggerCol <= len(line) {
+			if line[m.completion.TriggerCol-1] == '"' {
+				needsOpenQuote = false
+			}
+		}
 		if col < len(line) && line[col] == '"' {
 			m.editor.Update(tea.KeyMsg{Type: tea.KeyDelete})
 		}
 	}
 
-	m.editor.InsertString(insertion + suffix)
+	prefix := ""
+	if needsOpenQuote {
+		prefix = `"`
+	}
+	m.editor.InsertString(prefix + insertion + suffix)
 	m.completion.Close()
 }
 
