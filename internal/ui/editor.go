@@ -31,10 +31,11 @@ type validateMsg struct {
 type validateTickMsg struct{}
 
 type Selection struct {
-	StartLine, StartCol int
-	EndLine, EndCol     int
-	Active              bool
-	Dragging            bool
+	StartLine, StartCol   int
+	EndLine, EndCol       int
+	AnchorLine, AnchorCol int
+	Active                bool
+	Dragging              bool
 }
 
 type Editor struct {
@@ -394,6 +395,32 @@ func (e Editor) renderWithSelection(content string) string {
 	return strings.Join(result, "\n")
 }
 
+func (e Editor) renderPlainWithCursor(content string, cursorLine, cursorCol int) string {
+	lines := strings.Split(content, "\n")
+	if cursorLine < 0 || cursorLine >= len(lines) {
+		return content
+	}
+
+	line := lines[cursorLine]
+	runes := []rune(line)
+
+	if cursorCol > len(runes) {
+		cursorCol = len(runes)
+	}
+
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+
+	var newLine string
+	if cursorCol < len(runes) {
+		newLine = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
+	} else {
+		newLine = line + cursorStyle.Render(" ")
+	}
+
+	lines[cursorLine] = newLine
+	return strings.Join(lines, "\n")
+}
+
 func (e Editor) View() string {
 	content := e.textarea.Value()
 	lines := strings.Split(content, "\n")
@@ -404,20 +431,19 @@ func (e Editor) View() string {
 		gutterWidth = 4
 	}
 
-	highlighted := e.highlightContent()
-
-	if e.selection.Active {
-		highlighted = e.renderWithSelection(highlighted)
-	}
-
 	cursorLine := e.textarea.Line()
 	cursorCol := e.textarea.LineInfo().CharOffset
 
-	if e.textarea.Focused() && !e.selection.Active {
-		highlighted = e.renderWithCursor(highlighted, cursorLine, cursorCol)
+	var displayContent string
+	if e.selection.Active {
+		displayContent = e.renderWithSelection(content)
+	} else if e.textarea.Focused() {
+		displayContent = e.renderPlainWithCursor(content, cursorLine, cursorCol)
+	} else {
+		displayContent = e.highlightContent()
 	}
 
-	highlightedLines := strings.Split(highlighted, "\n")
+	displayLines := strings.Split(displayContent, "\n")
 
 	gutterStyle := lipgloss.NewStyle().
 		Foreground(ColorGray).
@@ -439,92 +465,13 @@ func (e Editor) View() string {
 		lineNum := gutterStyle.Render(fmt.Sprintf("%d", i+1))
 		separator := separatorStyle.Render(" \u2502 ")
 		lineContent := ""
-		if i < len(highlightedLines) {
-			lineContent = highlightedLines[i]
+		if i < len(displayLines) {
+			lineContent = displayLines[i]
 		}
 		resultLines = append(resultLines, lineNum+separator+lineContent)
 	}
 
 	return strings.Join(resultLines, "\n")
-}
-
-func (e Editor) renderWithCursor(content string, cursorLine, cursorCol int) string {
-	lines := strings.Split(content, "\n")
-	if cursorLine < 0 || cursorLine >= len(lines) {
-		return content
-	}
-
-	line := lines[cursorLine]
-	runes := []rune(stripAnsi(line))
-
-	if cursorCol > len(runes) {
-		cursorCol = len(runes)
-	}
-
-	cursorStyle := lipgloss.NewStyle().Reverse(true)
-
-	var newLine string
-	if cursorCol < len(runes) {
-		before := e.substringWithAnsi(line, 0, cursorCol)
-		cursorChar := string(runes[cursorCol])
-		after := e.substringWithAnsi(line, cursorCol+1, len(runes))
-		newLine = before + cursorStyle.Render(cursorChar) + after
-	} else {
-		newLine = line + cursorStyle.Render(" ")
-	}
-
-	lines[cursorLine] = newLine
-	return strings.Join(lines, "\n")
-}
-
-func stripAnsi(s string) string {
-	var result strings.Builder
-	inEscape := false
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteRune(r)
-	}
-	return result.String()
-}
-
-func (e Editor) substringWithAnsi(s string, start, end int) string {
-	var result strings.Builder
-	var ansiBuffer strings.Builder
-	inEscape := false
-	charIndex := 0
-
-	for _, r := range s {
-		if r == '\x1b' {
-			inEscape = true
-			ansiBuffer.WriteRune(r)
-			continue
-		}
-		if inEscape {
-			ansiBuffer.WriteRune(r)
-			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
-				inEscape = false
-				if charIndex >= start && charIndex < end {
-					result.WriteString(ansiBuffer.String())
-				}
-				ansiBuffer.Reset()
-			}
-			continue
-		}
-		if charIndex >= start && charIndex < end {
-			result.WriteRune(r)
-		}
-		charIndex++
-	}
-	return result.String()
 }
 
 func (e Editor) GetSelectedText() string {
@@ -590,9 +537,69 @@ func (e Editor) Focused() bool {
 }
 
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
+			return e.handleShiftArrow(keyMsg)
+		case "left", "right", "up", "down", "home", "end":
+			e.selection.Active = false
+		}
+	}
+
 	var cmd tea.Cmd
 	e.textarea, cmd = e.textarea.Update(msg)
 	return cmd
+}
+
+func (e *Editor) handleShiftArrow(msg tea.KeyMsg) tea.Cmd {
+	curLine := e.textarea.Line()
+	curCol := e.textarea.LineInfo().CharOffset
+
+	if !e.selection.Active {
+		e.selection.AnchorLine = curLine
+		e.selection.AnchorCol = curCol
+		e.selection.Active = true
+	}
+
+	var cmd tea.Cmd
+	switch msg.String() {
+	case "shift+left":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	case "shift+right":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyRight})
+	case "shift+up":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyUp})
+	case "shift+down":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyDown})
+	case "shift+home":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyHome})
+	case "shift+end":
+		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	}
+
+	newLine := e.textarea.Line()
+	newCol := e.textarea.LineInfo().CharOffset
+
+	e.updateSelectionFromAnchor(newLine, newCol)
+
+	return cmd
+}
+
+func (e *Editor) updateSelectionFromAnchor(curLine, curCol int) {
+	anchorLine := e.selection.AnchorLine
+	anchorCol := e.selection.AnchorCol
+
+	if curLine < anchorLine || (curLine == anchorLine && curCol < anchorCol) {
+		e.selection.StartLine = curLine
+		e.selection.StartCol = curCol
+		e.selection.EndLine = anchorLine
+		e.selection.EndCol = anchorCol
+	} else {
+		e.selection.StartLine = anchorLine
+		e.selection.StartCol = anchorCol
+		e.selection.EndLine = curLine
+		e.selection.EndCol = curCol
+	}
 }
 
 func (e Editor) Line() int {
@@ -609,4 +616,22 @@ func (e *Editor) InsertString(s string) {
 
 func (e *Editor) SetCursor(pos int) {
 	e.textarea.SetCursor(pos)
+}
+
+func (e *Editor) ClearSelection() {
+	e.selection.Active = false
+	e.selection.Dragging = false
+}
+
+func (e Editor) GetSelection() Selection {
+	return e.selection
+}
+
+func (e *Editor) SetSelection(startLine, startCol, endLine, endCol int) {
+	e.selection.StartLine = startLine
+	e.selection.StartCol = startCol
+	e.selection.EndLine = endLine
+	e.selection.EndCol = endCol
+	e.selection.Active = true
+	e.selection.Dragging = false
 }

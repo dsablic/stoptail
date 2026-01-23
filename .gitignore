@@ -3,6 +3,7 @@
 
 # Go
 stoptail
+editor-test
 bin/
 *.exe
 *.exe~

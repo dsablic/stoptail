@@ -152,9 +152,16 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` | Activate editor |
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+R` | Execute request |
+| `Ctrl+F` | Search in response |
+| `Enter` / `n` | Next search match |
+| `Shift+Enter` / `N` | Previous search match |
 | `Ctrl+Y` | Copy body or response to clipboard |
+| `Ctrl+C` | Copy selected text |
+| `Shift+Arrow` | Select text |
+| `Shift+Home/End` | Select to line start/end |
 | `Up/Down` | Navigate completions (when open) |
-| `Esc` | Dismiss completions / deactivate editor |
+| `Esc` | Dismiss completions / deactivate editor / close search |
+| Mouse drag | Select text in editor |
 
 ### Mappings Tab
 
@@ -162,6 +169,8 @@ stoptail stores data in `~/.stoptail/`:
 |-----|--------|
 | `/` | Filter indices |
 | `Ctrl+F` | Search fields |
+| `Enter` / `n` | Next search match |
+| `Shift+Enter` / `N` | Previous search match |
 | `Left/Right` | Switch between index list and mapping panes |
 | `Enter` | Load mappings for selected index |
 | `t` | Toggle tree/flat view |

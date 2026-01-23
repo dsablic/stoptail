@@ -37,7 +37,12 @@ var helpWorkbench = `## Workbench
 | Enter | Edit |
 | Tab | Autocomplete / next |
 | Ctrl+R | Execute |
-| Ctrl+Y | Copy |
+| Ctrl+F | Search response |
+| Enter/n | Next match |
+| Shift+Enter/N | Prev match |
+| Ctrl+Y | Copy body/response |
+| Ctrl+C | Copy selection |
+| Shift+Arrow | Select text |
 | Up/Down | Navigate |
 | Esc | Cancel |
 `
@@ -48,6 +53,8 @@ var helpMappings = `## Mappings
 |-----|--------|
 | / | Filter |
 | Ctrl+F | Search |
+| Enter/n | Next match |
+| Shift+Enter/N | Prev match |
 | left/right | Switch panes |
 | Enter | Load mappings |
 | t | Toggle tree view |

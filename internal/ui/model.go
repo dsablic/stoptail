@@ -81,6 +81,20 @@ func (m Model) overviewAcceptsGlobalKeys() bool {
 	return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
 }
 
+func (m Model) hasActiveInput() bool {
+	switch m.activeTab {
+	case TabOverview:
+		return m.overview.filterActive || m.overview.HasModal()
+	case TabWorkbench:
+		return m.workbench.HasActiveInput()
+	case TabMappings:
+		return m.mappings.filterActive || m.mappings.search.Active()
+	case TabTasks:
+		return m.tasks.confirming != ""
+	}
+	return false
+}
+
 func pulseTick() tea.Cmd {
 	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
 		return pulseTickMsg{}
@@ -218,107 +232,85 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workbench, cmd = m.workbench.Update(msg)
 		return m, cmd
 	case tea.KeyMsg:
-		// Global keys
-		switch msg.String() {
-		case "?":
-			if m.overviewAcceptsGlobalKeys() || m.activeTab != TabOverview {
+		// Global keys - skip when any input is active (typing in search, filter, editor, etc.)
+		if !m.hasActiveInput() {
+			switch msg.String() {
+			case "?":
 				m.showHelp = !m.showHelp
 				return m, nil
+			case "q":
+				return m, tea.Quit
+			case "r":
+				m.loading = true
+				switch m.activeTab {
+				case TabOverview, TabMappings:
+					return m, tea.Batch(m.spinner.Tick, m.connect())
+				case TabNodes:
+					return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
+				case TabTasks:
+					return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+				}
+			case "m":
+				m.workbench.Blur()
+				if m.cluster != nil {
+					m.mappings.SetIndices(m.cluster.Indices)
+				}
+				return m, m.switchTab(TabMappings)
+			case "tab":
+				if m.showHelp {
+					break
+				}
+				switch m.activeTab {
+				case TabOverview:
+					m.workbench.Blur()
+					return m, m.switchTab(TabWorkbench)
+				case TabWorkbench:
+					m.workbench.Blur()
+					if m.cluster != nil {
+						m.mappings.SetIndices(m.cluster.Indices)
+					}
+					return m, m.switchTab(TabMappings)
+				case TabMappings:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
+				case TabNodes:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
+				case TabTasks:
+					return m, m.switchTab(TabOverview)
+				}
+			case "shift+tab":
+				if m.showHelp {
+					break
+				}
+				switch m.activeTab {
+				case TabWorkbench:
+					m.workbench.Blur()
+					return m, m.switchTab(TabOverview)
+				case TabMappings:
+					return m, m.switchTab(TabWorkbench)
+				case TabOverview:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
+				case TabTasks:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
+				case TabNodes:
+					if m.cluster != nil {
+						m.mappings.SetIndices(m.cluster.Indices)
+					}
+					return m, m.switchTab(TabMappings)
+				}
 			}
+		}
+
+		// Keys that work even with active input
+		switch msg.String() {
 		case "ctrl+c":
+			if m.activeTab == TabWorkbench && m.workbench.focus == FocusBody && m.workbench.editor.selection.Active {
+				break
+			}
 			return m, tea.Quit
-		case "q":
-			if m.overviewAcceptsGlobalKeys() {
-				return m, tea.Quit
-			}
-			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
-				return m, tea.Quit
-			}
-			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				return m, tea.Quit
-			}
-			if m.activeTab == TabNodes {
-				return m, tea.Quit
-			}
-			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				return m, tea.Quit
-			}
-		case "tab":
-			if m.showHelp {
-				break
-			}
-			if m.overviewAcceptsGlobalKeys() {
-				m.workbench.Blur()
-				return m, m.switchTab(TabWorkbench)
-			}
-			if m.activeTab == TabWorkbench && !m.workbench.HasActiveInput() {
-				m.workbench.Blur()
-				if m.cluster != nil {
-					m.mappings.SetIndices(m.cluster.Indices)
-				}
-				return m, m.switchTab(TabMappings)
-			}
-			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				m.loading = true
-				return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
-			}
-			if m.activeTab == TabNodes {
-				m.loading = true
-				return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
-			}
-			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				return m, m.switchTab(TabOverview)
-			}
-		case "shift+tab":
-			if m.showHelp {
-				break
-			}
-			if m.activeTab == TabWorkbench {
-				m.workbench.Blur()
-				return m, m.switchTab(TabOverview)
-			}
-			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				return m, m.switchTab(TabWorkbench)
-			}
-			if m.overviewAcceptsGlobalKeys() {
-				m.loading = true
-				return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
-			}
-			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				m.loading = true
-				return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes())
-			}
-			if m.activeTab == TabNodes {
-				if m.cluster != nil {
-					m.mappings.SetIndices(m.cluster.Indices)
-				}
-				return m, m.switchTab(TabMappings)
-			}
-		case "m":
-			if m.overviewAcceptsGlobalKeys() || (m.activeTab != TabWorkbench || !m.workbench.HasActiveInput()) && m.activeTab != TabOverview {
-				m.workbench.Blur()
-				if m.cluster != nil {
-					m.mappings.SetIndices(m.cluster.Indices)
-				}
-				return m, m.switchTab(TabMappings)
-			}
-		case "r":
-			if m.overviewAcceptsGlobalKeys() {
-				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.connect())
-			}
-			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.connect())
-			}
-			if m.activeTab == TabNodes {
-				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchNodes())
-			}
-			if m.activeTab == TabTasks {
-				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
-			}
 		case "enter":
 			if m.overviewAcceptsGlobalKeys() {
 				if idx := m.overview.SelectedIndex(); idx != "" {

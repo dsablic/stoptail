@@ -9,6 +9,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type SearchAction int
+
+const (
+	SearchActionNone SearchAction = iota
+	SearchActionClose
+	SearchActionNext
+	SearchActionPrev
+)
+
 type SearchBar struct {
 	input      textinput.Model
 	matches    []int
@@ -45,8 +54,20 @@ func (s *SearchBar) Query() string {
 	return s.input.Value()
 }
 
+func (s *SearchBar) SetQuery(q string) {
+	s.input.SetValue(q)
+}
+
 func (s *SearchBar) Matches() []int {
 	return s.matches
+}
+
+func (s *SearchBar) MatchCount() int {
+	return len(s.matches)
+}
+
+func (s *SearchBar) CurrentIdx() int {
+	return s.currentIdx
 }
 
 func (s *SearchBar) CurrentMatch() int {
@@ -91,6 +112,65 @@ func (s *SearchBar) PrevMatch() int {
 	return s.matches[s.currentIdx]
 }
 
+func (s *SearchBar) HandleKey(msg tea.KeyMsg) (tea.Cmd, SearchAction) {
+	switch msg.String() {
+	case "esc":
+		s.Deactivate()
+		return nil, SearchActionClose
+	case "enter", "ctrl+n":
+		if len(s.matches) > 0 {
+			s.currentIdx = (s.currentIdx + 1) % len(s.matches)
+		}
+		return nil, SearchActionNext
+	case "shift+enter", "ctrl+p":
+		if len(s.matches) > 0 {
+			s.currentIdx--
+			if s.currentIdx < 0 {
+				s.currentIdx = len(s.matches) - 1
+			}
+		}
+		return nil, SearchActionPrev
+	default:
+		var cmd tea.Cmd
+		s.input, cmd = s.input.Update(msg)
+		return cmd, SearchActionNone
+	}
+}
+
+func (s *SearchBar) HandleClick(relX int) SearchAction {
+	searchInputWidth := lipgloss.Width(s.input.View())
+	statusWidth := 0
+	if len(s.matches) > 0 {
+		statusWidth = len(fmt.Sprintf(" %d/%d ", s.currentIdx+1, len(s.matches)))
+	} else if s.input.Value() != "" {
+		statusWidth = len(" No matches ")
+	}
+
+	inputEnd := 1 + searchInputWidth
+	statusEnd := inputEnd + statusWidth
+
+	if len(s.matches) > 0 {
+		prevEnd := statusEnd + 5
+		nextEnd := prevEnd + 5
+
+		if relX >= statusEnd && relX < prevEnd {
+			s.PrevMatch()
+			return SearchActionPrev
+		} else if relX >= prevEnd && relX < nextEnd {
+			s.NextMatch()
+			return SearchActionNext
+		} else if relX >= nextEnd {
+			s.Deactivate()
+			return SearchActionClose
+		}
+	} else if relX >= statusEnd {
+		s.Deactivate()
+		return SearchActionClose
+	}
+
+	return SearchActionNone
+}
+
 func (s *SearchBar) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	s.input, cmd = s.input.Update(msg)
@@ -108,12 +188,12 @@ func (s *SearchBar) View(width int) string {
 
 	navBtns := ""
 	if len(s.matches) > 0 {
-		navBtns = " [<] [>]"
+		navBtns = " [◀] [▶]"
 	}
 
 	return lipgloss.NewStyle().
 		Background(ActiveBg).
 		Padding(0, 1).
 		Width(width).
-		Render("/" + s.input.View() + status + navBtns + " [x]")
+		Render("/" + s.input.View() + status + navBtns + " [×]")
 }

@@ -40,30 +40,27 @@ var bracketPairs = map[string]string{
 }
 
 type WorkbenchModel struct {
-	client        *es.Client
-	methodIdx     int
-	path          textinput.Model
-	editor        Editor
-	response      viewport.Model
-	responseText  string
-	statusCode    int
-	duration      string
-	focus         WorkbenchFocus
-	width         int
-	height        int
-	executing     bool
-	err           error
-	history       *storage.History
-	historyIdx    int
-	spinner       spinner.Model
-	searchActive  bool
-	searchInput   textinput.Model
-	searchMatches []int
-	searchIdx     int
-	completion    CompletionState
-	fieldCache    map[string][]CompletionItem
-	lastIndex     string
-	copyMsg       string
+	client       *es.Client
+	methodIdx    int
+	path         textinput.Model
+	editor       Editor
+	response     viewport.Model
+	responseText string
+	statusCode   int
+	duration     string
+	focus        WorkbenchFocus
+	width        int
+	height       int
+	executing    bool
+	err          error
+	history      *storage.History
+	historyIdx   int
+	spinner      spinner.Model
+	search       SearchBar
+	completion   CompletionState
+	fieldCache   map[string][]CompletionItem
+	lastIndex    string
+	copyMsg      string
 }
 
 type executeResultMsg struct {
@@ -114,22 +111,17 @@ func NewWorkbench() WorkbenchModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
 
-	search := textinput.New()
-	search.Placeholder = "Search..."
-	search.CharLimit = 100
-	search.Width = 30
-
 	return WorkbenchModel{
-		methodIdx:   methodIdx,
-		path:        path,
-		editor:      editor,
-		response:    vp,
-		focus:       FocusNone,
-		history:     history,
-		historyIdx:  -1,
-		spinner:     s,
-		searchInput: search,
-		fieldCache:  make(map[string][]CompletionItem),
+		methodIdx:  methodIdx,
+		path:       path,
+		editor:     editor,
+		response:   vp,
+		focus:      FocusNone,
+		history:    history,
+		historyIdx: -1,
+		spinner:    s,
+		search:     NewSearchBar(),
+		fieldCache: make(map[string][]CompletionItem),
 	}
 }
 
@@ -139,7 +131,7 @@ func (m *WorkbenchModel) SetClient(client *es.Client) {
 }
 
 func (m WorkbenchModel) HasActiveInput() bool {
-	return m.focus == FocusPath || m.focus == FocusBody
+	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active()
 }
 
 func (m *WorkbenchModel) SetSize(width, height int) {
@@ -283,34 +275,20 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		m.copyMsg = ""
-		if m.searchActive {
-			switch msg.String() {
-			case "esc", "enter":
-				m.searchActive = false
-				m.searchInput.Blur()
-				return m, nil
-			case "ctrl+n", "n":
-				if len(m.searchMatches) > 0 {
-					m.searchIdx = (m.searchIdx + 1) % len(m.searchMatches)
+		if m.search.Active() {
+			cmd, action := m.search.HandleKey(msg)
+			switch action {
+			case SearchActionClose:
+				m.focus = FocusResponse
+			case SearchActionNext, SearchActionPrev:
+				if match := m.search.CurrentMatch(); match >= 0 {
 					m.response.GotoTop()
-					m.response.SetYOffset(m.searchMatches[m.searchIdx])
+					m.response.SetYOffset(match)
 				}
-				return m, nil
-			case "ctrl+p", "N":
-				if len(m.searchMatches) > 0 {
-					m.searchIdx--
-					if m.searchIdx < 0 {
-						m.searchIdx = len(m.searchMatches) - 1
-					}
-					m.response.GotoTop()
-					m.response.SetYOffset(m.searchMatches[m.searchIdx])
-				}
-				return m, nil
-			default:
-				m.searchInput, cmd = m.searchInput.Update(msg)
+			case SearchActionNone:
 				m.updateSearchMatches()
-				return m, cmd
 			}
+			return m, cmd
 		}
 
 		switch msg.String() {
@@ -322,11 +300,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "ctrl+f":
 			if m.focus == FocusResponse {
-				m.searchActive = true
-				m.searchInput.Focus()
-				m.searchInput.SetValue("")
-				m.searchMatches = nil
-				m.searchIdx = 0
+				m.search.Activate()
 				return m, textinput.Blink
 			}
 		case "ctrl+r":
@@ -360,6 +334,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 						m.copyMsg = "Copy failed"
 					}
 					m.editor.selection.Active = false
+				}
+				return m, nil
+			}
+		case "n", "ctrl+n":
+			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
+				if match := m.search.NextMatch(); match >= 0 {
+					m.response.GotoTop()
+					m.response.SetYOffset(match)
+				}
+				return m, nil
+			}
+		case "N", "ctrl+p":
+			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
+				if match := m.search.PrevMatch(); match >= 0 {
+					m.response.GotoTop()
+					m.response.SetYOffset(match)
 				}
 				return m, nil
 			}
@@ -532,34 +522,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.editor.Blur()
 				m.focus = FocusResponse
 
-				if m.searchActive && msg.Y >= m.height-4 {
-					relX := msg.X - paneInnerWidth - 3
-					searchInputEnd := 35
-					if relX > searchInputEnd {
-						text := m.searchInput.View()
-						btnStart := len(text) + 10
-						if len(m.searchMatches) > 0 {
-							prevEnd := btnStart + 4
-							nextEnd := prevEnd + 5
-							closeStart := nextEnd + 1
-							if relX >= btnStart && relX < prevEnd {
-								m.searchIdx--
-								if m.searchIdx < 0 {
-									m.searchIdx = len(m.searchMatches) - 1
-								}
-								m.response.GotoTop()
-								m.response.SetYOffset(m.searchMatches[m.searchIdx])
-							} else if relX >= prevEnd && relX < nextEnd {
-								m.searchIdx = (m.searchIdx + 1) % len(m.searchMatches)
-								m.response.GotoTop()
-								m.response.SetYOffset(m.searchMatches[m.searchIdx])
-							} else if relX >= closeStart {
-								m.searchActive = false
-								m.searchInput.Blur()
-							}
-						} else if relX >= btnStart {
-							m.searchActive = false
-							m.searchInput.Blur()
+				if m.search.Active() && msg.Y >= m.height-4 {
+					relX := msg.X - paneInnerWidth - 3 - 1
+					action := m.search.HandleClick(relX)
+					if action == SearchActionNext || action == SearchActionPrev {
+						if match := m.search.CurrentMatch(); match >= 0 {
+							m.response.GotoTop()
+							m.response.SetYOffset(match)
 						}
 					}
 				}
@@ -677,24 +646,11 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 }
 
 func (m *WorkbenchModel) updateSearchMatches() {
-	query := strings.ToLower(m.searchInput.Value())
-	m.searchMatches = nil
-	m.searchIdx = 0
-
-	if query == "" {
-		return
-	}
-
 	lines := strings.Split(m.responseText, "\n")
-	for i, line := range lines {
-		if strings.Contains(strings.ToLower(line), query) {
-			m.searchMatches = append(m.searchMatches, i)
-		}
-	}
-
-	if len(m.searchMatches) > 0 {
+	m.search.FindMatches(lines)
+	if match := m.search.CurrentMatch(); match >= 0 {
 		m.response.GotoTop()
-		m.response.SetYOffset(m.searchMatches[0])
+		m.response.SetYOffset(match)
 	}
 }
 
@@ -843,22 +799,8 @@ func (m WorkbenchModel) View() string {
 	}
 
 	responseContent := m.response.View()
-	if m.searchActive {
-		searchStatus := ""
-		if len(m.searchMatches) > 0 {
-			searchStatus = fmt.Sprintf(" %d/%d ", m.searchIdx+1, len(m.searchMatches))
-		} else if m.searchInput.Value() != "" {
-			searchStatus = " No matches "
-		}
-		navBtns := ""
-		if len(m.searchMatches) > 0 {
-			navBtns = " [◀] [▶]"
-		}
-		searchBar := lipgloss.NewStyle().
-			Background(ActiveBg).
-			Padding(0, 1).
-			Width(paneInnerWidth - 4).
-			Render("/" + m.searchInput.View() + searchStatus + navBtns + " [×]")
+	if m.search.Active() {
+		searchBar := m.search.View(paneInnerWidth - 4)
 		responseContent = lipgloss.JoinVertical(lipgloss.Left, responseContent, searchBar)
 	}
 

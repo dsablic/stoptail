@@ -154,6 +154,46 @@ func TestEditorView(t *testing.T) {
 	}
 }
 
+func TestRenderPlainWithCursor(t *testing.T) {
+	e := NewEditor()
+	content := "hello"
+
+	result := e.renderPlainWithCursor(content, 0, 2)
+	if !strings.Contains(result, "\x1b[7m") {
+		t.Error("expected reverse video ANSI code for cursor")
+	}
+	if !strings.Contains(result, "l") {
+		t.Error("expected cursor character 'l' in output")
+	}
+}
+
+func TestEditorViewStateTransitions(t *testing.T) {
+	e := NewEditor()
+	e.SetContent(`{"query": {}}`)
+	e.SetSize(60, 10)
+
+	unfocusedView := e.View()
+	if !strings.Contains(unfocusedView, "\x1b[") {
+		t.Error("unfocused view should have syntax highlighting")
+	}
+
+	e.Focus()
+	focusedView := e.View()
+	if !strings.Contains(focusedView, "\x1b[7m") {
+		t.Error("focused view should show cursor (reverse video)")
+	}
+
+	e.selection = Selection{
+		StartLine: 0, StartCol: 0,
+		EndLine: 0, EndCol: 5,
+		Active: true,
+	}
+	selectionView := e.View()
+	if !strings.Contains(selectionView, "\x1b[7m") {
+		t.Error("selection view should show selection (reverse video)")
+	}
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return []string{""}

@@ -103,6 +103,7 @@ When making changes:
 4. **Changed file paths** - Update both README.md and CLAUDE.md (e.g., config paths)
 5. **New UI patterns** - Add to "Lipgloss Layout Patterns" or "Mouse Click Detection" sections in CLAUDE.md
 6. **New features** - Add to README.md Features section
+7. **Code quality improvements** - When consolidating logic, adding helper functions, or improving code structure, update CLAUDE.md patterns (e.g., `hasActiveInput()` pattern for keyboard handling)
 
 ### ES API Error Handling
 
@@ -157,20 +158,73 @@ When adding new functionality, check if a utility already exists before creating
 - Delegate to sub-models for tab-specific logic
 - Handle tea.WindowSizeMsg to propagate dimensions
 
-**Modal keyboard handling** - When a modal/form is open, global keybindings (q, r, tab, ?, etc.) must be disabled so users can type in form fields. Create a helper method combining the checks:
+**Create reusable components** - Always build reusable UI components that can be composed to create custom views. When a feature appears in multiple places (e.g., search, filtering, navigation), create a shared component:
 
 ```go
-func (m Model) overviewAcceptsGlobalKeys() bool {
-    return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
+type SearchBar struct {
+    input      textinput.Model
+    matches    []int
+    currentIdx int
+    active     bool
 }
 
-case "r":
-    if m.overviewAcceptsGlobalKeys() {
-        // handle refresh
+func (s *SearchBar) HandleKey(msg tea.KeyMsg) (tea.Cmd, SearchAction) {
+    switch msg.String() {
+    case "esc":
+        s.Deactivate()
+        return nil, SearchActionClose
+    case "enter", "ctrl+n":
+        return nil, SearchActionNext
+    // ...
     }
+}
 ```
 
-Sub-models with modals should expose a `HasModal() bool` method. The modal itself handles Esc for cancellation. Apply this pattern to any tab that can have modals or input states that capture keys.
+Components should:
+- Encapsulate their own state and logic
+- Return action enums so parent models can respond appropriately
+- Provide consistent keyboard/mouse handling
+- Be testable in isolation
+
+See `internal/ui/search.go` for the SearchBar component used by both workbench and mappings views.
+
+**Global keyboard handling** - When any input is active (search, filter, editor, modal), global keybindings (q, r, tab, ?, m, etc.) must be disabled so users can type. Use the consolidated `hasActiveInput()` helper:
+
+```go
+func (m Model) hasActiveInput() bool {
+    switch m.activeTab {
+    case TabOverview:
+        return m.overview.filterActive || m.overview.HasModal()
+    case TabWorkbench:
+        return m.workbench.HasActiveInput()
+    case TabMappings:
+        return m.mappings.filterActive || m.mappings.search.Active()
+    case TabTasks:
+        return m.tasks.confirming != ""
+    }
+    return false
+}
+
+// In Update(), wrap all global shortcuts:
+if !m.hasActiveInput() {
+    switch msg.String() {
+    case "q":
+        return m, tea.Quit
+    case "r":
+        // refresh
+    case "tab", "shift+tab":
+        // tab navigation
+    }
+}
+
+// Keys that work even with active input go in separate switch:
+switch msg.String() {
+case "ctrl+c":
+    // special handling
+}
+```
+
+Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding new global shortcuts, add them inside the `if !m.hasActiveInput()` block.
 
 **Creating modals with huh** - When creating modals using `huh.NewForm()`, always use pointer receivers to avoid value copy issues:
 

@@ -241,3 +241,79 @@ func TestAutoCompleteTriggersOnQuote(t *testing.T) {
 		t.Error("completion should have items")
 	}
 }
+
+func TestCtrlRExecutionState(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+
+	if w.executing {
+		t.Fatal("executing should be false initially")
+	}
+
+	ctrlR := tea.KeyMsg{Type: tea.KeyCtrlR}
+	w1, cmd1 := w.Update(ctrlR)
+
+	if w1.client != nil && !w1.executing {
+		t.Log("ctrl+r without client does nothing (expected)")
+	}
+
+	if cmd1 != nil && w.client == nil {
+		t.Error("should not return command without client")
+	}
+
+	if w1.search.Active() {
+		t.Error("search should not be active by ctrl+r")
+	}
+}
+
+func TestSearchNavigationWhenActive(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+	w.responseText = "line1\nmatch\nline3\nmatch\nline5"
+	w.response.SetContent(w.responseText)
+	w.focus = FocusResponse
+
+	ctrlF := tea.KeyMsg{Type: tea.KeyCtrlF}
+	w, _ = w.Update(ctrlF)
+
+	if !w.search.Active() {
+		t.Fatal("search should be active after Ctrl+F")
+	}
+
+	w.search.SetQuery("match")
+	w.updateSearchMatches()
+
+	if w.search.MatchCount() != 2 {
+		t.Errorf("expected 2 matches, got %d", w.search.MatchCount())
+	}
+
+	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	w, _ = w.Update(enterKey)
+
+	if w.search.CurrentIdx() != 1 {
+		t.Errorf("expected searchIdx 1 after Enter, got %d", w.search.CurrentIdx())
+	}
+	if !w.search.Active() {
+		t.Error("search should remain active after Enter (just navigates)")
+	}
+
+	ctrlP := tea.KeyMsg{Type: tea.KeyCtrlP}
+	w, _ = w.Update(ctrlP)
+
+	if w.search.CurrentIdx() != 0 {
+		t.Errorf("expected searchIdx 0 after Ctrl+P, got %d", w.search.CurrentIdx())
+	}
+
+	escKey := tea.KeyMsg{Type: tea.KeyEsc}
+	w, _ = w.Update(escKey)
+
+	if w.search.Active() {
+		t.Error("search should be inactive after Esc")
+	}
+
+	nKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	w, _ = w.Update(nKey)
+	if w.search.CurrentIdx() != 1 {
+		t.Errorf("'n' should navigate when search is closed (but matches exist), searchIdx=%d", w.search.CurrentIdx())
+	}
+}

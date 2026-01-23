@@ -62,25 +62,18 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.search.Active() {
-			switch msg.String() {
-			case "esc":
-				m.search.Deactivate()
-				return m, nil
-			case "enter":
-				if match := m.search.NextMatch(); match >= 0 {
+			cmd, action := m.search.HandleKey(msg)
+			switch action {
+			case SearchActionClose:
+				// search deactivated
+			case SearchActionNext, SearchActionPrev:
+				if match := m.search.CurrentMatch(); match >= 0 {
 					m.scrollY = match
 				}
-				return m, nil
-			case "shift+enter":
-				if match := m.search.PrevMatch(); match >= 0 {
-					m.scrollY = match
-				}
-				return m, nil
-			default:
-				cmd := m.search.Update(msg)
+			case SearchActionNone:
 				(&m).updateNodeSearch()
-				return m, cmd
 			}
+			return m, cmd
 		}
 		switch msg.String() {
 		case "ctrl+f":
