@@ -396,6 +396,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			if pair, ok := bracketPairs[msg.String()]; ok {
 				m.editor.InsertString(msg.String() + pair)
 				m.editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				if msg.String() == "\"" && m.shouldAutoComplete() {
+					m.triggerCompletion()
+				}
 				return m, nil
 			}
 		}
@@ -426,10 +429,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					} else {
 						m.completion.Close()
 					}
-				}
-			} else if key == "\"" {
-				if m.shouldAutoComplete() {
-					m.triggerCompletion()
 				}
 			}
 		case FocusResponse:

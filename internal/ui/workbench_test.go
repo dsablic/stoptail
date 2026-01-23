@@ -3,6 +3,8 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestOffsetToLineCol(t *testing.T) {
@@ -154,5 +156,88 @@ func TestAutoCompleteAfterQuote(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected 'track_total_hits' in keywords")
+	}
+}
+
+func TestTriggerCompletionSetsState(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+	
+	// Set content with cursor positioned after opening brace and quote
+	w.editor.SetContent(`{"`)
+	
+	// Manually trigger completion (simulating what happens after typing ")
+	w.triggerCompletion()
+	
+	if !w.completion.Active {
+		t.Error("completion should be active after triggerCompletion")
+	}
+	
+	if len(w.completion.Items) == 0 {
+		t.Error("completion should have items")
+	}
+	
+	if len(w.completion.Filtered) == 0 {
+		t.Error("completion should have filtered items")
+	}
+	
+	// Verify dropdown renders
+	dropdown := w.renderCompletionDropdown()
+	if dropdown == "" {
+		t.Error("dropdown should not be empty")
+	}
+	
+	// Verify View includes completion
+	view := w.View()
+	if !strings.Contains(view, "query") {
+		t.Error("view should contain 'query' completion item")
+	}
+}
+
+func TestShouldAutoCompleteWithContent(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+	
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"after opening brace", `{"`, true},
+		{"after brace with newline", "{\n\"", true},
+		{"after comma", `{"a": 1, "`, true},
+		{"inside value", `{"a": "`, false},  // after : means value position
+		{"empty", `"`, false},  // no brace before
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w.editor.SetContent(tt.content)
+			// shouldAutoComplete checks col-1, so we need cursor at end
+			got := w.shouldAutoComplete()
+			if got != tt.want {
+				t.Errorf("shouldAutoComplete() = %v, want %v for content %q", got, tt.want, tt.content)
+			}
+		})
+	}
+}
+
+func TestAutoCompleteTriggersOnQuote(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+	w.focus = FocusBody
+	w.editor.Focus()
+
+	w.editor.SetContent("{}")
+	w.editor.SetCursor(1)
+
+	quoteMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'"'}}
+	newModel, _ := w.Update(quoteMsg)
+
+	if !newModel.completion.Active {
+		t.Error("completion should be active after typing quote")
+	}
+	if len(newModel.completion.Items) == 0 {
+		t.Error("completion should have items")
 	}
 }
