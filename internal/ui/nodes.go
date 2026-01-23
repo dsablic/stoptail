@@ -58,6 +58,11 @@ func (m *NodesModel) SetView(view string) {
 	}
 }
 
+func (m *NodesModel) selectView(view NodesView) {
+	m.activeView = view
+	m.scrollY = 0
+}
+
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -80,14 +85,11 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.search.Activate()
 			return m, nil
 		case "1":
-			m.activeView = ViewMemory
-			m.scrollY = 0
+			m.selectView(ViewMemory)
 		case "2":
-			m.activeView = ViewDisk
-			m.scrollY = 0
+			m.selectView(ViewDisk)
 		case "3":
-			m.activeView = ViewFielddata
-			m.scrollY = 0
+			m.selectView(ViewFielddata)
 		case "up", "k":
 			if m.scrollY > 0 {
 				m.scrollY--
@@ -122,8 +124,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				for _, tab := range tabs {
 					tabWidth := lipgloss.Width(InactiveTabStyle.Render(tab.label))
 					if msg.X >= pos && msg.X < pos+tabWidth {
-						m.activeView = tab.view
-						m.scrollY = 0
+						m.selectView(tab.view)
 						break
 					}
 					pos += tabWidth

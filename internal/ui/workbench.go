@@ -309,10 +309,8 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, textinput.Blink
 			}
 		case "ctrl+r":
-			if m.client != nil && !m.executing {
-				m.prettyPrintBody()
-				m.executing = true
-				return m, tea.Batch(m.spinner.Tick, m.execute())
+			if cmd := m.startExecution(); cmd != nil {
+				return m, cmd
 			}
 		case "ctrl+y":
 			var text string
@@ -498,10 +496,8 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					m.path.Focus()
 					m.focus = FocusPath
 				} else if msg.X < execEnd {
-					if m.client != nil && !m.executing {
-						m.prettyPrintBody()
-						m.executing = true
-						return m, tea.Batch(m.spinner.Tick, m.execute())
+					if cmd := m.startExecution(); cmd != nil {
+						return m, cmd
 					}
 				} else if msg.X < fmtEnd {
 					m.prettyPrintBody()
@@ -585,6 +581,15 @@ func (m *WorkbenchModel) prettyPrintBody() {
 	if err := json.Indent(&pretty, []byte(val), "", "  "); err == nil {
 		m.editor.SetContent(pretty.String())
 	}
+}
+
+func (m *WorkbenchModel) startExecution() tea.Cmd {
+	if m.client == nil || m.executing {
+		return nil
+	}
+	m.prettyPrintBody()
+	m.executing = true
+	return tea.Batch(m.spinner.Tick, m.execute())
 }
 
 func (m *WorkbenchModel) addToHistory() {
