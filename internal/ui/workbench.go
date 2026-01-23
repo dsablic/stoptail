@@ -241,7 +241,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.err = nil
 			m.statusCode = msg.result.StatusCode
 			m.duration = msg.result.Duration.String()
-			m.responseText = highlightJSON(msg.result.Body)
+			var pretty bytes.Buffer
+			if err := json.Indent(&pretty, []byte(msg.result.Body), "", "  "); err == nil {
+				m.responseText = highlightJSON(pretty.String())
+			} else {
+				m.responseText = highlightJSON(msg.result.Body)
+			}
 			if msg.result.StatusCode < 400 {
 				m.addToHistory()
 			}
@@ -305,6 +310,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "ctrl+r":
 			if m.client != nil && !m.executing {
+				m.prettyPrintBody()
 				m.executing = true
 				return m, tea.Batch(m.spinner.Tick, m.execute())
 			}
@@ -493,6 +499,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					m.focus = FocusPath
 				} else if msg.X < execEnd {
 					if m.client != nil && !m.executing {
+						m.prettyPrintBody()
 						m.executing = true
 						return m, tea.Batch(m.spinner.Tick, m.execute())
 					}
