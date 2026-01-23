@@ -36,7 +36,6 @@ type Model struct {
 	connected    bool
 	loading      bool
 	err          error
-	quitting     bool
 	showHelp     bool
 	tabPulse     int
 }
@@ -227,28 +226,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "ctrl+c":
-			m.quitting = true
-			return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+			return m, tea.Quit
 		case "q":
 			if m.overviewAcceptsGlobalKeys() {
-				m.quitting = true
-				return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+				return m, tea.Quit
 			}
 			if m.activeTab == TabWorkbench && m.workbench.focus != FocusPath && m.workbench.focus != FocusBody {
-				m.quitting = true
-				return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+				return m, tea.Quit
 			}
 			if m.activeTab == TabMappings && !m.mappings.filterActive {
-				m.quitting = true
-				return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+				return m, tea.Quit
 			}
 			if m.activeTab == TabNodes {
-				m.quitting = true
-				return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+				return m, tea.Quit
 			}
 			if m.activeTab == TabTasks && m.tasks.confirming == "" {
-				m.quitting = true
-				return m, tea.Sequence(tea.ClearScreen, tea.Quit)
+				return m, tea.Quit
 			}
 		case "tab":
 			if m.showHelp {
@@ -413,10 +406,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	if m.quitting {
-		return ""
-	}
-
 	if m.showHelp {
 		return renderHelp(m.width, m.height, m.activeTab)
 	}
