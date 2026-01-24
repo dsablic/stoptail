@@ -169,6 +169,16 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 			if cmd != nil {
 				return m, cmd
 			}
+		case "pgup":
+			cmd := m.handlePageUp()
+			if cmd != nil {
+				return m, cmd
+			}
+		case "pgdown":
+			cmd := m.handlePageDown()
+			if cmd != nil {
+				return m, cmd
+			}
 		case "ctrl+y":
 			if m.activePane == BrowserPaneDetail && len(m.documents) > 0 {
 				m.clipboard.Copy(m.selectedDocSource())
@@ -289,6 +299,67 @@ func (m *BrowserModel) scrollDocsDown(amount int) tea.Cmd {
 
 	if m.shouldLoadMore() {
 		return m.fetchDocuments(true)
+	}
+	return nil
+}
+
+func (m *BrowserModel) handlePageUp() tea.Cmd {
+	switch m.activePane {
+	case BrowserPaneIndices:
+		pageSize := m.maxVisibleIndices()
+		m.selectedIndex -= pageSize
+		if m.selectedIndex < 0 {
+			m.selectedIndex = 0
+		}
+		if m.selectedIndex < m.indexScroll {
+			m.indexScroll = m.selectedIndex
+		}
+	case BrowserPaneDocs:
+		pageSize := m.maxVisibleDocs()
+		m.selectedDoc -= pageSize
+		if m.selectedDoc < 0 {
+			m.selectedDoc = 0
+		}
+		if m.selectedDoc < m.docScroll {
+			m.docScroll = m.selectedDoc
+		}
+		m.updateDetailPane()
+	case BrowserPaneDetail:
+		m.detail.ScrollUp(m.detail.Height)
+	}
+	return nil
+}
+
+func (m *BrowserModel) handlePageDown() tea.Cmd {
+	switch m.activePane {
+	case BrowserPaneIndices:
+		filtered := m.filteredIndices()
+		pageSize := m.maxVisibleIndices()
+		m.selectedIndex += pageSize
+		if m.selectedIndex >= len(filtered) {
+			m.selectedIndex = len(filtered) - 1
+		}
+		maxVisible := m.maxVisibleIndices()
+		if m.selectedIndex >= m.indexScroll+maxVisible {
+			m.indexScroll = m.selectedIndex - maxVisible + 1
+		}
+	case BrowserPaneDocs:
+		pageSize := m.maxVisibleDocs()
+		m.selectedDoc += pageSize
+		if m.selectedDoc >= len(m.documents) {
+			m.selectedDoc = len(m.documents) - 1
+		}
+		maxVisible := m.maxVisibleDocs()
+		if m.selectedDoc >= m.docScroll+maxVisible {
+			m.docScroll = m.selectedDoc - maxVisible + 1
+		}
+		m.updateDetailPane()
+
+		if m.shouldLoadMore() {
+			return m.fetchDocuments(true)
+		}
+	case BrowserPaneDetail:
+		m.detail.ScrollDown(m.detail.Height)
 	}
 	return nil
 }

@@ -111,6 +111,24 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			if m.scrollY < m.getMaxScroll() {
 				m.scrollY++
 			}
+		case "pgup":
+			pageSize := m.height - 8
+			if pageSize < 1 {
+				pageSize = 10
+			}
+			m.scrollY -= pageSize
+			if m.scrollY < 0 {
+				m.scrollY = 0
+			}
+		case "pgdown":
+			pageSize := m.height - 8
+			if pageSize < 1 {
+				pageSize = 10
+			}
+			m.scrollY += pageSize
+			if m.scrollY > m.getMaxScroll() {
+				m.scrollY = m.getMaxScroll()
+			}
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {

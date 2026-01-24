@@ -166,6 +166,49 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 					m.mappingScroll++
 				}
 			}
+		case "pgup":
+			if m.activePane == PaneIndices {
+				pageSize := m.maxVisibleIndices()
+				m.selectedIndex -= pageSize
+				if m.selectedIndex < 0 {
+					m.selectedIndex = 0
+				}
+				if m.selectedIndex < m.scrollY {
+					m.scrollY = m.selectedIndex
+				}
+			} else {
+				pageSize := m.height - 6
+				if pageSize < 1 {
+					pageSize = 10
+				}
+				m.mappingScroll -= pageSize
+				if m.mappingScroll < 0 {
+					m.mappingScroll = 0
+				}
+			}
+		case "pgdown":
+			if m.activePane == PaneIndices {
+				filtered := m.filteredIndices()
+				pageSize := m.maxVisibleIndices()
+				m.selectedIndex += pageSize
+				if m.selectedIndex >= len(filtered) {
+					m.selectedIndex = len(filtered) - 1
+				}
+				maxVisible := m.maxVisibleIndices()
+				if m.selectedIndex >= m.scrollY+maxVisible {
+					m.scrollY = m.selectedIndex - maxVisible + 1
+				}
+			} else {
+				pageSize := m.height - 6
+				if pageSize < 1 {
+					pageSize = 10
+				}
+				maxScroll := m.maxMappingScroll()
+				m.mappingScroll += pageSize
+				if m.mappingScroll > maxScroll {
+					m.mappingScroll = maxScroll
+				}
+			}
 		}
 	case tea.MouseMsg:
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {

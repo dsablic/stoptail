@@ -154,6 +154,19 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			if m.scrollY < maxScrollY {
 				m.scrollY++
 			}
+		case "pgup":
+			pageSize := m.maxVisibleNodes()
+			m.scrollY -= pageSize
+			if m.scrollY < 0 {
+				m.scrollY = 0
+			}
+		case "pgdown":
+			pageSize := m.maxVisibleNodes()
+			maxScrollY := m.maxScrollY()
+			m.scrollY += pageSize
+			if m.scrollY > maxScrollY {
+				m.scrollY = maxScrollY
+			}
 		case "left", "h":
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
@@ -459,7 +472,7 @@ func (m OverviewModel) maxScrollY() int {
 
 func (m OverviewModel) maxVisibleNodes() int {
 	maxLinesPerNode := 4
-	rows := (m.height - 8) / maxLinesPerNode
+	rows := (m.height - 9) / maxLinesPerNode
 	if rows < 1 {
 		rows = 1
 	}
@@ -605,11 +618,27 @@ func (m OverviewModel) renderGrid() string {
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
 		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			statsStyle := lipgloss.NewStyle().
+			sizeStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
 				Foreground(ColorGray)
-			stats := idx.StoreSize + " · " + idx.DocsCount
-			b.WriteString(statsStyle.Render(Truncate(stats, indexColWidth-2)))
+			priSize := idx.PriStoreSize
+			if priSize == "" {
+				priSize = idx.StoreSize
+			}
+			sizeText := priSize + "/" + idx.StoreSize
+			b.WriteString(sizeStyle.Render(Truncate(sizeText, indexColWidth-2)))
+		}
+	}
+	b.WriteString("\n")
+
+	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+	for i, idx := range indices {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
+			docsStyle := lipgloss.NewStyle().
+				Width(indexColWidth).
+				Foreground(ColorGray)
+			docsText := FormatNumber(idx.DocsCount) + " docs"
+			b.WriteString(docsStyle.Render(Truncate(docsText, indexColWidth-2)))
 		}
 	}
 	b.WriteString("\n")

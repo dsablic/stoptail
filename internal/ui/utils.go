@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -72,4 +73,32 @@ func RenderBar(percent float64, width int) string {
 	b.WriteString("]")
 
 	return b.String()
+}
+
+func FormatNumber(s string) string {
+	if s == "" || s == "-" {
+		return s
+	}
+
+	num, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return s
+	}
+
+	if num < 1000 {
+		return s
+	}
+
+	str := strconv.FormatInt(num, 10)
+	var result strings.Builder
+	n := len(str)
+
+	for i, digit := range str {
+		if i > 0 && (n-i)%3 == 0 {
+			result.WriteRune(',')
+		}
+		result.WriteRune(digit)
+	}
+
+	return result.String()
 }

@@ -100,6 +100,25 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 					m.scrollY = m.selectedRow - maxVisible + 1
 				}
 			}
+		case "pgup":
+			pageSize := m.maxVisibleRows()
+			m.selectedRow -= pageSize
+			if m.selectedRow < 0 {
+				m.selectedRow = 0
+			}
+			if m.selectedRow < m.scrollY {
+				m.scrollY = m.selectedRow
+			}
+		case "pgdown":
+			pageSize := m.maxVisibleRows()
+			m.selectedRow += pageSize
+			if m.selectedRow >= len(m.tasks) {
+				m.selectedRow = len(m.tasks) - 1
+			}
+			maxVisible := m.maxVisibleRows()
+			if m.selectedRow >= m.scrollY+maxVisible {
+				m.scrollY = m.selectedRow - maxVisible + 1
+			}
 		case "c":
 			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
 				m.confirming = m.tasks[m.selectedRow].ID
