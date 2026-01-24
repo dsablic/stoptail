@@ -20,12 +20,16 @@ Enter
 Sleep 2s
 Show
 
-# Overview tab - scroll through indices
-Sleep 500ms
+# Overview tab - show primary/total sizes and document counts
+Sleep 1s
+
+# Scroll through indices
 Type "l"
 Sleep 400ms
 Type "l"
 Sleep 400ms
+Type "l"
+Sleep 800ms
 
 # Filter indices
 Type "/"
