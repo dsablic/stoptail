@@ -357,8 +357,8 @@ func (m NodesModel) renderFielddataTable() string {
 		totalPercentage = float64(totalFielddata) / float64(totalHeap) * 100
 	}
 
-	colWidths := []int{25, 25, 12, 8}
-	headers := []string{"index", "field", "size", "heap%"}
+	colWidths := []int{25, 25, 12, 8, 12}
+	headers := []string{"index", "field", "size", "heap%", ""}
 
 	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
 
@@ -382,6 +382,7 @@ func (m NodesModel) renderFielddataTable() string {
 			m.leftAlign(field, colWidths[1]),
 			m.rightAlign(formatBytes(fd.Size), colWidths[2]),
 			percentStyle.Render(m.rightAlign(percentStr, colWidths[3])),
+			RenderBar(heapPercent, 10),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -402,6 +403,7 @@ func (m NodesModel) renderFielddataTable() string {
 		m.leftAlign("", colWidths[1]),
 		m.rightAlign(formatBytes(totalFielddata), colWidths[2]),
 		totalPercentStyle.Render(m.rightAlign(totalPercentStr, colWidths[3])),
+		RenderBar(totalPercentage, 10),
 	}
 	b.WriteString(strings.Join(totalRow, " "))
 	b.WriteString("\n")
