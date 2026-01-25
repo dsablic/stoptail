@@ -285,21 +285,29 @@ func (m NodesModel) renderDiskTable() string {
 	return b.String()
 }
 
-type fielddataByIndex struct {
+type fielddataByIndexField struct {
 	Index string
+	Field string
 	Size  int64
 }
 
-func (m NodesModel) aggregateFielddataByIndex() []fielddataByIndex {
-	indexSizes := make(map[string]int64)
-	for _, fd := range m.state.Fielddata {
-		indexSizes[fd.Index] += fd.Size
+func (m NodesModel) aggregateFielddataByIndexField() []fielddataByIndexField {
+	type key struct {
+		index string
+		field string
 	}
 
-	var result []fielddataByIndex
-	for index, size := range indexSizes {
-		result = append(result, fielddataByIndex{
-			Index: index,
+	aggregated := make(map[key]int64)
+	for _, fd := range m.state.Fielddata {
+		k := key{index: fd.Index, field: fd.Field}
+		aggregated[k] += fd.Size
+	}
+
+	var result []fielddataByIndexField
+	for k, size := range aggregated {
+		result = append(result, fielddataByIndexField{
+			Index: k.index,
+			Field: k.field,
 			Size:  size,
 		})
 	}
@@ -311,11 +319,8 @@ func (m NodesModel) aggregateFielddataByIndex() []fielddataByIndex {
 	return result
 }
 
-func (m NodesModel) calculateFielddataStats() (totalFielddata int64, totalHeap int64, percentage float64) {
-	for _, fd := range m.state.Fielddata {
-		totalFielddata += fd.Size
-	}
-
+func (m NodesModel) getTotalHeap() int64 {
+	var totalHeap int64
 	for _, node := range m.state.Nodes {
 		heapMax := node.HeapMax
 		if heapMax == "" {
@@ -326,12 +331,7 @@ func (m NodesModel) calculateFielddataStats() (totalFielddata int64, totalHeap i
 			totalHeap += heapBytes
 		}
 	}
-
-	if totalHeap > 0 {
-		percentage = float64(totalFielddata) / float64(totalHeap) * 100
-	}
-
-	return totalFielddata, totalHeap, percentage
+	return totalHeap
 }
 
 func (m NodesModel) renderFielddataTable() string {
@@ -339,40 +339,72 @@ func (m NodesModel) renderFielddataTable() string {
 		return "No fielddata found"
 	}
 
-	aggregated := m.aggregateFielddataByIndex()
+	aggregated := m.aggregateFielddataByIndexField()
 	if len(aggregated) == 0 {
 		return "No fielddata found"
 	}
 
 	var b strings.Builder
 
-	totalFielddata, totalHeap, percentage := m.calculateFielddataStats()
-	summaryStyle := lipgloss.NewStyle().Foreground(ColorGray)
-	percentStyle := m.percentStyle(fmt.Sprintf("%.1f", percentage))
+	totalHeap := m.getTotalHeap()
+	var totalFielddata int64
+	for _, fd := range aggregated {
+		totalFielddata += fd.Size
+	}
 
-	summary := fmt.Sprintf("Total: %s / %s heap (%s%.1f%%%s)",
-		formatBytes(totalFielddata),
-		formatBytes(totalHeap),
-		percentStyle.Render(""),
-		percentage,
-		summaryStyle.Render(""))
-	b.WriteString(summary)
-	b.WriteString("\n\n")
+	var totalPercentage float64
+	if totalHeap > 0 {
+		totalPercentage = float64(totalFielddata) / float64(totalHeap) * 100
+	}
 
-	colWidths := []int{40, 15}
-	headers := []string{"index", "total size"}
+	colWidths := []int{25, 25, 12, 8}
+	headers := []string{"index", "field", "size", "heap%"}
 
-	b.WriteString(m.renderTableHeader(headers, colWidths, 1))
+	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
 
 	visibleItems := m.visibleItems(len(aggregated))
 	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
+		field := fd.Field
+		if field == "" {
+			field = "(all)"
+		}
+
+		var heapPercent float64
+		if totalHeap > 0 {
+			heapPercent = float64(fd.Size) / float64(totalHeap) * 100
+		}
+
+		percentStr := fmt.Sprintf("%.1f", heapPercent)
+		percentStyle := m.percentStyle(percentStr)
+
 		row := []string{
 			m.leftAlign(fd.Index, colWidths[0]),
-			m.rightAlign(formatBytes(fd.Size), colWidths[1]),
+			m.leftAlign(field, colWidths[1]),
+			m.rightAlign(formatBytes(fd.Size), colWidths[2]),
+			percentStyle.Render(m.rightAlign(percentStr, colWidths[3])),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
 	}
+
+	totalWidth := 0
+	for _, w := range colWidths {
+		totalWidth += w
+	}
+	totalWidth += len(colWidths) - 1
+	b.WriteString(strings.Repeat("-", totalWidth) + "\n")
+
+	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
+	totalPercentStyle := m.percentStyle(totalPercentStr)
+
+	totalRow := []string{
+		m.leftAlign("TOTAL", colWidths[0]),
+		m.leftAlign("", colWidths[1]),
+		m.rightAlign(formatBytes(totalFielddata), colWidths[2]),
+		totalPercentStyle.Render(m.rightAlign(totalPercentStr, colWidths[3])),
+	}
+	b.WriteString(strings.Join(totalRow, " "))
+	b.WriteString("\n")
 
 	return b.String()
 }
@@ -399,7 +431,12 @@ func (m NodesModel) renderLegend() string {
 			grayStyle.Render(" | ") +
 			redStyle.Render(">=85")
 	case ViewFielddata:
-		return grayStyle.Render("total fielddata size by index (aggregated across all nodes)")
+		return grayStyle.Render("heap%: ") +
+			greenStyle.Render("<75") +
+			grayStyle.Render(" | ") +
+			yellowStyle.Render("75-84") +
+			grayStyle.Render(" | ") +
+			redStyle.Render(">=85")
 	default:
 		return ""
 	}
@@ -465,7 +502,7 @@ func (m NodesModel) getItemCount() int {
 	case ViewMemory, ViewDisk:
 		return len(m.state.Nodes)
 	case ViewFielddata:
-		return len(m.aggregateFielddataByIndex())
+		return len(m.aggregateFielddataByIndexField())
 	}
 	return 0
 }
@@ -530,9 +567,13 @@ func (m *NodesModel) getSearchableLines() []string {
 			lines = append(lines, node.Name)
 		}
 	case ViewFielddata:
-		aggregated := m.aggregateFielddataByIndex()
+		aggregated := m.aggregateFielddataByIndexField()
 		for _, fd := range aggregated {
-			lines = append(lines, fd.Index)
+			field := fd.Field
+			if field == "" {
+				field = "(all)"
+			}
+			lines = append(lines, fd.Index+" "+field)
 		}
 	}
 	return lines
