@@ -432,26 +432,16 @@ func (m NodesModel) renderFielddataTable() string {
 		})
 
 	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
-	totalRow := table.New().
-		Rows([]string{
-			"TOTAL",
-			"",
-			formatBytes(totalFielddata),
+	boldStyle := lipgloss.NewStyle().Bold(true)
+	totalLine := fmt.Sprintf("%s  %s  %s",
+		boldStyle.Render("TOTAL"),
+		boldStyle.Render(formatBytes(totalFielddata)),
+		boldStyle.Inherit(m.percentStyle(totalPercentStr)).Render(
 			fmt.Sprintf("%s %s", totalPercentStr, RenderBar(totalPercentage, 10)),
-		}).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle().Bold(true)
-			if col >= 2 && col != 3 {
-				base = base.Align(lipgloss.Right)
-			} else if col == 3 {
-				base = base.Align(lipgloss.Center).Inherit(m.percentStyle(totalPercentStr))
-			}
-			return base
-		})
+		),
+	)
 
-	return t.Render() + "\n" + totalRow.Render()
+	return t.Render() + "\n" + totalLine
 }
 
 func (m NodesModel) renderLegend() string {
