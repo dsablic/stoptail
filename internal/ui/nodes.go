@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -284,28 +285,90 @@ func (m NodesModel) renderDiskTable() string {
 	return b.String()
 }
 
+type fielddataByIndex struct {
+	Index string
+	Size  int64
+}
+
+func (m NodesModel) aggregateFielddataByIndex() []fielddataByIndex {
+	indexSizes := make(map[string]int64)
+	for _, fd := range m.state.Fielddata {
+		indexSizes[fd.Index] += fd.Size
+	}
+
+	var result []fielddataByIndex
+	for index, size := range indexSizes {
+		result = append(result, fielddataByIndex{
+			Index: index,
+			Size:  size,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Size > result[j].Size
+	})
+
+	return result
+}
+
+func (m NodesModel) calculateFielddataStats() (totalFielddata int64, totalHeap int64, percentage float64) {
+	for _, fd := range m.state.Fielddata {
+		totalFielddata += fd.Size
+	}
+
+	for _, node := range m.state.Nodes {
+		heapMax := node.HeapMax
+		if heapMax == "" {
+			continue
+		}
+		heapBytes, err := parseSize(heapMax)
+		if err == nil {
+			totalHeap += heapBytes
+		}
+	}
+
+	if totalHeap > 0 {
+		percentage = float64(totalFielddata) / float64(totalHeap) * 100
+	}
+
+	return totalFielddata, totalHeap, percentage
+}
+
 func (m NodesModel) renderFielddataTable() string {
 	if len(m.state.Fielddata) == 0 {
 		return "No fielddata found"
 	}
 
-	colWidths := []int{18, 25, 25, 12}
-	headers := []string{"node", "index", "field", "size"}
+	aggregated := m.aggregateFielddataByIndex()
+	if len(aggregated) == 0 {
+		return "No fielddata found"
+	}
 
 	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths, 3))
 
-	visibleItems := m.visibleItems(len(m.state.Fielddata))
-	for _, fd := range m.state.Fielddata[visibleItems.start:visibleItems.end] {
-		field := fd.Field
-		if field == "" {
-			field = "(all)"
-		}
+	totalFielddata, totalHeap, percentage := m.calculateFielddataStats()
+	summaryStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	percentStyle := m.percentStyle(fmt.Sprintf("%.1f", percentage))
+
+	summary := fmt.Sprintf("Total: %s / %s heap (%s%.1f%%%s)",
+		formatBytes(totalFielddata),
+		formatBytes(totalHeap),
+		percentStyle.Render(""),
+		percentage,
+		summaryStyle.Render(""))
+	b.WriteString(summary)
+	b.WriteString("\n\n")
+
+	colWidths := []int{40, 15}
+	headers := []string{"index", "total size"}
+
+	b.WriteString(m.renderTableHeader(headers, colWidths, 1))
+
+	visibleItems := m.visibleItems(len(aggregated))
+	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
 		row := []string{
-			m.leftAlign(fd.Node, colWidths[0]),
-			m.leftAlign(fd.Index, colWidths[1]),
-			m.leftAlign(field, colWidths[2]),
-			m.rightAlign(formatBytes(fd.Size), colWidths[3]),
+			m.leftAlign(fd.Index, colWidths[0]),
+			m.rightAlign(formatBytes(fd.Size), colWidths[1]),
 		}
 		b.WriteString(strings.Join(row, " "))
 		b.WriteString("\n")
@@ -336,7 +399,7 @@ func (m NodesModel) renderLegend() string {
 			grayStyle.Render(" | ") +
 			redStyle.Render(">=85")
 	case ViewFielddata:
-		return grayStyle.Render("fielddata size per node/index/field")
+		return grayStyle.Render("total fielddata size by index (aggregated across all nodes)")
 	default:
 		return ""
 	}
@@ -402,7 +465,7 @@ func (m NodesModel) getItemCount() int {
 	case ViewMemory, ViewDisk:
 		return len(m.state.Nodes)
 	case ViewFielddata:
-		return len(m.state.Fielddata)
+		return len(m.aggregateFielddataByIndex())
 	}
 	return 0
 }
@@ -461,8 +524,16 @@ func (m *NodesModel) getSearchableLines() []string {
 		return nil
 	}
 	var lines []string
-	for _, node := range m.state.Nodes {
-		lines = append(lines, node.Name)
+	switch m.activeView {
+	case ViewMemory, ViewDisk:
+		for _, node := range m.state.Nodes {
+			lines = append(lines, node.Name)
+		}
+	case ViewFielddata:
+		aggregated := m.aggregateFielddataByIndex()
+		for _, fd := range aggregated {
+			lines = append(lines, fd.Index)
+		}
 	}
 	return lines
 }
@@ -484,4 +555,48 @@ func formatBytes(bytes int64) string {
 	default:
 		return fmt.Sprintf("%db", bytes)
 	}
+}
+
+func parseSize(s string) (int64, error) {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+		tb = gb * 1024
+	)
+
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return 0, fmt.Errorf("empty size string")
+	}
+
+	var multiplier int64 = 1
+	var numStr string
+
+	if strings.HasSuffix(s, "tb") {
+		multiplier = tb
+		numStr = strings.TrimSuffix(s, "tb")
+	} else if strings.HasSuffix(s, "gb") {
+		multiplier = gb
+		numStr = strings.TrimSuffix(s, "gb")
+	} else if strings.HasSuffix(s, "mb") {
+		multiplier = mb
+		numStr = strings.TrimSuffix(s, "mb")
+	} else if strings.HasSuffix(s, "kb") {
+		multiplier = kb
+		numStr = strings.TrimSuffix(s, "kb")
+	} else if strings.HasSuffix(s, "b") {
+		multiplier = 1
+		numStr = strings.TrimSuffix(s, "b")
+	} else {
+		numStr = s
+	}
+
+	numStr = strings.TrimSpace(numStr)
+	value, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size format: %s", s)
+	}
+
+	return int64(value * float64(multiplier)), nil
 }
