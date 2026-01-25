@@ -1,11 +1,11 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/labtiva/stoptail/internal/es"
 )
 
@@ -187,56 +187,61 @@ func (m TasksModel) View() string {
 			Render("No long-running tasks found.\n\nThis view shows: reindex, update-by-query, delete-by-query,\nforce merge, and snapshot operations.")
 	}
 
-	var b strings.Builder
-
-	colWidths := []int{35, 25, 15, 12, 8}
-	headers := []string{"action", "node", "description", "running", "cancel"}
-	b.WriteString(m.renderHeader(headers, colWidths))
-
 	maxVisible := m.maxVisibleRows()
 	endIdx := min(m.scrollY+maxVisible, len(m.tasks))
 
+	var rows [][]string
+	var rowStates []string
 	for i := m.scrollY; i < endIdx; i++ {
 		task := m.tasks[i]
-		isSelected := i == m.selectedRow
-		isConfirming := m.confirming == task.ID
-
-		rowStyle := lipgloss.NewStyle()
-		if isConfirming {
-			rowStyle = rowStyle.Background(ColorRed).Foreground(ColorOnAccent)
-		} else if isSelected {
-			rowStyle = rowStyle.Background(ColorBlue).Foreground(ColorOnAccent)
-		}
-
-		action := m.truncateAction(task.Action)
-		desc := task.Description
-		if len(desc) > colWidths[2]-2 {
-			desc = desc[:colWidths[2]-5] + "..."
-		}
-
 		cancelText := "[c]"
-		if isConfirming {
+		state := "normal"
+		if m.confirming == task.ID {
 			cancelText = "y/n?"
+			state = "confirming"
+		} else if i == m.selectedRow {
+			state = "selected"
 		}
+		rowStates = append(rowStates, state)
 
-		row := fmt.Sprintf("%-*s %-*s %-*s %*s %*s",
-			colWidths[0], action,
-			colWidths[1], Truncate(task.Node, colWidths[1]),
-			colWidths[2], Truncate(desc, colWidths[2]),
-			colWidths[3], task.RunningTime,
-			colWidths[4], cancelText,
-		)
-
-		b.WriteString(rowStyle.Render(row))
-		b.WriteString("\n")
+		rows = append(rows, []string{
+			Truncate(m.truncateAction(task.Action), 25),
+			Truncate(task.Node, 20),
+			Truncate(task.Description, 30),
+			task.RunningTime,
+			cancelText,
+		})
 	}
+
+	t := table.New().
+		Headers("action", "node", "description", "running", "cancel").
+		Rows(rows...).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle()
+			if col == 3 || col == 4 {
+				base = base.Align(lipgloss.Right)
+			}
+			if row == table.HeaderRow {
+				return base.Bold(true).Foreground(ColorWhite)
+			}
+			if row >= 0 && row < len(rowStates) {
+				switch rowStates[row] {
+				case "confirming":
+					return base.Background(ColorRed).Foreground(ColorOnAccent)
+				case "selected":
+					return base.Background(ColorBlue).Foreground(ColorOnAccent)
+				}
+			}
+			return base
+		})
+
+	content := t.Render()
 
 	if m.confirming != "" {
-		b.WriteString("\n")
-		b.WriteString(lipgloss.NewStyle().Foreground(ColorYellow).Render("Cancel this task? Press 'y' to confirm, 'n' or Esc to abort"))
+		content += "\n\n" + lipgloss.NewStyle().Foreground(ColorYellow).Render("Cancel this task? Press 'y' to confirm, 'n' or Esc to abort")
 	}
-
-	content := b.String()
 
 	if m.search.Active() {
 		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
@@ -245,22 +250,6 @@ func (m TasksModel) View() string {
 	return content
 }
 
-func (m TasksModel) renderHeader(headers []string, widths []int) string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-	var parts []string
-	for i, h := range headers {
-		parts = append(parts, fmt.Sprintf("%-*s", widths[i], h))
-	}
-	header := headerStyle.Render(strings.Join(parts, " "))
-
-	totalWidth := 0
-	for _, w := range widths {
-		totalWidth += w
-	}
-	totalWidth += len(widths) - 1
-
-	return header + "\n" + strings.Repeat("-", totalWidth) + "\n"
-}
 
 func (m TasksModel) truncateAction(action string) string {
 	parts := strings.Split(action, "/")

@@ -411,8 +411,18 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		browser.SetIndices(state.Indices)
 		fmt.Println(browser.View())
 
+	case "tasks":
+		tasks, err := client.FetchTasks(ctx)
+		if err != nil {
+			return fmt.Errorf("fetching tasks: %w", err)
+		}
+		tasksModel := ui.NewTasks()
+		tasksModel.SetSize(width, height)
+		tasksModel.SetTasks(tasks)
+		fmt.Println(tasksModel.View())
+
 	default:
-		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, nodes)", tab)
+		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, nodes, tasks)", tab)
 	}
 	return nil
 }
