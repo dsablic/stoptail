@@ -251,8 +251,10 @@ func (m NodesModel) renderMemoryTable() string {
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 1 {
+			if col >= 2 {
 				base = base.Align(lipgloss.Right)
+			} else if col == 1 {
+				base = base.Align(lipgloss.Center)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
@@ -296,8 +298,10 @@ func (m NodesModel) renderDiskTable() string {
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 2 {
+			if col >= 3 {
 				base = base.Align(lipgloss.Right)
+			} else if col == 2 {
+				base = base.Align(lipgloss.Center)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
@@ -406,15 +410,6 @@ func (m NodesModel) renderFielddataTable() string {
 		})
 	}
 
-	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
-	pctValues = append(pctValues, totalPercentStr)
-	rows = append(rows, []string{
-		"TOTAL",
-		"",
-		formatBytes(totalFielddata),
-		fmt.Sprintf("%s %s", totalPercentStr, RenderBar(totalPercentage, 10)),
-	})
-
 	t := table.New().
 		Headers("index", "field", "size", "heap%").
 		Rows(rows...).
@@ -422,8 +417,10 @@ func (m NodesModel) renderFielddataTable() string {
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 2 {
+			if col >= 2 && col != 3 {
 				base = base.Align(lipgloss.Right)
+			} else if col == 3 {
+				base = base.Align(lipgloss.Center)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
@@ -434,7 +431,27 @@ func (m NodesModel) renderFielddataTable() string {
 			return base
 		})
 
-	return t.Render()
+	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
+	totalRow := table.New().
+		Rows([]string{
+			"TOTAL",
+			"",
+			formatBytes(totalFielddata),
+			fmt.Sprintf("%s %s", totalPercentStr, RenderBar(totalPercentage, 10)),
+		}).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle().Bold(true)
+			if col >= 2 && col != 3 {
+				base = base.Align(lipgloss.Right)
+			} else if col == 3 {
+				base = base.Align(lipgloss.Center).Inherit(m.percentStyle(totalPercentStr))
+			}
+			return base
+		})
+
+	return t.Render() + "\n" + totalRow.Render()
 }
 
 func (m NodesModel) renderLegend() string {
