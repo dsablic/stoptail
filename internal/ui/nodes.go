@@ -227,8 +227,6 @@ func (m NodesModel) renderMemoryTable() string {
 		return "No nodes found"
 	}
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-
 	var rows [][]string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
@@ -248,15 +246,20 @@ func (m NodesModel) renderMemoryTable() string {
 	t := table.New().
 		Headers("node", "heap%", "", "heap", "fielddata", "query_cache", "segments").
 		Rows(rows...).
-		Border(lipgloss.HiddenBorder()).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle()
+			if col >= 1 && col != 2 {
+				base = base.Align(lipgloss.Right)
+			}
 			if row == table.HeaderRow {
-				return headerStyle
+				return base.Bold(true).Foreground(ColorWhite)
 			}
 			if col == 1 && row >= 0 && row < len(rows) {
-				return m.percentStyle(rows[row][col])
+				return base.Inherit(m.percentStyle(rows[row][col]))
 			}
-			return lipgloss.NewStyle()
+			return base
 		})
 
 	return t.Render()
@@ -266,8 +269,6 @@ func (m NodesModel) renderDiskTable() string {
 	if len(m.state.Nodes) == 0 {
 		return "No nodes found"
 	}
-
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
 
 	var rows [][]string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
@@ -289,15 +290,20 @@ func (m NodesModel) renderDiskTable() string {
 	t := table.New().
 		Headers("node", "version", "disk%", "", "disk.avail", "disk.total", "disk.used", "shards").
 		Rows(rows...).
-		Border(lipgloss.HiddenBorder()).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle()
+			if col >= 2 && col != 3 {
+				base = base.Align(lipgloss.Right)
+			}
 			if row == table.HeaderRow {
-				return headerStyle
+				return base.Bold(true).Foreground(ColorWhite)
 			}
 			if col == 2 && row >= 0 && row < len(rows) {
-				return m.percentStyle(rows[row][col])
+				return base.Inherit(m.percentStyle(rows[row][col]))
 			}
-			return lipgloss.NewStyle()
+			return base
 		})
 
 	return t.Render()
@@ -373,8 +379,6 @@ func (m NodesModel) renderFielddataTable() string {
 		totalPercentage = float64(totalFielddata) / float64(totalHeap) * 100
 	}
 
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-
 	var rows [][]string
 	visibleItems := m.visibleItems(len(aggregated))
 	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
@@ -411,15 +415,20 @@ func (m NodesModel) renderFielddataTable() string {
 	t := table.New().
 		Headers("index", "field", "size", "heap%", "").
 		Rows(rows...).
-		Border(lipgloss.HiddenBorder()).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle()
+			if col >= 2 && col != 4 {
+				base = base.Align(lipgloss.Right)
+			}
 			if row == table.HeaderRow {
-				return headerStyle
+				return base.Bold(true).Foreground(ColorWhite)
 			}
 			if col == 3 && row >= 0 && row < len(rows) {
-				return m.percentStyle(rows[row][col])
+				return base.Inherit(m.percentStyle(rows[row][col]))
 			}
-			return lipgloss.NewStyle()
+			return base
 		})
 
 	return t.Render()
