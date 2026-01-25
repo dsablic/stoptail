@@ -677,7 +677,7 @@ func (m OverviewModel) renderGrid() string {
 
 	for _, node := range visibleNodes[:maxRows] {
 		var shardLines [][]string
-		maxLines := 1
+		maxLines := 2
 
 		for i, idx := range indices {
 			if i >= m.scrollX && i < m.scrollX+visibleCols {
@@ -697,6 +697,10 @@ func (m OverviewModel) renderGrid() string {
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
 			if lineIdx == 0 {
 				b.WriteString(nodeStyle.Render(Truncate(node.Name, nodeColWidth-2)))
+				b.WriteString("│ ")
+			} else if lineIdx == 1 {
+				versionStyle := lipgloss.NewStyle().Width(nodeColWidth).Foreground(ColorGray)
+				b.WriteString(versionStyle.Render(node.Version))
 				b.WriteString("│ ")
 			} else {
 				b.WriteString(nodeStyle.Render(""))

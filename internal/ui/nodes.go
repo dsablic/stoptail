@@ -236,6 +236,7 @@ func (m NodesModel) renderMemoryTable() string {
 
 		rows = append(rows, []string{
 			node.Name,
+			node.Version,
 			fmt.Sprintf("%s %s", node.HeapPercent, RenderBar(heapPct, 10)),
 			node.HeapCurrent,
 			node.FielddataSize,
@@ -245,21 +246,21 @@ func (m NodesModel) renderMemoryTable() string {
 	}
 
 	t := table.New().
-		Headers("node", "heap%", "heap", "fielddata", "query_cache", "segments").
+		Headers("node", "version", "heap%", "heap", "fielddata", "query_cache", "segments").
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 2 {
+			if col >= 3 {
 				base = base.Align(lipgloss.Right)
-			} else if col == 1 {
+			} else if col == 2 {
 				base = base.Align(lipgloss.Center)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 1 && row >= 0 && row < len(pctValues) {
+			if col == 2 && row >= 0 && row < len(pctValues) {
 				return base.Inherit(m.percentStyle(pctValues[row]))
 			}
 			return base

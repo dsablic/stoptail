@@ -21,9 +21,10 @@ type IndexInfo struct {
 }
 
 type NodeInfo struct {
-	Name string `json:"name"`
-	IP   string `json:"ip"`
-	Role string `json:"node.role"`
+	Name    string `json:"name"`
+	IP      string `json:"ip"`
+	Role    string `json:"node.role"`
+	Version string `json:"version"`
 }
 
 type ShardInfo struct {
@@ -425,7 +426,7 @@ func (c *Client) fetchNodes(ctx context.Context) ([]NodeInfo, error) {
 	res, err := c.es.Cat.Nodes(
 		c.es.Cat.Nodes.WithContext(ctx),
 		c.es.Cat.Nodes.WithFormat("json"),
-		c.es.Cat.Nodes.WithH("name", "ip", "node.role"),
+		c.es.Cat.Nodes.WithH("name", "ip", "node.role", "version"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching nodes: %w", err)
