@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/labtiva/stoptail/internal/es"
 )
 
@@ -226,31 +227,39 @@ func (m NodesModel) renderMemoryTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 8, 12, 12, 12, 14, 10}
-	headers := []string{"node", "heap%", "", "heap", "fielddata", "query_cache", "segments"}
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
 
-	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths))
-
+	var rows [][]string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
-		heapPctStyle := m.percentStyle(node.HeapPercent)
 		heapPct := m.parsePercent(node.HeapPercent)
 
-		row := []string{
-			m.leftAlign(node.Name, colWidths[0]),
-			heapPctStyle.Render(m.rightAlign(node.HeapPercent, colWidths[1])),
+		rows = append(rows, []string{
+			node.Name,
+			node.HeapPercent,
 			RenderBar(heapPct, 10),
-			m.rightAlign(node.HeapCurrent, colWidths[3]),
-			m.rightAlign(node.FielddataSize, colWidths[4]),
-			m.rightAlign(node.QueryCacheSize, colWidths[5]),
-			m.rightAlign(node.SegmentsCount, colWidths[6]),
-		}
-		b.WriteString(strings.Join(row, " "))
-		b.WriteString("\n")
+			node.HeapCurrent,
+			node.FielddataSize,
+			node.QueryCacheSize,
+			node.SegmentsCount,
+		})
 	}
 
-	return b.String()
+	t := table.New().
+		Headers("node", "heap%", "", "heap", "fielddata", "query_cache", "segments").
+		Rows(rows...).
+		Border(lipgloss.HiddenBorder()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			if col == 1 && row >= 0 && row < len(rows) {
+				return m.percentStyle(rows[row][col])
+			}
+			return lipgloss.NewStyle()
+		})
+
+	return t.Render()
 }
 
 func (m NodesModel) renderDiskTable() string {
@@ -258,31 +267,40 @@ func (m NodesModel) renderDiskTable() string {
 		return "No nodes found"
 	}
 
-	colWidths := []int{20, 10, 8, 12, 12, 12, 12, 8}
-	headers := []string{"node", "version", "disk%", "", "disk.avail", "disk.total", "disk.used", "shards"}
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
 
-	var b strings.Builder
-	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
-
+	var rows [][]string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
-		diskPctStyle := m.percentStyle(node.DiskPercent)
 		diskPct := m.parsePercent(node.DiskPercent)
-		row := []string{
-			m.leftAlign(node.Name, colWidths[0]),
-			m.leftAlign(node.Version, colWidths[1]),
-			diskPctStyle.Render(m.rightAlign(node.DiskPercent, colWidths[2])),
+
+		rows = append(rows, []string{
+			node.Name,
+			node.Version,
+			node.DiskPercent,
 			RenderBar(diskPct, 10),
-			m.rightAlign(node.DiskAvail, colWidths[4]),
-			m.rightAlign(node.DiskTotal, colWidths[5]),
-			m.rightAlign(node.DiskUsed, colWidths[6]),
-			m.rightAlign(node.Shards, colWidths[7]),
-		}
-		b.WriteString(strings.Join(row, " "))
-		b.WriteString("\n")
+			node.DiskAvail,
+			node.DiskTotal,
+			node.DiskUsed,
+			node.Shards,
+		})
 	}
 
-	return b.String()
+	t := table.New().
+		Headers("node", "version", "disk%", "", "disk.avail", "disk.total", "disk.used", "shards").
+		Rows(rows...).
+		Border(lipgloss.HiddenBorder()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			if col == 2 && row >= 0 && row < len(rows) {
+				return m.percentStyle(rows[row][col])
+			}
+			return lipgloss.NewStyle()
+		})
+
+	return t.Render()
 }
 
 type fielddataByIndexField struct {
@@ -344,8 +362,6 @@ func (m NodesModel) renderFielddataTable() string {
 		return "No fielddata found"
 	}
 
-	var b strings.Builder
-
 	totalHeap := m.getTotalHeap()
 	var totalFielddata int64
 	for _, fd := range aggregated {
@@ -357,11 +373,9 @@ func (m NodesModel) renderFielddataTable() string {
 		totalPercentage = float64(totalFielddata) / float64(totalHeap) * 100
 	}
 
-	colWidths := []int{25, 25, 12, 8, 12}
-	headers := []string{"index", "field", "size", "heap%", ""}
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
 
-	b.WriteString(m.renderTableHeader(headers, colWidths, 2))
-
+	var rows [][]string
 	visibleItems := m.visibleItems(len(aggregated))
 	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
 		field := fd.Field
@@ -375,40 +389,40 @@ func (m NodesModel) renderFielddataTable() string {
 		}
 
 		percentStr := fmt.Sprintf("%.1f", heapPercent)
-		percentStyle := m.percentStyle(percentStr)
 
-		row := []string{
-			m.leftAlign(fd.Index, colWidths[0]),
-			m.leftAlign(field, colWidths[1]),
-			m.rightAlign(formatBytes(fd.Size), colWidths[2]),
-			percentStyle.Render(m.rightAlign(percentStr, colWidths[3])),
+		rows = append(rows, []string{
+			fd.Index,
+			field,
+			formatBytes(fd.Size),
+			percentStr,
 			RenderBar(heapPercent, 10),
-		}
-		b.WriteString(strings.Join(row, " "))
-		b.WriteString("\n")
+		})
 	}
-
-	totalWidth := 0
-	for _, w := range colWidths {
-		totalWidth += w
-	}
-	totalWidth += len(colWidths) - 1
-	b.WriteString(strings.Repeat("-", totalWidth) + "\n")
 
 	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
-	totalPercentStyle := m.percentStyle(totalPercentStr)
-
-	totalRow := []string{
-		m.leftAlign("TOTAL", colWidths[0]),
-		m.leftAlign("", colWidths[1]),
-		m.rightAlign(formatBytes(totalFielddata), colWidths[2]),
-		totalPercentStyle.Render(m.rightAlign(totalPercentStr, colWidths[3])),
+	rows = append(rows, []string{
+		"TOTAL",
+		"",
+		formatBytes(totalFielddata),
+		totalPercentStr,
 		RenderBar(totalPercentage, 10),
-	}
-	b.WriteString(strings.Join(totalRow, " "))
-	b.WriteString("\n")
+	})
 
-	return b.String()
+	t := table.New().
+		Headers("index", "field", "size", "heap%", "").
+		Rows(rows...).
+		Border(lipgloss.HiddenBorder()).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			if col == 3 && row >= 0 && row < len(rows) {
+				return m.percentStyle(rows[row][col])
+			}
+			return lipgloss.NewStyle()
+		})
+
+	return t.Render()
 }
 
 func (m NodesModel) renderLegend() string {
@@ -442,31 +456,6 @@ func (m NodesModel) renderLegend() string {
 	default:
 		return ""
 	}
-}
-
-func (m NodesModel) renderTableHeader(headers []string, widths []int, leftAlignCols ...int) string {
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-	numLeftAlign := 1
-	if len(leftAlignCols) > 0 {
-		numLeftAlign = leftAlignCols[0]
-	}
-	var headerParts []string
-	for i, h := range headers {
-		if i < numLeftAlign {
-			headerParts = append(headerParts, headerStyle.Render(m.leftAlign(h, widths[i])))
-		} else {
-			headerParts = append(headerParts, headerStyle.Render(m.rightAlign(h, widths[i])))
-		}
-	}
-	header := strings.Join(headerParts, " ")
-
-	totalWidth := 0
-	for _, w := range widths {
-		totalWidth += w
-	}
-	totalWidth += len(widths) - 1
-
-	return header + "\n" + strings.Repeat("-", totalWidth) + "\n"
 }
 
 type visibleRange struct {
@@ -521,22 +510,6 @@ func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {
 		return lipgloss.NewStyle().Foreground(ColorYellow)
 	}
 	return lipgloss.NewStyle().Foreground(ColorGreen)
-}
-
-func (m NodesModel) leftAlign(s string, width int) string {
-	r := []rune(s)
-	if len(r) >= width {
-		return string(r[:width])
-	}
-	return s + strings.Repeat(" ", width-len(r))
-}
-
-func (m NodesModel) rightAlign(s string, width int) string {
-	r := []rune(s)
-	if len(r) >= width {
-		return string(r[:width])
-	}
-	return strings.Repeat(" ", width-len(r)) + s
 }
 
 func (m NodesModel) parsePercent(pctStr string) float64 {
