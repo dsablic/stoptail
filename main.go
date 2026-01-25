@@ -83,7 +83,7 @@ func formatVersion() string {
 func run(cmd *cobra.Command, args []string) error {
 	ui.SetTheme(themeFlag)
 
-	esURL, err := resolveESURL(args)
+	esURL, err := resolveESURL(args, renderFlag != "")
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveESURL(args []string) (string, error) {
+func resolveESURL(args []string, skipUI bool) (string, error) {
 	if err := config.EnsureConfigDir(); err != nil {
 		return "", fmt.Errorf("creating config dir: %w", err)
 	}
@@ -126,7 +126,7 @@ func resolveESURL(args []string) (string, error) {
 			return arg, nil
 		}
 		if clusters != nil {
-			return resolveURLWithProgress(clusters, arg)
+			return resolveURLWithProgress(clusters, arg, skipUI)
 		}
 		return "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
@@ -136,6 +136,9 @@ func resolveESURL(args []string) (string, error) {
 	}
 
 	if clusters != nil && len(clusters.Clusters) > 0 {
+		if skipUI {
+			return "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
+		}
 		return selectCluster(clusters)
 	}
 
@@ -147,7 +150,7 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	sort.Strings(names)
 
 	if len(names) == 1 {
-		return resolveURLWithProgress(clusters, names[0])
+		return resolveURLWithProgress(clusters, names[0], false)
 	}
 
 	picker := newClusterPickerModal(names)
@@ -162,7 +165,7 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 		return "", fmt.Errorf("cancelled")
 	}
 
-	return resolveURLWithProgress(clusters, m.selected)
+	return resolveURLWithProgress(clusters, m.selected, false)
 }
 
 type clusterPickerModal struct {
@@ -324,7 +327,7 @@ func (m urlResolverModel) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func resolveURLWithProgress(clusters *config.ClustersConfig, name string) (string, error) {
+func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (string, error) {
 	entry, ok := clusters.Clusters[name]
 	if !ok {
 		return "", fmt.Errorf("cluster %q not found", name)
@@ -332,6 +335,10 @@ func resolveURLWithProgress(clusters *config.ClustersConfig, name string) (strin
 
 	if entry.URL != "" {
 		return entry.URL, nil
+	}
+
+	if skipUI {
+		return clusters.ResolveURL(name)
 	}
 
 	m := newURLResolver(clusters, name)
