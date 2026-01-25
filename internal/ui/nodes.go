@@ -228,14 +228,15 @@ func (m NodesModel) renderMemoryTable() string {
 	}
 
 	var rows [][]string
+	var pctValues []string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
 		heapPct := m.parsePercent(node.HeapPercent)
+		pctValues = append(pctValues, node.HeapPercent)
 
 		rows = append(rows, []string{
 			node.Name,
-			node.HeapPercent,
-			RenderBar(heapPct, 10),
+			fmt.Sprintf("%s %s", node.HeapPercent, RenderBar(heapPct, 10)),
 			node.HeapCurrent,
 			node.FielddataSize,
 			node.QueryCacheSize,
@@ -244,20 +245,20 @@ func (m NodesModel) renderMemoryTable() string {
 	}
 
 	t := table.New().
-		Headers("node", "heap%", "", "heap", "fielddata", "query_cache", "segments").
+		Headers("node", "heap%", "heap", "fielddata", "query_cache", "segments").
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 1 && col != 2 {
+			if col >= 1 {
 				base = base.Align(lipgloss.Right)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 1 && row >= 0 && row < len(rows) {
-				return base.Inherit(m.percentStyle(rows[row][col]))
+			if col == 1 && row >= 0 && row < len(pctValues) {
+				return base.Inherit(m.percentStyle(pctValues[row]))
 			}
 			return base
 		})
@@ -271,15 +272,16 @@ func (m NodesModel) renderDiskTable() string {
 	}
 
 	var rows [][]string
+	var pctValues []string
 	visibleNodes := m.visibleItems(len(m.state.Nodes))
 	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
 		diskPct := m.parsePercent(node.DiskPercent)
+		pctValues = append(pctValues, node.DiskPercent)
 
 		rows = append(rows, []string{
 			node.Name,
 			node.Version,
-			node.DiskPercent,
-			RenderBar(diskPct, 10),
+			fmt.Sprintf("%s %s", node.DiskPercent, RenderBar(diskPct, 10)),
 			node.DiskAvail,
 			node.DiskTotal,
 			node.DiskUsed,
@@ -288,20 +290,20 @@ func (m NodesModel) renderDiskTable() string {
 	}
 
 	t := table.New().
-		Headers("node", "version", "disk%", "", "disk.avail", "disk.total", "disk.used", "shards").
+		Headers("node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards").
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 2 && col != 3 {
+			if col >= 2 {
 				base = base.Align(lipgloss.Right)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 2 && row >= 0 && row < len(rows) {
-				return base.Inherit(m.percentStyle(rows[row][col]))
+			if col == 2 && row >= 0 && row < len(pctValues) {
+				return base.Inherit(m.percentStyle(pctValues[row]))
 			}
 			return base
 		})
@@ -380,6 +382,7 @@ func (m NodesModel) renderFielddataTable() string {
 	}
 
 	var rows [][]string
+	var pctValues []string
 	visibleItems := m.visibleItems(len(aggregated))
 	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
 		field := fd.Field
@@ -393,40 +396,40 @@ func (m NodesModel) renderFielddataTable() string {
 		}
 
 		percentStr := fmt.Sprintf("%.1f", heapPercent)
+		pctValues = append(pctValues, percentStr)
 
 		rows = append(rows, []string{
 			fd.Index,
 			field,
 			formatBytes(fd.Size),
-			percentStr,
-			RenderBar(heapPercent, 10),
+			fmt.Sprintf("%s %s", percentStr, RenderBar(heapPercent, 10)),
 		})
 	}
 
 	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
+	pctValues = append(pctValues, totalPercentStr)
 	rows = append(rows, []string{
 		"TOTAL",
 		"",
 		formatBytes(totalFielddata),
-		totalPercentStr,
-		RenderBar(totalPercentage, 10),
+		fmt.Sprintf("%s %s", totalPercentStr, RenderBar(totalPercentage, 10)),
 	})
 
 	t := table.New().
-		Headers("index", "field", "size", "heap%", "").
+		Headers("index", "field", "size", "heap%").
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			base := lipgloss.NewStyle()
-			if col >= 2 && col != 4 {
+			if col >= 2 {
 				base = base.Align(lipgloss.Right)
 			}
 			if row == table.HeaderRow {
 				return base.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 3 && row >= 0 && row < len(rows) {
-				return base.Inherit(m.percentStyle(rows[row][col]))
+			if col == 3 && row >= 0 && row < len(pctValues) {
+				return base.Inherit(m.percentStyle(pctValues[row]))
 			}
 			return base
 		})
