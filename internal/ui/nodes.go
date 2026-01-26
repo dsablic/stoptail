@@ -665,9 +665,9 @@ func (m NodesModel) countHotThreads() int {
 	lines := strings.Split(m.hotThreads, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "::: {") {
-			end := strings.Index(line[4:], "}")
+			end := strings.Index(line[5:], "}")
 			if end > 0 {
-				currentNode = line[4 : 4+end]
+				currentNode = line[5 : 5+end]
 			} else {
 				currentNode = "unknown"
 			}
@@ -1015,9 +1015,9 @@ func (m NodesModel) renderHotThreads() string {
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "::: {") {
-			end := strings.Index(line[4:], "}")
+			end := strings.Index(line[5:], "}")
 			if end > 0 {
-				currentNode = line[4 : 4+end]
+				currentNode = line[5 : 5+end]
 			} else {
 				currentNode = "unknown"
 			}
