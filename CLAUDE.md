@@ -51,6 +51,7 @@ go build .
 ./stoptail --render cluster --view fielddata --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
+./stoptail --render cluster --view hotthreads --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -297,6 +298,28 @@ case "ctrl+c":
 
 Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding new global shortcuts, add them inside the `if !m.hasActiveInput()` block.
 
+**Adding new views to existing tabs** - When adding a new view (like Hot Threads to Cluster tab), follow this pattern:
+
+1. Add view constant to the `NodesView` enum
+2. Add data field to the model struct
+3. Add `Set<Data>()` method
+4. Add message type in `model.go` (e.g., `hotThreadsMsg`)
+5. Add `fetch<Data>()` function in `model.go`
+6. Add message handler in `Update()`
+7. Add keyboard shortcut (e.g., case "6")
+8. Add tab to `renderTabs()` list
+9. Add case to View switch for rendering
+10. Add `render<View>()` function
+11. Add fetch to batch calls when refreshing the tab
+12. Update help.go, README.md keybindings
+
+**Filter vs Search** - Use the right pattern for the content type:
+
+- **Tables (structured data)**: Use filter (`/`) - instantly hides non-matching rows
+- **Text content (logs, code)**: Use search (`Ctrl+F`) - highlights matches, navigate with n/N
+
+Tables in Cluster tab use filter because users want to narrow down to specific nodes/settings. Workbench response uses search because users want to find text within the JSON while seeing surrounding context.
+
 **Creating modals with huh** - When creating modals using `huh.NewForm()`, always use pointer receivers to avoid value copy issues:
 
 ```go
@@ -401,6 +424,7 @@ Always verify UI changes using the render flag before committing:
 ./stoptail --render cluster --view fielddata --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
+./stoptail --render cluster --view hotthreads --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -430,7 +454,7 @@ When modifying `demo.tape`, always verify the generated `demo.gif` before commit
    - Filter shows filtered indices
    - Workbench shows correct path (`/products/_search`) and 200 response
    - Mappings tab shows field mappings with Ctrl+F search
-   - Cluster tab shows all 5 views (Memory, Disk, Fielddata, Settings, Threads)
+   - Cluster tab shows all 6 views (Memory, Disk, Fielddata, Settings, Threads, Hot)
    - Help overlay displays correctly
 
 **Before recording demo**:
