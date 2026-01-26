@@ -24,6 +24,11 @@ type AllocationExplainMsg struct {
 	Result *es.AllocationExplain
 	Err    error
 }
+type RecoveryMsg struct {
+	Index  string
+	Shard  string
+	Result *es.RecoveryInfo
+}
 
 type OverviewModel struct {
 	cluster            *es.ClusterState
@@ -46,6 +51,7 @@ type OverviewModel struct {
 	allocationLoading  bool
 	shardPicker        *ShardPicker
 	shardInfo          *es.ShardInfo
+	recoveryInfo       *es.RecoveryInfo
 }
 
 func NewOverview() OverviewModel {
@@ -152,6 +158,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			if m.shardInfo != nil {
 				m.shardInfo = nil
 				m.allocationExplain = nil
+				m.recoveryInfo = nil
 				return m, nil
 			}
 			if m.allocationExplain != nil {
@@ -291,6 +298,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			if m.shardInfo != nil {
 				m.shardInfo = nil
 				m.allocationExplain = nil
+				m.recoveryInfo = nil
 				return m, nil
 			}
 			if m.allocationExplain != nil {
@@ -350,6 +358,11 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		m.allocationExplain = msg.Result
+		return m, nil
+	case RecoveryMsg:
+		if m.shardInfo != nil && m.shardInfo.Index == msg.Index && m.shardInfo.Shard == msg.Shard {
+			m.recoveryInfo = msg.Result
+		}
 		return m, nil
 	}
 	return m, nil
@@ -455,6 +468,24 @@ func (m OverviewModel) fetchAllocationExplain(index string, shard int, primary b
 		}
 		result, err := m.client.FetchAllocationExplain(context.Background(), index, shard, primary)
 		return AllocationExplainMsg{Result: result, Err: err}
+	}
+}
+
+func (m OverviewModel) fetchRecovery(index string, shard string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return RecoveryMsg{Index: index, Shard: shard}
+		}
+		recoveries, err := m.client.FetchRecovery(context.Background())
+		if err != nil {
+			return RecoveryMsg{Index: index, Shard: shard}
+		}
+		for _, r := range recoveries {
+			if r.Index == index && r.Shard == shard {
+				return RecoveryMsg{Index: index, Shard: shard, Result: &r}
+			}
+		}
+		return RecoveryMsg{Index: index, Shard: shard}
 	}
 }
 
@@ -595,10 +626,15 @@ func (m OverviewModel) handleCellEnter() (OverviewModel, tea.Cmd) {
 
 func (m OverviewModel) showShardInfo(sh *es.ShardInfo) (OverviewModel, tea.Cmd) {
 	m.shardInfo = sh
+	m.recoveryInfo = nil
 	if sh.State == "UNASSIGNED" || sh.State == "RELOCATING" || sh.State == "INITIALIZING" {
 		m.allocationLoading = true
 		shardNum, _ := strconv.Atoi(sh.Shard)
-		return m, m.fetchAllocationExplain(sh.Index, shardNum, sh.Primary)
+		cmds := []tea.Cmd{m.fetchAllocationExplain(sh.Index, shardNum, sh.Primary)}
+		if sh.State == "RELOCATING" || sh.State == "INITIALIZING" {
+			cmds = append(cmds, m.fetchRecovery(sh.Index, sh.Shard))
+		}
+		return m, tea.Batch(cmds...)
 	}
 	return m, nil
 }
@@ -661,7 +697,7 @@ func (m OverviewModel) View() string {
 	}
 
 	if m.shardInfo != nil {
-		return RenderShardInfoModal(m.shardInfo, m.allocationExplain, m.width, m.height)
+		return RenderShardInfoModal(m.shardInfo, m.allocationExplain, m.recoveryInfo, m.width, m.height)
 	}
 
 	if m.allocationExplain != nil {

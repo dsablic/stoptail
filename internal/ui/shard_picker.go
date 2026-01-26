@@ -109,7 +109,7 @@ func (p *ShardPicker) View() string {
 	return boxStyle.Render(content + "\n" + hint)
 }
 
-func RenderShardInfoModal(sh *es.ShardInfo, ae *es.AllocationExplain, width, height int) string {
+func RenderShardInfoModal(sh *es.ShardInfo, ae *es.AllocationExplain, ri *es.RecoveryInfo, width, height int) string {
 	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
 	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
 
@@ -124,6 +124,24 @@ func RenderShardInfoModal(sh *es.ShardInfo, ae *es.AllocationExplain, width, hei
 	lines = append(lines, labelStyle.Render("State:    ")+valueStyle.Render(sh.State))
 	if sh.Node != "" {
 		lines = append(lines, labelStyle.Render("Node:     ")+valueStyle.Render(sh.Node))
+	}
+
+	if ri != nil {
+		lines = append(lines, "")
+		lines = append(lines, labelStyle.Render("--- Recovery Progress ---"))
+		lines = append(lines, labelStyle.Render("Stage:    ")+valueStyle.Render(ri.Stage))
+		lines = append(lines, labelStyle.Render("Type:     ")+valueStyle.Render(ri.Type))
+		if ri.SourceNode != "" {
+			lines = append(lines, labelStyle.Render("Source:   ")+valueStyle.Render(ri.SourceNode))
+		}
+		if ri.TargetNode != "" {
+			lines = append(lines, labelStyle.Render("Target:   ")+valueStyle.Render(ri.TargetNode))
+		}
+		lines = append(lines, labelStyle.Render("Bytes:    ")+valueStyle.Render(ri.BytesPct))
+		lines = append(lines, labelStyle.Render("Files:    ")+valueStyle.Render(ri.FilesPct))
+		if ri.TranslogOps != "" && ri.TranslogOps != "0" {
+			lines = append(lines, labelStyle.Render("Translog: ")+valueStyle.Render(ri.TranslogOps+" ops"))
+		}
 	}
 
 	if ae != nil {

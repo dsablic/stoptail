@@ -650,8 +650,35 @@ func (m NodesModel) getItemCount() int {
 		return len(m.getClusterSettingsList())
 	case ViewThreadPools:
 		return len(m.threadPools)
+	case ViewHotThreads:
+		return m.countHotThreads()
 	}
 	return 0
+}
+
+func (m NodesModel) countHotThreads() int {
+	if m.hotThreads == "" {
+		return 0
+	}
+	count := 0
+	var currentNode string
+	lines := strings.Split(m.hotThreads, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "::: {") {
+			end := strings.Index(line[4:], "}")
+			if end > 0 {
+				currentNode = line[4 : 4+end]
+			} else {
+				currentNode = "unknown"
+			}
+		} else if currentNode != "" {
+			trimmed := strings.TrimSpace(line)
+			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {
@@ -936,40 +963,117 @@ func (m NodesModel) renderThreadPoolsTable() string {
 	return t.Render()
 }
 
+type hotThread struct {
+	node    string
+	total   string
+	cpu     string
+	other   string
+	time    string
+}
+
+func parseHotThread(node, line string) *hotThread {
+	ht := &hotThread{node: node}
+
+	pctEnd := strings.Index(line, "%")
+	if pctEnd == -1 {
+		return nil
+	}
+	ht.total = line[:pctEnd+1]
+
+	bracketStart := strings.Index(line, "[")
+	bracketEnd := strings.Index(line, "]")
+	if bracketStart > 0 && bracketEnd > bracketStart {
+		breakdown := line[bracketStart+1 : bracketEnd]
+		parts := strings.Split(breakdown, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if strings.HasPrefix(p, "cpu=") {
+				ht.cpu = strings.TrimPrefix(p, "cpu=")
+			} else if strings.HasPrefix(p, "other=") {
+				ht.other = strings.TrimPrefix(p, "other=")
+			}
+		}
+	}
+
+	parenStart := strings.Index(line, "(")
+	parenEnd := strings.Index(line, ")")
+	if parenStart > 0 && parenEnd > parenStart {
+		ht.time = line[parenStart+1 : parenEnd]
+	}
+
+	return ht
+}
+
 func (m NodesModel) renderHotThreads() string {
 	if m.hotThreads == "" {
 		return "No hot threads data. Press 'r' to refresh."
 	}
 
+	var threads []hotThread
+	var currentNode string
 	lines := strings.Split(m.hotThreads, "\n")
-	if m.filter.Value() != "" {
-		var filtered []string
-		for _, line := range lines {
-			if m.matchesFilter(line) {
-				filtered = append(filtered, line)
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "::: {") {
+			end := strings.Index(line[4:], "}")
+			if end > 0 {
+				currentNode = line[4 : 4+end]
+			} else {
+				currentNode = "unknown"
+			}
+		} else if currentNode != "" {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Hot threads at") || trimmed == "" {
+				continue
+			}
+			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
+				if ht := parseHotThread(currentNode, trimmed); ht != nil {
+					threads = append(threads, *ht)
+				}
 			}
 		}
-		lines = filtered
 	}
 
-	if len(lines) == 0 {
-		return "No matching lines"
+	if len(threads) == 0 {
+		idleStyle := lipgloss.NewStyle().Foreground(ColorGray)
+		return idleStyle.Render("All nodes idle - no hot threads detected")
 	}
 
-	maxVisible := m.height - 8
-	if maxVisible < 1 {
-		maxVisible = 10
+	var filtered []hotThread
+	for _, t := range threads {
+		if m.matchesFilter(t.node + " " + t.total + " " + t.cpu) {
+			filtered = append(filtered, t)
+		}
 	}
 
-	start := m.scrollY
-	if start > len(lines) {
-		start = len(lines)
-	}
-	end := start + maxVisible
-	if end > len(lines) {
-		end = len(lines)
+	if len(filtered) == 0 {
+		return "No matching threads"
 	}
 
-	visibleLines := lines[start:end]
-	return strings.Join(visibleLines, "\n")
+	vr := m.visibleItems(len(filtered))
+
+	var rows [][]string
+	for i := vr.start; i < vr.end && i < len(filtered); i++ {
+		t := filtered[i]
+		rows = append(rows, []string{t.node, t.total, t.cpu, t.other, t.time})
+	}
+
+	tbl := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers("Node", "Total", "CPU", "Other", "Time").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			style := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return style.Bold(true).Foreground(ColorWhite)
+			}
+			if col == 1 && row >= 0 && row < len(rows) {
+				pctStr := strings.TrimSuffix(rows[row][1], "%")
+				return style.Inherit(m.percentStyle(pctStr))
+			}
+			return style.Foreground(ColorWhite)
+		})
+
+	return tbl.Render()
 }

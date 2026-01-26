@@ -1394,3 +1394,46 @@ func (c *Client) FetchHotThreads(ctx context.Context) (string, error) {
 	return string(body), nil
 }
 
+type RecoveryInfo struct {
+	Index       string `json:"index"`
+	Shard       string `json:"shard"`
+	Type        string `json:"type"`
+	Stage       string `json:"stage"`
+	SourceNode  string `json:"source_node"`
+	TargetNode  string `json:"target_node"`
+	BytesTotal  string `json:"bytes_total"`
+	BytesPct    string `json:"bytes_percent"`
+	FilesTotal  string `json:"files_total"`
+	FilesPct    string `json:"files_percent"`
+	TranslogOps string `json:"translog_ops_recovered"`
+}
+
+func (c *Client) FetchRecovery(ctx context.Context) ([]RecoveryInfo, error) {
+	res, err := c.es.Cat.Recovery(
+		c.es.Cat.Recovery.WithContext(ctx),
+		c.es.Cat.Recovery.WithFormat("json"),
+		c.es.Cat.Recovery.WithActiveOnly(true),
+		c.es.Cat.Recovery.WithH("index", "shard", "type", "stage", "source_node", "target_node", "bytes_total", "bytes_percent", "files_total", "files_percent", "translog_ops_recovered"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching recovery: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading recovery response: %w", err)
+	}
+
+	var recovery []RecoveryInfo
+	if err := json.Unmarshal(body, &recovery); err != nil {
+		return nil, fmt.Errorf("parsing recovery: %w", err)
+	}
+
+	return recovery, nil
+}
