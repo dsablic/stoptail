@@ -23,8 +23,9 @@ var helpOverview = `## Overview
 |-----|--------|
 | / | Filter indices |
 | Esc | Clear filters |
-| arrows | Navigate |
-| Enter | Allocation explain |
+| ←→ | Select index |
+| ↑↓ | Select node |
+| Enter | Shard info |
 | 1-9 | Toggle alias |
 | U/R/I | Shard states |
 | . | Toggle system indices |

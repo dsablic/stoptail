@@ -11,6 +11,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Blue: Replica shards
   - Yellow: Relocating shards
   - Red: Unassigned shards
+  - Select any cell to view shard info (with allocation explain for problem shards)
 - **Workbench Tab**: Full request editor like Kibana Dev Tools
   - Support for GET, POST, PUT, DELETE, HEAD methods
   - JSON syntax highlighting in responses
@@ -141,13 +142,13 @@ stoptail stores data in `~/.stoptail/`:
 | `/` | Focus filter input |
 | `Esc` | Clear all filters |
 | `Left/Right` | Select index (column) |
-| `Up/Down` | Scroll nodes (rows) |
+| `Up/Down` | Select node (row) |
 | `1-9` | Toggle alias filter buttons |
 | `U` | Show only UNASSIGNED shards |
 | `R` | Show only RELOCATING shards |
 | `I` | Show only INITIALIZING shards |
 | `.` | Toggle system indices (starting with .) |
-| `Enter` | Show allocation explain (if unassigned shards) |
+| `Enter` | Show shard info (picker if multiple shards) |
 | `c` | Create new index |
 | `d` | Delete selected index |
 | `a` | Add alias to selected index |

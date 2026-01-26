@@ -36,6 +36,7 @@ type OverviewModel struct {
 	scrollX            int
 	scrollY            int
 	selectedIndex      int
+	selectedNode       int
 	width              int
 	height             int
 	modal              *Modal
@@ -43,6 +44,8 @@ type OverviewModel struct {
 	operationMsg       string
 	allocationExplain  *es.AllocationExplain
 	allocationLoading  bool
+	shardPicker        *ShardPicker
+	shardInfo          *es.ShardInfo
 }
 
 func NewOverview() OverviewModel {
@@ -113,12 +116,39 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.shardPicker != nil {
+			switch msg.String() {
+			case "left", "h":
+				m.shardPicker.Prev()
+				return m, nil
+			case "right", "l":
+				m.shardPicker.Next()
+				return m, nil
+			case "enter":
+				sh := m.shardPicker.Selected()
+				m.shardPicker = nil
+				if sh != nil {
+					return m.showShardInfo(sh)
+				}
+				return m, nil
+			case "esc":
+				m.shardPicker = nil
+				return m, nil
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "/":
 			m.filterActive = true
 			m.filter.Focus()
 			return m, textinput.Blink
 		case "esc":
+			if m.shardInfo != nil {
+				m.shardInfo = nil
+				m.allocationExplain = nil
+				return m, nil
+			}
 			if m.allocationExplain != nil {
 				m.allocationExplain = nil
 				return m, nil
@@ -127,6 +157,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.aliasFilters = make(map[string]bool)
 			m.shardStateFilter = ""
 			m.selectedIndex = 0
+			m.selectedNode = 0
 		case "U":
 			if m.shardStateFilter == "UNASSIGNED" {
 				m.shardStateFilter = ""
@@ -134,7 +165,9 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "UNASSIGNED"
 			}
 			m.selectedIndex = 0
+			m.selectedNode = 0
 			m.scrollX = 0
+			m.scrollY = 0
 		case "R":
 			if m.shardStateFilter == "RELOCATING" {
 				m.shardStateFilter = ""
@@ -142,7 +175,9 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "RELOCATING"
 			}
 			m.selectedIndex = 0
+			m.selectedNode = 0
 			m.scrollX = 0
+			m.scrollY = 0
 		case "I":
 			if m.shardStateFilter == "INITIALIZING" {
 				m.shardStateFilter = ""
@@ -150,32 +185,54 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "INITIALIZING"
 			}
 			m.selectedIndex = 0
+			m.selectedNode = 0
 			m.scrollX = 0
+			m.scrollY = 0
 		case ".":
 			m.showSystem = !m.showSystem
 			m.selectedIndex = 0
+			m.selectedNode = 0
 			m.scrollX = 0
+			m.scrollY = 0
 		case "up", "k":
-			if m.scrollY > 0 {
-				m.scrollY--
+			nodes := m.getNodeList()
+			if m.selectedNode > 0 {
+				m.selectedNode--
+				if m.selectedNode < m.scrollY {
+					m.scrollY = m.selectedNode
+				}
+			}
+			if m.selectedNode >= len(nodes) {
+				m.selectedNode = len(nodes) - 1
 			}
 		case "down", "j":
-			maxScrollY := m.maxScrollY()
-			if m.scrollY < maxScrollY {
-				m.scrollY++
+			nodes := m.getNodeList()
+			if m.selectedNode < len(nodes)-1 {
+				m.selectedNode++
+				maxVisible := m.maxVisibleNodes()
+				if m.selectedNode >= m.scrollY+maxVisible {
+					m.scrollY = m.selectedNode - maxVisible + 1
+				}
 			}
 		case "pgup":
 			pageSize := m.maxVisibleNodes()
-			m.scrollY -= pageSize
-			if m.scrollY < 0 {
-				m.scrollY = 0
+			m.selectedNode -= pageSize
+			if m.selectedNode < 0 {
+				m.selectedNode = 0
+			}
+			if m.selectedNode < m.scrollY {
+				m.scrollY = m.selectedNode
 			}
 		case "pgdown":
+			nodes := m.getNodeList()
 			pageSize := m.maxVisibleNodes()
-			maxScrollY := m.maxScrollY()
-			m.scrollY += pageSize
-			if m.scrollY > maxScrollY {
-				m.scrollY = maxScrollY
+			m.selectedNode += pageSize
+			if m.selectedNode >= len(nodes) {
+				m.selectedNode = len(nodes) - 1
+			}
+			maxVisible := m.maxVisibleNodes()
+			if m.selectedNode >= m.scrollY+maxVisible {
+				m.scrollY = m.selectedNode - maxVisible + 1
 			}
 		case "left", "h":
 			if m.selectedIndex > 0 {
@@ -201,7 +258,9 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 					alias := aliases[idx]
 					m.aliasFilters[alias] = !m.aliasFilters[alias]
 					m.selectedIndex = 0
+					m.selectedNode = 0
 					m.scrollX = 0
+					m.scrollY = 0
 				}
 			}
 		case "c":
@@ -224,19 +283,16 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
 		case "enter":
+			if m.shardInfo != nil {
+				m.shardInfo = nil
+				m.allocationExplain = nil
+				return m, nil
+			}
 			if m.allocationExplain != nil {
 				m.allocationExplain = nil
 				return m, nil
 			}
-			if m.SelectedIndex() != "" && m.cluster != nil {
-				unassigned := m.cluster.GetUnassignedShardsForIndex(m.SelectedIndex())
-				if len(unassigned) > 0 {
-					m.allocationLoading = true
-					shard := unassigned[0]
-					shardNum, _ := strconv.Atoi(shard.Shard)
-					return m, m.fetchAllocationExplain(m.SelectedIndex(), shardNum, shard.Primary)
-				}
-			}
+			return m.handleCellEnter()
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
@@ -477,6 +533,79 @@ func (m OverviewModel) indexHasShardsInState(indexName, state string) bool {
 	return false
 }
 
+func (m OverviewModel) getNodeList() []es.NodeInfo {
+	if m.cluster == nil {
+		return nil
+	}
+	nodes := m.cluster.Nodes
+	hasUnassigned := false
+	indices := m.filteredIndices()
+	for _, idx := range indices {
+		if len(m.cluster.GetUnassignedShardsForIndex(idx.Name)) > 0 {
+			hasUnassigned = true
+			break
+		}
+	}
+	if hasUnassigned {
+		nodes = append(nodes, es.NodeInfo{Name: "Unassigned"})
+	}
+	return nodes
+}
+
+func (m OverviewModel) handleCellEnter() (OverviewModel, tea.Cmd) {
+	if m.cluster == nil {
+		return m, nil
+	}
+
+	indices := m.filteredIndices()
+	if m.selectedIndex < 0 || m.selectedIndex >= len(indices) {
+		return m, nil
+	}
+	indexName := indices[m.selectedIndex].Name
+
+	nodes := m.getNodeList()
+	if m.selectedNode < 0 || m.selectedNode >= len(nodes) {
+		return m, nil
+	}
+	nodeName := nodes[m.selectedNode].Name
+
+	var shards []es.ShardInfo
+	if nodeName == "Unassigned" {
+		shards = m.cluster.GetUnassignedShardsForIndex(indexName)
+	} else {
+		shards = m.cluster.GetShardsForIndexAndNode(indexName, nodeName)
+	}
+
+	if len(shards) == 0 {
+		return m, nil
+	}
+
+	if len(shards) == 1 {
+		return m.showShardInfo(&shards[0])
+	}
+
+	m.shardPicker = NewShardPicker(shards)
+	return m, nil
+}
+
+func (m OverviewModel) showShardInfo(sh *es.ShardInfo) (OverviewModel, tea.Cmd) {
+	m.shardInfo = sh
+	if sh.State == "UNASSIGNED" || sh.State == "RELOCATING" || sh.State == "INITIALIZING" {
+		m.allocationLoading = true
+		shardNum, _ := strconv.Atoi(sh.Shard)
+		return m, m.fetchAllocationExplain(sh.Index, shardNum, sh.Primary)
+	}
+	return m, nil
+}
+
+func (m OverviewModel) SelectedNode() string {
+	nodes := m.getNodeList()
+	if m.selectedNode >= 0 && m.selectedNode < len(nodes) {
+		return nodes[m.selectedNode].Name
+	}
+	return ""
+}
+
 func (m OverviewModel) SelectedIndex() string {
 	indices := m.filteredIndices()
 	if m.selectedIndex >= 0 && m.selectedIndex < len(indices) {
@@ -486,7 +615,7 @@ func (m OverviewModel) SelectedIndex() string {
 }
 
 func (m OverviewModel) HasModal() bool {
-	return m.modal != nil || m.allocationExplain != nil
+	return m.modal != nil || m.allocationExplain != nil || m.shardPicker != nil || m.shardInfo != nil
 }
 
 func (m OverviewModel) visibleColumns() int {
@@ -524,6 +653,10 @@ func (m OverviewModel) maxVisibleNodes() int {
 func (m OverviewModel) View() string {
 	if m.cluster == nil {
 		return "Loading cluster state..."
+	}
+
+	if m.shardInfo != nil {
+		return RenderShardInfoModal(m.shardInfo, m.allocationExplain, m.width, m.height)
 	}
 
 	if m.allocationExplain != nil {
@@ -602,6 +735,12 @@ func (m OverviewModel) View() string {
 	// Shard color legend
 	b.WriteString("\n\n")
 	b.WriteString(m.renderShardLegend())
+
+	// Shard picker overlay
+	if m.shardPicker != nil {
+		b.WriteString("\n")
+		b.WriteString(m.shardPicker.View())
+	}
 
 	if m.modal != nil {
 		return m.modal.View(m.width, m.height)
@@ -717,18 +856,23 @@ func (m OverviewModel) renderGrid() string {
 	}
 
 	nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
+	selectedNodeStyle := lipgloss.NewStyle().Width(nodeColWidth).Background(ColorBlue).Foreground(ColorOnAccent)
 	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
 
 	maxLinesPerNode := 4
 
-	for _, node := range visibleNodes[:maxRows] {
+	for rowIdx, node := range visibleNodes[:maxRows] {
+		actualNodeIdx := m.scrollY + rowIdx
+		isSelectedNode := actualNodeIdx == m.selectedNode
+
 		var shardLines [][]string
 		maxLines := 2
 
 		for i, idx := range indices {
 			if i >= m.scrollX && i < m.scrollX+visibleCols {
 				shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
-				lines := m.renderShardBoxes(shards, indexColWidth)
+				isSelectedCell := isSelectedNode && i == m.selectedIndex
+				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell)
 				shardLines = append(shardLines, lines)
 				if len(lines) > maxLines {
 					maxLines = len(lines)
@@ -742,14 +886,25 @@ func (m OverviewModel) renderGrid() string {
 
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
 			if lineIdx == 0 {
-				b.WriteString(nodeStyle.Render(Truncate(node.Name, nodeColWidth-2)))
+				style := nodeStyle
+				if isSelectedNode {
+					style = selectedNodeStyle
+				}
+				b.WriteString(style.Render(Truncate(node.Name, nodeColWidth-2)))
 				b.WriteString("│ ")
 			} else if lineIdx == 1 {
 				versionStyle := lipgloss.NewStyle().Width(nodeColWidth).Foreground(ColorGray)
+				if isSelectedNode {
+					versionStyle = versionStyle.Background(ColorBlue).Foreground(ColorOnAccent)
+				}
 				b.WriteString(versionStyle.Render(node.Version))
 				b.WriteString("│ ")
 			} else {
-				b.WriteString(nodeStyle.Render(""))
+				style := nodeStyle
+				if isSelectedNode {
+					style = selectedNodeStyle
+				}
+				b.WriteString(style.Render(""))
 				b.WriteString("│ ")
 			}
 
@@ -776,13 +931,17 @@ func (m OverviewModel) renderGrid() string {
 	if hasUnassigned {
 		b.WriteString(strings.Repeat("─", contentWidth) + "\n")
 
+		unassignedNodeIdx := len(nodes)
+		isSelectedUnassigned := m.selectedNode == unassignedNodeIdx
+
 		var shardLines [][]string
 		maxLines := 1
 
 		for i, idx := range indices {
 			if i >= m.scrollX && i < m.scrollX+visibleCols {
 				shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
-				lines := m.renderShardBoxes(shards, indexColWidth)
+				isSelectedCell := isSelectedUnassigned && i == m.selectedIndex
+				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell)
 				shardLines = append(shardLines, lines)
 				if len(lines) > maxLines {
 					maxLines = len(lines)
@@ -791,12 +950,19 @@ func (m OverviewModel) renderGrid() string {
 		}
 
 		unassignedStyle := lipgloss.NewStyle().Width(nodeColWidth).Foreground(ColorRed)
+		if isSelectedUnassigned {
+			unassignedStyle = unassignedStyle.Background(ColorBlue).Foreground(ColorOnAccent)
+		}
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
 			if lineIdx == 0 {
 				b.WriteString(unassignedStyle.Render("Unassigned"))
 				b.WriteString("│ ")
 			} else {
-				b.WriteString(nodeStyle.Render(""))
+				style := nodeStyle
+				if isSelectedUnassigned {
+					style = selectedNodeStyle
+				}
+				b.WriteString(style.Render(""))
 				b.WriteString("│ ")
 			}
 
@@ -848,8 +1014,11 @@ func (m OverviewModel) renderShardLegend() string {
 		redBadge + grayStyle.Render(" Unassigned")
 }
 
-func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []string {
+func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool) []string {
 	if len(shards) == 0 {
+		if highlight {
+			return []string{lipgloss.NewStyle().Width(width).Background(lipgloss.Color("#333333")).Render("")}
+		}
 		return []string{lipgloss.NewStyle().Width(width).Render("")}
 	}
 
@@ -877,18 +1046,27 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 			fgColor = lipgloss.Color("#000000")
 		}
 
-		styledShard := lipgloss.NewStyle().
+		style := lipgloss.NewStyle().
 			Foreground(fgColor).
 			Background(bgColor).
 			Bold(true).
 			Width(4).
 			Align(lipgloss.Center).
-			MarginRight(1).
-			Render(sh.Shard)
+			MarginRight(1)
+
+		if highlight {
+			style = style.Underline(true)
+		}
+
+		styledShard := style.Render(sh.Shard)
 		shardWidth := lipgloss.Width(styledShard)
 
 		if currentWidth+shardWidth > width && len(currentLine) > 0 {
-			lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
+			lineStyle := lipgloss.NewStyle().Width(width)
+			if highlight {
+				lineStyle = lineStyle.Background(lipgloss.Color("#333333"))
+			}
+			lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
 			currentLine = nil
 			currentWidth = 0
 		}
@@ -898,11 +1076,19 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 	}
 
 	if len(currentLine) > 0 {
-		lines = append(lines, lipgloss.NewStyle().Width(width).Render(strings.Join(currentLine, "")))
+		lineStyle := lipgloss.NewStyle().Width(width)
+		if highlight {
+			lineStyle = lineStyle.Background(lipgloss.Color("#333333"))
+		}
+		lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
 	}
 
 	if len(lines) == 0 {
-		lines = []string{lipgloss.NewStyle().Width(width).Render("")}
+		if highlight {
+			lines = []string{lipgloss.NewStyle().Width(width).Background(lipgloss.Color("#333333")).Render("")}
+		} else {
+			lines = []string{lipgloss.NewStyle().Width(width).Render("")}
+		}
 	}
 
 	return lines

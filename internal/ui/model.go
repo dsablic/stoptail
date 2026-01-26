@@ -539,7 +539,7 @@ func (m Model) View() string {
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
-		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: select  ↑↓: scroll  Enter: explain  .: system"
+		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: index  ↑↓: node  Enter: shard info  .: system"
 		if m.overview.showSystem {
 			statusText += " [on]"
 		}
