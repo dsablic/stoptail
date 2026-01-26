@@ -1034,7 +1034,7 @@ func threadTypeColor(threadType string) lipgloss.Color {
 		return ColorBlue
 	case "write", "bulk", "index":
 		return ColorGreen
-	case "merge", "refresh", "flush", "force_merge":
+	case "merge", "refresh", "flush", "force_merge", "warmer":
 		return ColorYellow
 	case "management", "generic":
 		return ColorGray
