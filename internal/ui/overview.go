@@ -20,23 +20,29 @@ type IndexCreatedMsg struct{ Err error }
 type IndexDeletedMsg struct{ Err error }
 type AliasAddedMsg struct{ Err error }
 type AliasRemovedMsg struct{ Err error }
+type AllocationExplainMsg struct {
+	Result *es.AllocationExplain
+	Err    error
+}
 
 type OverviewModel struct {
-	cluster          *es.ClusterState
-	client           *es.Client
-	filter           textinput.Model
-	filterActive     bool
-	aliasFilters     map[string]bool
-	shardStateFilter string
-	showSystem       bool
-	scrollX          int
-	scrollY          int
-	selectedIndex    int
-	width            int
-	height           int
-	modal            *Modal
-	spinner          spinner.Model
-	operationMsg     string
+	cluster            *es.ClusterState
+	client             *es.Client
+	filter             textinput.Model
+	filterActive       bool
+	aliasFilters       map[string]bool
+	shardStateFilter   string
+	showSystem         bool
+	scrollX            int
+	scrollY            int
+	selectedIndex      int
+	width              int
+	height             int
+	modal              *Modal
+	spinner            spinner.Model
+	operationMsg       string
+	allocationExplain  *es.AllocationExplain
+	allocationLoading  bool
 }
 
 func NewOverview() OverviewModel {
@@ -113,6 +119,10 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.filter.Focus()
 			return m, textinput.Blink
 		case "esc":
+			if m.allocationExplain != nil {
+				m.allocationExplain = nil
+				return m, nil
+			}
 			m.filter.SetValue("")
 			m.aliasFilters = make(map[string]bool)
 			m.shardStateFilter = ""
@@ -213,6 +223,20 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.modal = NewRemoveAliasModal(m.SelectedIndex(), aliases)
 				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
+		case "enter":
+			if m.allocationExplain != nil {
+				m.allocationExplain = nil
+				return m, nil
+			}
+			if m.SelectedIndex() != "" && m.cluster != nil {
+				unassigned := m.cluster.GetUnassignedShardsForIndex(m.SelectedIndex())
+				if len(unassigned) > 0 {
+					m.allocationLoading = true
+					shard := unassigned[0]
+					shardNum, _ := strconv.Atoi(shard.Shard)
+					return m, m.fetchAllocationExplain(m.SelectedIndex(), shardNum, shard.Primary)
+				}
+			}
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
@@ -257,6 +281,14 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.modal = NewErrorModal(msg.Err.Error())
 			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
+		return m, nil
+	case AllocationExplainMsg:
+		m.allocationLoading = false
+		if msg.Err != nil {
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
+		}
+		m.allocationExplain = msg.Result
 		return m, nil
 	}
 	return m, nil
@@ -355,6 +387,16 @@ func (m OverviewModel) removeAliasCmd(index, alias string) tea.Cmd {
 	}
 }
 
+func (m OverviewModel) fetchAllocationExplain(index string, shard int, primary bool) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return AllocationExplainMsg{Err: fmt.Errorf("no client")}
+		}
+		result, err := m.client.FetchAllocationExplain(context.Background(), index, shard, primary)
+		return AllocationExplainMsg{Result: result, Err: err}
+	}
+}
+
 func (m OverviewModel) filteredIndices() []es.IndexInfo {
 	if m.cluster == nil {
 		return nil
@@ -444,7 +486,7 @@ func (m OverviewModel) SelectedIndex() string {
 }
 
 func (m OverviewModel) HasModal() bool {
-	return m.modal != nil
+	return m.modal != nil || m.allocationExplain != nil
 }
 
 func (m OverviewModel) visibleColumns() int {
@@ -482,6 +524,10 @@ func (m OverviewModel) maxVisibleNodes() int {
 func (m OverviewModel) View() string {
 	if m.cluster == nil {
 		return "Loading cluster state..."
+	}
+
+	if m.allocationExplain != nil {
+		return m.renderAllocationExplainModal()
 	}
 
 	var b strings.Builder
@@ -860,5 +906,41 @@ func (m OverviewModel) renderShardBoxes(shards []es.ShardInfo, width int) []stri
 	}
 
 	return lines
+}
+
+func (m OverviewModel) renderAllocationExplainModal() string {
+	ae := m.allocationExplain
+
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
+
+	shardType := "replica"
+	if ae.Primary {
+		shardType = "primary"
+	}
+
+	content := strings.Join([]string{
+		labelStyle.Render("Index:    ") + valueStyle.Render(ae.Index),
+		labelStyle.Render("Shard:    ") + valueStyle.Render(fmt.Sprintf("%d (%s)", ae.Shard, shardType)),
+		labelStyle.Render("State:    ") + valueStyle.Render(ae.CurrentState),
+		"",
+		labelStyle.Render("Reason:   ") + valueStyle.Render(ae.UnassignedReason),
+		labelStyle.Render("Status:   ") + valueStyle.Render(ae.AllocationStatus),
+		"",
+		labelStyle.Render("Details:"),
+		valueStyle.Render(ae.ExplanationDetail),
+	}, "\n")
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2).
+		Width(60)
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
 

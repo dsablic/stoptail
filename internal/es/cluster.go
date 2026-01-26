@@ -94,6 +94,16 @@ type TaskInfo struct {
 	Cancellable   bool
 }
 
+type AllocationExplain struct {
+	Index             string
+	Shard             int
+	Primary           bool
+	CurrentState      string
+	UnassignedReason  string
+	AllocationStatus  string
+	ExplanationDetail string
+}
+
 type MappingField struct {
 	Name       string
 	Type       string
@@ -818,6 +828,74 @@ func (c *Client) RemoveAlias(ctx context.Context, index, alias string) error {
 		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
 	}
 	return nil
+}
+
+func (c *Client) FetchAllocationExplain(ctx context.Context, index string, shard int, primary bool) (*AllocationExplain, error) {
+	body := fmt.Sprintf(`{"index":"%s","shard":%d,"primary":%t}`, index, shard, primary)
+	res, err := c.es.Cluster.AllocationExplain(
+		c.es.Cluster.AllocationExplain.WithContext(ctx),
+		c.es.Cluster.AllocationExplain.WithBody(strings.NewReader(body)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching allocation explain: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		respBody, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(respBody))
+	}
+
+	respBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading allocation explain response: %w", err)
+	}
+
+	return parseAllocationExplain(respBody)
+}
+
+func parseAllocationExplain(data []byte) (*AllocationExplain, error) {
+	var response struct {
+		Index                    string `json:"index"`
+		Shard                    int    `json:"shard"`
+		Primary                  bool   `json:"primary"`
+		CurrentState             string `json:"current_state"`
+		UnassignedInfo           *struct {
+			Reason string `json:"reason"`
+			At     string `json:"at"`
+		} `json:"unassigned_info"`
+		CanAllocate              string `json:"can_allocate"`
+		AllocateExplanation      string `json:"allocate_explanation"`
+		CanMoveToOtherNode       string `json:"can_move_to_other_node"`
+		MoveExplanation          string `json:"move_explanation"`
+		CanRebalanceCluster      string `json:"can_rebalance_cluster"`
+		RebalanceExplanation     string `json:"rebalance_explanation"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parsing allocation explain: %w", err)
+	}
+
+	result := &AllocationExplain{
+		Index:        response.Index,
+		Shard:        response.Shard,
+		Primary:      response.Primary,
+		CurrentState: response.CurrentState,
+	}
+
+	if response.UnassignedInfo != nil {
+		result.UnassignedReason = response.UnassignedInfo.Reason
+	}
+
+	if response.CanAllocate != "" {
+		result.AllocationStatus = response.CanAllocate
+		result.ExplanationDetail = response.AllocateExplanation
+	} else if response.CanMoveToOtherNode != "" {
+		result.AllocationStatus = response.CanMoveToOtherNode
+		result.ExplanationDetail = response.MoveExplanation
+	}
+
+	return result, nil
 }
 
 func parseTasksResponse(data []byte) ([]TaskInfo, error) {

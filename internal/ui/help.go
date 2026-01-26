@@ -24,7 +24,7 @@ var helpOverview = `## Overview
 | / | Filter indices |
 | Esc | Clear filters |
 | arrows | Navigate |
-| Enter | Open in Workbench |
+| Enter | Allocation explain |
 | 1-9 | Toggle alias |
 | U/R/I | Shard states |
 | . | Toggle system indices |
