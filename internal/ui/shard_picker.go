@@ -8,17 +8,36 @@ import (
 	"github.com/labtiva/stoptail/internal/es"
 )
 
-const shardsPerRow = 16
-
 type ShardPicker struct {
-	shards   []es.ShardInfo
-	selected int
+	shards       []es.ShardInfo
+	selected     int
+	width        int
+	height       int
+	shardsPerRow int
+	scrollY      int
 }
 
-func NewShardPicker(shards []es.ShardInfo) *ShardPicker {
-	return &ShardPicker{
+func NewShardPicker(shards []es.ShardInfo, width, height int) *ShardPicker {
+	p := &ShardPicker{
 		shards:   shards,
 		selected: 0,
+	}
+	p.SetSize(width, height)
+	return p
+}
+
+func (p *ShardPicker) SetSize(width, height int) {
+	p.width = width
+	p.height = height
+	shardWidth := 5
+	maxPickerWidth := width - 6
+	if maxPickerWidth < shardWidth {
+		p.shardsPerRow = 4
+		return
+	}
+	p.shardsPerRow = maxPickerWidth / shardWidth
+	if p.shardsPerRow > 20 {
+		p.shardsPerRow = 20
 	}
 }
 
@@ -35,14 +54,14 @@ func (p *ShardPicker) Left() {
 }
 
 func (p *ShardPicker) Down() {
-	next := p.selected + shardsPerRow
+	next := p.selected + p.shardsPerRow
 	if next < len(p.shards) {
 		p.selected = next
 	}
 }
 
 func (p *ShardPicker) Up() {
-	next := p.selected - shardsPerRow
+	next := p.selected - p.shardsPerRow
 	if next >= 0 {
 		p.selected = next
 	}
@@ -88,7 +107,7 @@ func (p *ShardPicker) View() string {
 
 		currentRow = append(currentRow, style.Render(sh.Shard))
 
-		if len(currentRow) >= shardsPerRow {
+		if len(currentRow) >= p.shardsPerRow {
 			rows = append(rows, strings.Join(currentRow, " "))
 			currentRow = nil
 		}
@@ -97,14 +116,42 @@ func (p *ShardPicker) View() string {
 		rows = append(rows, strings.Join(currentRow, " "))
 	}
 
-	content := strings.Join(rows, "\n")
+	pickerChrome := 8
+	maxVisibleRows := p.height - pickerChrome
+	if maxVisibleRows < 3 {
+		maxVisibleRows = 3
+	}
+
+	selectedRow := p.selected / p.shardsPerRow
+	if selectedRow < p.scrollY {
+		p.scrollY = selectedRow
+	}
+	if selectedRow >= p.scrollY+maxVisibleRows {
+		p.scrollY = selectedRow - maxVisibleRows + 1
+	}
+
+	visibleRows := rows
+	if len(rows) > maxVisibleRows {
+		endY := p.scrollY + maxVisibleRows
+		if endY > len(rows) {
+			endY = len(rows)
+		}
+		visibleRows = rows[p.scrollY:endY]
+	}
+
+	content := strings.Join(visibleRows, "\n")
+
+	scrollIndicator := ""
+	if len(rows) > maxVisibleRows {
+		scrollIndicator = fmt.Sprintf(" [%d-%d of %d rows]", p.scrollY+1, p.scrollY+len(visibleRows), len(rows))
+	}
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorBlue).
 		Padding(0, 1)
 
-	hint := lipgloss.NewStyle().Foreground(ColorGray).Render("[arrows select, Enter confirm, Esc cancel]")
+	hint := lipgloss.NewStyle().Foreground(ColorGray).Render("[arrows select, Enter confirm, Esc cancel]" + scrollIndicator)
 
 	return boxStyle.Render(content + "\n" + hint)
 }

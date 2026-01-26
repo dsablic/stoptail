@@ -139,6 +139,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			case "enter":
 				sh := m.shardPicker.Selected()
 				if sh != nil {
+					m.shardPicker = nil
 					return m.showShardInfo(sh)
 				}
 				return m, nil
@@ -353,6 +354,9 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		return m, nil
 	case AllocationExplainMsg:
 		m.allocationLoading = false
+		if m.shardInfo == nil {
+			return m, nil
+		}
 		if msg.Err != nil {
 			m.modal = NewErrorModal(msg.Err.Error())
 			return m, func() tea.Msg { return ModalInitMsg{} }
@@ -620,7 +624,7 @@ func (m OverviewModel) handleCellEnter() (OverviewModel, tea.Cmd) {
 		return m.showShardInfo(&shards[0])
 	}
 
-	m.shardPicker = NewShardPicker(shards)
+	m.shardPicker = NewShardPicker(shards, m.width, m.height)
 	return m, nil
 }
 
@@ -628,8 +632,11 @@ func (m OverviewModel) showShardInfo(sh *es.ShardInfo) (OverviewModel, tea.Cmd) 
 	m.shardInfo = sh
 	m.recoveryInfo = nil
 	if sh.State == "UNASSIGNED" || sh.State == "RELOCATING" || sh.State == "INITIALIZING" {
+		shardNum, err := strconv.Atoi(sh.Shard)
+		if err != nil {
+			return m, nil
+		}
 		m.allocationLoading = true
-		shardNum, _ := strconv.Atoi(sh.Shard)
 		cmds := []tea.Cmd{m.fetchAllocationExplain(sh.Index, shardNum, sh.Primary)}
 		if sh.State == "RELOCATING" || sh.State == "INITIALIZING" {
 			cmds = append(cmds, m.fetchRecovery(sh.Index, sh.Shard))
@@ -765,12 +772,6 @@ func (m OverviewModel) View() string {
 	b.WriteString("\n\n")
 	b.WriteString(m.renderShardLegend())
 
-	// Shard picker overlay
-	if m.shardPicker != nil {
-		b.WriteString("\n")
-		b.WriteString(m.shardPicker.View())
-	}
-
 	if m.modal != nil {
 		return m.modal.View(m.width, m.height)
 	}
@@ -785,7 +786,13 @@ func (m OverviewModel) View() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 	}
 
-	return b.String()
+	background := b.String()
+
+	if m.shardPicker != nil {
+		return OverlayModal(background, m.shardPicker.View(), m.width, m.height)
+	}
+
+	return background
 }
 
 func (m OverviewModel) renderGrid() string {

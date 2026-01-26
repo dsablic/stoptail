@@ -75,6 +75,45 @@ func RenderBar(percent float64, width int) string {
 	return b.String()
 }
 
+func OverlayModal(background, modal string, width, height int) string {
+	bgLines := strings.Split(background, "\n")
+	modalLines := strings.Split(modal, "\n")
+
+	for len(bgLines) < height {
+		bgLines = append(bgLines, strings.Repeat(" ", width))
+	}
+
+	modalHeight := len(modalLines)
+	startY := (height - modalHeight) / 2
+	if startY < 0 {
+		startY = 0
+	}
+
+	dimStyle := lipgloss.NewStyle().Faint(true)
+	result := make([]string, len(bgLines))
+	for i, line := range bgLines {
+		result[i] = dimStyle.Render(line)
+	}
+
+	for i, modalLine := range modalLines {
+		y := startY + i
+		if y >= 0 && y < len(result) {
+			lineWidth := lipgloss.Width(modalLine)
+			padLeft := (width - lineWidth) / 2
+			if padLeft < 0 {
+				padLeft = 0
+			}
+			result[y] = strings.Repeat(" ", padLeft) + modalLine
+		}
+	}
+
+	if len(result) > height {
+		result = result[:height]
+	}
+
+	return strings.Join(result, "\n")
+}
+
 func FormatNumber(s string) string {
 	if s == "" || s == "-" {
 		return s

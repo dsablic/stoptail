@@ -160,7 +160,7 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 		case "enter":
 			if m.activePane == BrowserPaneIndices {
 				m.activePane = BrowserPaneDocs
-				return m, m.fetchDocuments(false)
+				return m, m.startFetchDocuments(false)
 			}
 		case "up", "k":
 			m.handleUp()
@@ -225,7 +225,7 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyMsg) (BrowserModel, tea.Cmd) 
 		m.selectedIndex = 0
 		m.indexScroll = 0
 		if msg.String() == "enter" {
-			return m, m.fetchDocuments(false)
+			return m, m.startFetchDocuments(false)
 		}
 	case "backspace":
 		if len(m.filterText) > 0 {
@@ -284,7 +284,7 @@ func (m *BrowserModel) handleDown() tea.Cmd {
 			m.updateDetailPane()
 
 			if m.shouldLoadMore() {
-				return m.fetchDocuments(true)
+				return m.startFetchDocuments(true)
 			}
 		}
 	case BrowserPaneDetail:
@@ -298,7 +298,7 @@ func (m *BrowserModel) scrollDocsDown(amount int) tea.Cmd {
 	m.docScroll = min(maxScroll, m.docScroll+amount)
 
 	if m.shouldLoadMore() {
-		return m.fetchDocuments(true)
+		return m.startFetchDocuments(true)
 	}
 	return nil
 }
@@ -356,7 +356,7 @@ func (m *BrowserModel) handlePageDown() tea.Cmd {
 		m.updateDetailPane()
 
 		if m.shouldLoadMore() {
-			return m.fetchDocuments(true)
+			return m.startFetchDocuments(true)
 		}
 	case BrowserPaneDetail:
 		m.detail.ScrollDown(m.detail.Height)
@@ -399,7 +399,7 @@ func (m BrowserModel) selectedDocSource() string {
 	return doc.Source
 }
 
-func (m BrowserModel) fetchDocuments(append bool) tea.Cmd {
+func (m *BrowserModel) startFetchDocuments(appendDocs bool) tea.Cmd {
 	index := m.selectedIndexName()
 	if index == "" || m.client == nil {
 		return nil
@@ -407,7 +407,7 @@ func (m BrowserModel) fetchDocuments(append bool) tea.Cmd {
 
 	m.loading = true
 	var after []any
-	if append {
+	if appendDocs {
 		after = m.searchAfter
 	} else {
 		m.documents = nil
@@ -415,9 +415,10 @@ func (m BrowserModel) fetchDocuments(append bool) tea.Cmd {
 		m.hasMore = true
 	}
 
+	client := m.client
 	return func() tea.Msg {
-		result, err := m.client.SearchDocuments(context.Background(), index, after, browserPageSize)
-		return browserSearchMsg{result: result, err: err, append: append}
+		result, err := client.SearchDocuments(context.Background(), index, after, browserPageSize)
+		return browserSearchMsg{result: result, err: err, append: appendDocs}
 	}
 }
 

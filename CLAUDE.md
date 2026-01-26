@@ -215,6 +215,7 @@ Common utility functions are in `internal/ui/utils.go` to avoid duplication:
 - `Truncate(s string, maxLen int) string` - Unicode-safe string truncation with ellipsis
 - `TrimANSI(s string) string` - Trim trailing spaces and ANSI reset codes for side-by-side panes
 - `HealthColor(health string) lipgloss.Color` - Map ES health status to colors
+- `OverlayModal(background, modal string, width, height int) string` - Overlay a centered modal on dimmed background
 
 **ES utilities** (`internal/es/cluster.go`):
 - `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first
