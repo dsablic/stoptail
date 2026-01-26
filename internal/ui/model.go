@@ -47,6 +47,7 @@ type nodesStateMsg struct{ state *es.NodesState }
 type clusterSettingsMsg struct{ settings *es.ClusterSettings }
 type threadPoolsMsg struct{ pools []es.ThreadPoolInfo }
 type tasksMsg struct{ tasks []es.TaskInfo }
+type pendingTasksMsg struct{ tasks []es.PendingTask }
 type taskCancelledMsg struct{ err error }
 type pulseTickMsg struct{}
 type mappingsMsg struct {
@@ -190,6 +191,17 @@ func (m Model) fetchTasks() tea.Cmd {
 	}
 }
 
+func (m Model) fetchPendingTasks() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		tasks, err := m.client.FetchPendingTasks(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return pendingTasksMsg{tasks}
+	}
+}
+
 func (m Model) fetchMappings(indexName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -250,6 +262,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tasksMsg:
 		m.loading = false
 		m.tasks.SetTasks(msg.tasks)
+	case pendingTasksMsg:
+		m.tasks.SetPendingTasks(msg.tasks)
 	case mappingsMsg:
 		m.loading = false
 		if msg.err != nil {
@@ -278,7 +292,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			m.loading = true
-			return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+			return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 		}
 	case taskCancelRequestMsg:
 		return m, m.cancelTask(msg.taskID)
@@ -306,7 +320,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabNodes:
 					return m, tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
 				case TabTasks:
-					return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+					return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				}
 			case "b":
 				m.workbench.Blur()
@@ -344,7 +358,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
 				case TabNodes:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
+					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				case TabTasks:
 					return m, m.switchTab(TabOverview)
 				}
@@ -365,7 +379,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.switchTab(TabBrowser)
 				case TabOverview:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks())
+					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				case TabTasks:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
@@ -436,7 +450,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab = TabTasks
 					m.workbench.Blur()
 					m.loading = true
-					return m, tea.Batch(m.spinner.Tick, m.fetchTasks())
+					return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				}
 				return m, nil
 			}

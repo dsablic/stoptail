@@ -154,6 +154,15 @@ type ThreadPoolInfo struct {
 	PoolType  string `json:"type"`
 }
 
+type PendingTask struct {
+	InsertOrder       int    `json:"insert_order"`
+	Priority          string `json:"priority"`
+	Source            string `json:"source"`
+	Executing         bool   `json:"executing"`
+	TimeInQueueMillis int64  `json:"time_in_queue_millis"`
+	TimeInQueue       string `json:"time_in_queue"`
+}
+
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
 	sort.Slice(shards, func(i, j int) bool {
 		if shards[i].Index != shards[j].Index {
@@ -1329,5 +1338,34 @@ func (c *Client) FetchThreadPools(ctx context.Context) ([]ThreadPoolInfo, error)
 	})
 
 	return pools, nil
+}
+
+func (c *Client) FetchPendingTasks(ctx context.Context) ([]PendingTask, error) {
+	res, err := c.es.Cluster.PendingTasks(
+		c.es.Cluster.PendingTasks.WithContext(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching pending tasks: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading pending tasks response: %w", err)
+	}
+
+	var response struct {
+		Tasks []PendingTask `json:"tasks"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing pending tasks: %w", err)
+	}
+
+	return response.Tasks, nil
 }
 

@@ -35,9 +35,10 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Fielddata: per-node/index/field fielddata breakdown
   - Cluster: cluster settings (persistent, transient, defaults)
   - Threads: thread pool stats (active, queue, rejected, completed)
-- **Tasks Tab**: Monitor long-running operations
+- **Tasks Tab**: Monitor long-running and pending operations
   - Reindex, update-by-query, delete-by-query tracking
   - Force merge and snapshot operations
+  - Pending cluster tasks (create index, update mapping, etc.)
   - Cancel with confirmation
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
 - **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`

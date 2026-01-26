@@ -11,6 +11,7 @@ import (
 
 type TasksModel struct {
 	tasks        []es.TaskInfo
+	pendingTasks []es.PendingTask
 	selectedRow  int
 	scrollY      int
 	width        int
@@ -34,6 +35,10 @@ func (m *TasksModel) SetTasks(tasks []es.TaskInfo) {
 	if m.selectedRow >= len(tasks) {
 		m.selectedRow = max(0, len(tasks)-1)
 	}
+}
+
+func (m *TasksModel) SetPendingTasks(tasks []es.PendingTask) {
+	m.pendingTasks = tasks
 }
 
 func (m *TasksModel) SetSize(width, height int) {
@@ -193,15 +198,24 @@ func (m TasksModel) View() string {
 		return "Loading tasks..."
 	}
 
-	if len(m.tasks) == 0 {
-		return lipgloss.NewStyle().
-			Foreground(ColorGray).
-			Padding(2).
-			Render("No long-running tasks found.\n\nThis view shows: reindex, update-by-query, delete-by-query,\nforce merge, and snapshot operations.")
-	}
-
 	if m.showingModal {
 		return m.renderDetailsModal()
+	}
+
+	var sections []string
+
+	if len(m.pendingTasks) > 0 {
+		sections = append(sections, m.renderPendingTasks())
+	}
+
+	if len(m.tasks) == 0 {
+		if len(sections) == 0 {
+			return lipgloss.NewStyle().
+				Foreground(ColorGray).
+				Padding(2).
+				Render("No tasks found.\n\nThis view shows long-running tasks (reindex, update-by-query, etc.)\nand pending cluster tasks.")
+		}
+		return strings.Join(sections, "\n\n")
 	}
 
 	maxVisible := m.maxVisibleRows()
@@ -263,11 +277,14 @@ func (m TasksModel) View() string {
 		content += "\n\n" + lipgloss.NewStyle().Foreground(ColorYellow).Render("Cancel this task? Press 'y' to confirm, 'n' or Esc to abort")
 	}
 
+	sections = append(sections, content)
+
+	result := strings.Join(sections, "\n\n")
 	if m.search.Active() {
-		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
+		result = lipgloss.JoinVertical(lipgloss.Left, result, m.search.View(m.width-4))
 	}
 
-	return content
+	return result
 }
 
 
@@ -319,5 +336,49 @@ func (m TasksModel) renderDetailsModal() string {
 
 func (m TasksModel) HasModal() bool {
 	return m.showingModal
+}
+
+func (m TasksModel) renderPendingTasks() string {
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorYellow).
+		Render("Pending Cluster Tasks")
+
+	var rows [][]string
+	for _, task := range m.pendingTasks {
+		executing := "-"
+		if task.Executing {
+			executing = "yes"
+		}
+		rows = append(rows, []string{
+			task.Priority,
+			Truncate(task.Source, 60),
+			task.TimeInQueue,
+			executing,
+		})
+	}
+
+	t := table.New().
+		Headers("priority", "source", "queued", "exec").
+		Rows(rows...).
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorYellow)).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			base := lipgloss.NewStyle()
+			if row == table.HeaderRow {
+				return base.Bold(true).Foreground(ColorYellow)
+			}
+			if col == 0 && row >= 0 && row < len(rows) {
+				switch rows[row][0] {
+				case "URGENT", "IMMEDIATE":
+					return base.Foreground(ColorRed)
+				case "HIGH":
+					return base.Foreground(ColorYellow)
+				}
+			}
+			return base.Foreground(ColorWhite)
+		})
+
+	return title + "\n" + t.Render()
 }
 
