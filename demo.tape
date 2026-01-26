@@ -92,6 +92,10 @@ Sleep 1.5s
 Type "3"
 Sleep 1s
 
+# Show Templates view
+Type "7"
+Sleep 1.5s
+
 # Back to Memory
 Type "1"
 Sleep 1s
