@@ -19,11 +19,13 @@ const (
 	ViewDisk
 	ViewFielddata
 	ViewClusterSettings
+	ViewThreadPools
 )
 
 type NodesModel struct {
 	state           *es.NodesState
 	clusterSettings *es.ClusterSettings
+	threadPools     []es.ThreadPoolInfo
 	activeView      NodesView
 	scrollY         int
 	width           int
@@ -50,6 +52,10 @@ func (m *NodesModel) SetClusterSettings(settings *es.ClusterSettings) {
 	m.clusterSettings = settings
 }
 
+func (m *NodesModel) SetThreadPools(pools []es.ThreadPoolInfo) {
+	m.threadPools = pools
+}
+
 func (m *NodesModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -65,6 +71,8 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewFielddata
 	case "cluster":
 		m.activeView = ViewClusterSettings
+	case "threadpools":
+		m.activeView = ViewThreadPools
 	}
 }
 
@@ -115,6 +123,8 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewFielddata)
 		case "4":
 			m.selectView(ViewClusterSettings)
+		case "5":
+			m.selectView(ViewThreadPools)
 		case "up", "k":
 			if m.scrollY > 0 {
 				m.scrollY--
@@ -183,6 +193,10 @@ func (m NodesModel) View() string {
 		if m.clusterSettings == nil {
 			return "Loading cluster settings..."
 		}
+	} else if m.activeView == ViewThreadPools {
+		if m.threadPools == nil {
+			return "Loading thread pools..."
+		}
 	} else if m.loading || m.state == nil {
 		return "Loading..."
 	}
@@ -201,10 +215,12 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderFielddataTable())
 	case ViewClusterSettings:
 		b.WriteString(m.renderClusterSettingsTable())
+	case ViewThreadPools:
+		b.WriteString(m.renderThreadPoolsTable())
 	}
 
 	b.WriteString("\n\n")
-	if m.activeView != ViewClusterSettings {
+	if m.activeView != ViewClusterSettings && m.activeView != ViewThreadPools {
 		b.WriteString(m.renderLegend())
 	}
 
@@ -226,6 +242,7 @@ func (m NodesModel) renderTabs() string {
 		{"2", "Disk", ViewDisk},
 		{"3", "Fielddata", ViewFielddata},
 		{"4", "Cluster", ViewClusterSettings},
+		{"5", "Threads", ViewThreadPools},
 	}
 
 	var parts []string
@@ -541,6 +558,8 @@ func (m NodesModel) getItemCount() int {
 			return 0
 		}
 		return len(m.getClusterSettingsList())
+	case ViewThreadPools:
+		return len(m.threadPools)
 	}
 	return 0
 }
@@ -750,6 +769,51 @@ func (m NodesModel) renderClusterSettingsTable() string {
 						return style.Foreground(ColorBlue)
 					default:
 						return style.Foreground(ColorGray)
+					}
+				}
+			}
+			return style.Foreground(ColorWhite)
+		})
+
+	return t.Render()
+}
+
+func (m NodesModel) renderThreadPoolsTable() string {
+	if len(m.threadPools) == 0 {
+		return "No thread pools"
+	}
+
+	vr := m.visibleItems(len(m.threadPools))
+
+	var rows [][]string
+	for i := vr.start; i < vr.end && i < len(m.threadPools); i++ {
+		p := m.threadPools[i]
+		rows = append(rows, []string{p.NodeName, p.Name, p.Active, p.Queue, p.Rejected, p.Completed, p.PoolSize, p.PoolType})
+	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers("Node", "Pool", "Active", "Queue", "Rejected", "Completed", "Size", "Type").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			style := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return style.Bold(true).Foreground(ColorWhite)
+			}
+			if row >= 0 && row < len(rows) {
+				switch col {
+				case 2:
+					if rows[row][2] != "0" {
+						return style.Foreground(ColorGreen)
+					}
+				case 3:
+					if rows[row][3] != "0" {
+						return style.Foreground(ColorYellow)
+					}
+				case 4:
+					if rows[row][4] != "0" {
+						return style.Foreground(ColorRed)
 					}
 				}
 			}

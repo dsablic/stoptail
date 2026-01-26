@@ -143,6 +143,17 @@ type ClusterSettings struct {
 	Defaults   map[string]string
 }
 
+type ThreadPoolInfo struct {
+	NodeName  string `json:"node_name"`
+	Name      string `json:"name"`
+	Active    string `json:"active"`
+	Queue     string `json:"queue"`
+	Rejected  string `json:"rejected"`
+	Completed string `json:"completed"`
+	PoolSize  string `json:"pool_size"`
+	PoolType  string `json:"type"`
+}
+
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
 	sort.Slice(shards, func(i, j int) bool {
 		if shards[i].Index != shards[j].Index {
@@ -1282,5 +1293,41 @@ func flattenSettings(m map[string]any) map[string]string {
 		}
 	}
 	return result
+}
+
+func (c *Client) FetchThreadPools(ctx context.Context) ([]ThreadPoolInfo, error) {
+	res, err := c.es.Cat.ThreadPool(
+		c.es.Cat.ThreadPool.WithContext(ctx),
+		c.es.Cat.ThreadPool.WithFormat("json"),
+		c.es.Cat.ThreadPool.WithH("node_name", "name", "active", "queue", "rejected", "completed", "pool_size", "type"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching thread pools: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading thread pools response: %w", err)
+	}
+
+	var pools []ThreadPoolInfo
+	if err := json.Unmarshal(body, &pools); err != nil {
+		return nil, fmt.Errorf("parsing thread pools: %w", err)
+	}
+
+	sort.Slice(pools, func(i, j int) bool {
+		if pools[i].NodeName != pools[j].NodeName {
+			return pools[i].NodeName < pools[j].NodeName
+		}
+		return pools[i].Name < pools[j].Name
+	})
+
+	return pools, nil
 }
 
