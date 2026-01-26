@@ -1161,18 +1161,18 @@ func (m NodesModel) renderTemplates() string {
 	var rows [][]string
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		t := filtered[i]
-		patterns := strings.Join(t.IndexPatterns, ", ")
-		composed := strings.Join(t.ComposedOf, ", ")
+		patterns := Truncate(strings.Join(t.IndexPatterns, ", "), 25)
+		composed := Truncate(strings.Join(t.ComposedOf, ", "), 20)
 		dataStream := ""
 		if t.DataStream {
-			dataStream = "yes"
+			dataStream = "Y"
 		}
+		shards := t.NumberOfShards + "/" + t.NumberOfReplicas
 		rows = append(rows, []string{
-			t.Name,
+			Truncate(t.Name, 20),
 			patterns,
 			fmt.Sprintf("%d", t.Priority),
-			t.NumberOfShards,
-			t.NumberOfReplicas,
+			shards,
 			composed,
 			dataStream,
 		})
@@ -1181,7 +1181,7 @@ func (m NodesModel) renderTemplates() string {
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Name", "Patterns", "Pri", "Shards", "Replicas", "Composed Of", "DS").
+		Headers("Name", "Patterns", "Pri", "S/R", "Composed Of", "DS").
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
@@ -1191,7 +1191,7 @@ func (m NodesModel) renderTemplates() string {
 			if col == 2 && row >= 0 && row < len(rows) {
 				return style.Align(lipgloss.Right)
 			}
-			if col == 6 && row >= 0 && row < len(rows) && rows[row][6] == "yes" {
+			if col == 5 && row >= 0 && row < len(rows) && rows[row][5] == "Y" {
 				return style.Foreground(ColorBlue)
 			}
 			return style.Foreground(ColorWhite)
