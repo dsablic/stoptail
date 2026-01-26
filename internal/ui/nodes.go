@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -23,23 +24,50 @@ const (
 )
 
 type NodesModel struct {
-	state           *es.NodesState
-	clusterSettings *es.ClusterSettings
-	threadPools     []es.ThreadPoolInfo
-	activeView      NodesView
-	scrollY         int
-	width           int
-	height          int
-	loading         bool
-	search          SearchBar
+	state            *es.NodesState
+	clusterSettings  *es.ClusterSettings
+	threadPools      []es.ThreadPoolInfo
+	activeView       NodesView
+	scrollY          int
+	selectedSetting  int
+	settingDetail    *clusterSetting
+	width            int
+	height           int
+	loading          bool
+	filter           textinput.Model
+	filterActive     bool
 }
 
 func NewNodes() NodesModel {
+	f := textinput.New()
+	f.Prompt = ""
+	f.CharLimit = 100
 	return NodesModel{
 		activeView: ViewMemory,
 		loading:    true,
-		search:     NewSearchBar(),
+		filter:     f,
 	}
+}
+
+func (m NodesModel) matchesFilter(text string) bool {
+	if m.filter.Value() == "" {
+		return true
+	}
+	return strings.Contains(strings.ToLower(text), strings.ToLower(m.filter.Value()))
+}
+
+func (m NodesModel) getFilteredSettings() []clusterSetting {
+	allSettings := m.getClusterSettingsList()
+	if m.filter.Value() == "" {
+		return allSettings
+	}
+	var filtered []clusterSetting
+	for _, s := range allSettings {
+		if m.matchesFilter(s.Key + " " + s.Value + " " + s.Source) {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 func (m *NodesModel) SetState(state *es.NodesState) {
@@ -69,7 +97,7 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewDisk
 	case "fielddata":
 		m.activeView = ViewFielddata
-	case "cluster":
+	case "settings":
 		m.activeView = ViewClusterSettings
 	case "threadpools":
 		m.activeView = ViewThreadPools
@@ -79,6 +107,8 @@ func (m *NodesModel) SetView(view string) {
 func (m *NodesModel) selectView(view NodesView) {
 	m.activeView = view
 	m.scrollY = 0
+	m.selectedSetting = 0
+	m.settingDetail = nil
 }
 
 func (m NodesModel) getMaxScroll() int {
@@ -97,23 +127,38 @@ func (m NodesModel) getMaxScroll() int {
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if m.search.Active() {
-			cmd, action := m.search.HandleKey(msg)
-			switch action {
-			case SearchActionClose:
-				// search deactivated
-			case SearchActionNext, SearchActionPrev:
-				if match := m.search.CurrentMatch(); match >= 0 {
-					m.scrollY = match
-				}
-			case SearchActionNone:
-				(&m).updateNodeSearch()
+		if m.filterActive {
+			switch msg.String() {
+			case "esc", "enter":
+				m.filterActive = false
+				m.filter.Blur()
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.filter, cmd = m.filter.Update(msg)
+				m.scrollY = 0
+				m.selectedSetting = 0
+				return m, cmd
 			}
-			return m, cmd
 		}
+		if m.settingDetail != nil {
+			if msg.String() == "esc" || msg.String() == "enter" {
+				m.settingDetail = nil
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
-		case "ctrl+f":
-			m.search.Activate()
+		case "/":
+			m.filterActive = true
+			m.filter.Focus()
+			return m, textinput.Blink
+		case "esc":
+			if m.filter.Value() != "" {
+				m.filter.SetValue("")
+				m.scrollY = 0
+				m.selectedSetting = 0
+			}
 			return m, nil
 		case "1":
 			m.selectView(ViewMemory)
@@ -125,12 +170,44 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewClusterSettings)
 		case "5":
 			m.selectView(ViewThreadPools)
+		case "enter":
+			if m.activeView == ViewClusterSettings {
+				filtered := m.getFilteredSettings()
+				if m.selectedSetting >= 0 && m.selectedSetting < len(filtered) {
+					s := filtered[m.selectedSetting]
+					m.settingDetail = &s
+				}
+			}
+			return m, nil
 		case "up", "k":
-			if m.scrollY > 0 {
+			if m.activeView == ViewClusterSettings {
+				if m.selectedSetting > 0 {
+					m.selectedSetting--
+					maxVisible := m.height - 10
+					if maxVisible < 1 {
+						maxVisible = 10
+					}
+					if m.selectedSetting < m.scrollY {
+						m.scrollY = m.selectedSetting
+					}
+				}
+			} else if m.scrollY > 0 {
 				m.scrollY--
 			}
 		case "down", "j":
-			if m.scrollY < m.getMaxScroll() {
+			if m.activeView == ViewClusterSettings {
+				filtered := m.getFilteredSettings()
+				if m.selectedSetting < len(filtered)-1 {
+					m.selectedSetting++
+					maxVisible := m.height - 10
+					if maxVisible < 1 {
+						maxVisible = 10
+					}
+					if m.selectedSetting >= m.scrollY+maxVisible {
+						m.scrollY = m.selectedSetting - maxVisible + 1
+					}
+				}
+			} else if m.scrollY < m.getMaxScroll() {
 				m.scrollY++
 			}
 		case "pgup":
@@ -193,6 +270,9 @@ func (m NodesModel) View() string {
 		if m.clusterSettings == nil {
 			return "Loading cluster settings..."
 		}
+		if m.settingDetail != nil {
+			return m.renderSettingDetailModal()
+		}
 	} else if m.activeView == ViewThreadPools {
 		if m.threadPools == nil {
 			return "Loading thread pools..."
@@ -219,17 +299,16 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderThreadPoolsTable())
 	}
 
-	b.WriteString("\n\n")
-	if m.activeView != ViewClusterSettings && m.activeView != ViewThreadPools {
-		b.WriteString(m.renderLegend())
+	b.WriteString("\n")
+
+	filterStyle := lipgloss.NewStyle().Padding(0, 1)
+	if m.filterActive {
+		b.WriteString(filterStyle.Render("Filter: " + m.filter.View()))
+	} else if m.filter.Value() != "" {
+		b.WriteString(filterStyle.Render("Filter: " + m.filter.Value() + " (Esc to clear)"))
 	}
 
-	content := b.String()
-	if m.search.Active() {
-		content = lipgloss.JoinVertical(lipgloss.Left, content, m.search.View(m.width-4))
-	}
-
-	return content
+	return b.String()
 }
 
 func (m NodesModel) renderTabs() string {
@@ -241,7 +320,7 @@ func (m NodesModel) renderTabs() string {
 		{"1", "Memory", ViewMemory},
 		{"2", "Disk", ViewDisk},
 		{"3", "Fielddata", ViewFielddata},
-		{"4", "Cluster", ViewClusterSettings},
+		{"4", "Settings", ViewClusterSettings},
 		{"5", "Threads", ViewThreadPools},
 	}
 
@@ -259,14 +338,24 @@ func (m NodesModel) renderTabs() string {
 }
 
 func (m NodesModel) renderMemoryTable() string {
-	if len(m.state.Nodes) == 0 {
+	var filtered []es.NodeStats
+	for _, node := range m.state.Nodes {
+		if m.matchesFilter(node.Name + " " + node.Version) {
+			filtered = append(filtered, node)
+		}
+	}
+
+	if len(filtered) == 0 {
+		if m.filter.Value() != "" {
+			return "No matching nodes"
+		}
 		return "No nodes found"
 	}
 
 	var rows [][]string
 	var pctValues []string
-	visibleNodes := m.visibleItems(len(m.state.Nodes))
-	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
+	visibleNodes := m.visibleItems(len(filtered))
+	for _, node := range filtered[visibleNodes.start:visibleNodes.end] {
 		heapPct := m.parsePercent(node.HeapPercent)
 		pctValues = append(pctValues, node.HeapPercent)
 
@@ -306,14 +395,24 @@ func (m NodesModel) renderMemoryTable() string {
 }
 
 func (m NodesModel) renderDiskTable() string {
-	if len(m.state.Nodes) == 0 {
+	var filtered []es.NodeStats
+	for _, node := range m.state.Nodes {
+		if m.matchesFilter(node.Name + " " + node.Version) {
+			filtered = append(filtered, node)
+		}
+	}
+
+	if len(filtered) == 0 {
+		if m.filter.Value() != "" {
+			return "No matching nodes"
+		}
 		return "No nodes found"
 	}
 
 	var rows [][]string
 	var pctValues []string
-	visibleNodes := m.visibleItems(len(m.state.Nodes))
-	for _, node := range m.state.Nodes[visibleNodes.start:visibleNodes.end] {
+	visibleNodes := m.visibleItems(len(filtered))
+	for _, node := range filtered[visibleNodes.start:visibleNodes.end] {
 		diskPct := m.parsePercent(node.DiskPercent)
 		pctValues = append(pctValues, node.DiskPercent)
 
@@ -402,18 +501,29 @@ func (m NodesModel) getTotalHeap() int64 {
 }
 
 func (m NodesModel) renderFielddataTable() string {
-	if len(m.state.Fielddata) == 0 {
-		return "No fielddata found"
+	aggregated := m.aggregateFielddataByIndexField()
+
+	var filtered []fielddataByIndexField
+	for _, fd := range aggregated {
+		field := fd.Field
+		if field == "" {
+			field = "(all)"
+		}
+		if m.matchesFilter(fd.Index + " " + field) {
+			filtered = append(filtered, fd)
+		}
 	}
 
-	aggregated := m.aggregateFielddataByIndexField()
-	if len(aggregated) == 0 {
+	if len(filtered) == 0 {
+		if m.filter.Value() != "" {
+			return "No matching fielddata"
+		}
 		return "No fielddata found"
 	}
 
 	totalHeap := m.getTotalHeap()
 	var totalFielddata int64
-	for _, fd := range aggregated {
+	for _, fd := range filtered {
 		totalFielddata += fd.Size
 	}
 
@@ -424,8 +534,8 @@ func (m NodesModel) renderFielddataTable() string {
 
 	var rows [][]string
 	var pctValues []string
-	visibleItems := m.visibleItems(len(aggregated))
-	for _, fd := range aggregated[visibleItems.start:visibleItems.end] {
+	visibleItems := m.visibleItems(len(filtered))
+	for _, fd := range filtered[visibleItems.start:visibleItems.end] {
 		field := fd.Field
 		if field == "" {
 			field = "(all)"
@@ -479,39 +589,6 @@ func (m NodesModel) renderFielddataTable() string {
 	)
 
 	return t.Render() + "\n" + totalLine
-}
-
-func (m NodesModel) renderLegend() string {
-	greenStyle := lipgloss.NewStyle().Foreground(ColorGreen)
-	yellowStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-	redStyle := lipgloss.NewStyle().Foreground(ColorRed)
-	grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
-
-	switch m.activeView {
-	case ViewMemory:
-		return grayStyle.Render("heap%: ") +
-			greenStyle.Render("<75") +
-			grayStyle.Render(" | ") +
-			yellowStyle.Render("75-84") +
-			grayStyle.Render(" | ") +
-			redStyle.Render(">=85")
-	case ViewDisk:
-		return grayStyle.Render("disk%: ") +
-			greenStyle.Render("<75") +
-			grayStyle.Render(" | ") +
-			yellowStyle.Render("75-84") +
-			grayStyle.Render(" | ") +
-			redStyle.Render(">=85")
-	case ViewFielddata:
-		return grayStyle.Render("heap%: ") +
-			greenStyle.Render("<75") +
-			grayStyle.Render(" | ") +
-			yellowStyle.Render("75-84") +
-			grayStyle.Render(" | ") +
-			redStyle.Render(">=85")
-	default:
-		return ""
-	}
 }
 
 type visibleRange struct {
@@ -584,40 +661,6 @@ func (m NodesModel) parsePercent(pctStr string) float64 {
 		return 0
 	}
 	return pct
-}
-
-func (m *NodesModel) updateNodeSearch() {
-	if m.state == nil {
-		return
-	}
-	lines := m.getSearchableLines()
-	m.search.FindMatches(lines)
-	if match := m.search.CurrentMatch(); match >= 0 {
-		m.scrollY = match
-	}
-}
-
-func (m *NodesModel) getSearchableLines() []string {
-	if m.state == nil {
-		return nil
-	}
-	var lines []string
-	switch m.activeView {
-	case ViewMemory, ViewDisk:
-		for _, node := range m.state.Nodes {
-			lines = append(lines, node.Name)
-		}
-	case ViewFielddata:
-		aggregated := m.aggregateFielddataByIndexField()
-		for _, fd := range aggregated {
-			field := fd.Field
-			if field == "" {
-				field = "(all)"
-			}
-			lines = append(lines, fd.Index+" "+field)
-		}
-	}
-	return lines
 }
 
 func formatBytes(bytes int64) string {
@@ -723,22 +766,24 @@ func (m NodesModel) getClusterSettingsList() []clusterSetting {
 }
 
 func (m NodesModel) renderClusterSettingsTable() string {
-	settings := m.getClusterSettingsList()
-	if len(settings) == 0 {
+	filtered := m.getFilteredSettings()
+
+	if len(filtered) == 0 {
+		if m.filter.Value() != "" {
+			return "No matching settings"
+		}
 		return "No cluster settings"
 	}
 
-	keyWidth := 50
-	valueWidth := m.width - keyWidth - 15
-	if valueWidth < 20 {
-		valueWidth = 20
-	}
+	keyWidth := 45
+	valueWidth := 40
 
-	vr := m.visibleItems(len(settings))
+	vr := m.visibleItems(len(filtered))
 
 	var rows [][]string
-	for i := vr.start; i < vr.end && i < len(settings); i++ {
-		s := settings[i]
+	var rowIndices []int
+	for i := vr.start; i < vr.end && i < len(filtered); i++ {
+		s := filtered[i]
 		key := s.Key
 		if len(key) > keyWidth {
 			key = key[:keyWidth-1] + "~"
@@ -748,6 +793,7 @@ func (m NodesModel) renderClusterSettingsTable() string {
 			value = value[:valueWidth-1] + "~"
 		}
 		rows = append(rows, []string{key, value, s.Source})
+		rowIndices = append(rowIndices, i)
 	}
 
 	t := table.New().
@@ -760,16 +806,17 @@ func (m NodesModel) renderClusterSettingsTable() string {
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 2 {
-				if row >= 0 && row < len(rows) {
-					switch rows[row][2] {
-					case "transient":
-						return style.Foreground(ColorYellow)
-					case "persistent":
-						return style.Foreground(ColorBlue)
-					default:
-						return style.Foreground(ColorGray)
-					}
+			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedSetting {
+				return style.Background(ColorBlue).Foreground(ColorOnAccent)
+			}
+			if col == 2 && row >= 0 && row < len(rows) {
+				switch rows[row][2] {
+				case "transient":
+					return style.Foreground(ColorYellow)
+				case "persistent":
+					return style.Foreground(ColorBlue)
+				default:
+					return style.Foreground(ColorGray)
 				}
 			}
 			return style.Foreground(ColorWhite)
@@ -778,16 +825,69 @@ func (m NodesModel) renderClusterSettingsTable() string {
 	return t.Render()
 }
 
+func (m NodesModel) renderSettingDetailModal() string {
+	s := m.settingDetail
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
+
+	var lines []string
+	lines = append(lines, labelStyle.Render("Setting: ")+valueStyle.Render(s.Key))
+	lines = append(lines, labelStyle.Render("Source:  ")+valueStyle.Render(s.Source))
+	lines = append(lines, "")
+	lines = append(lines, labelStyle.Render("Value:"))
+
+	maxValueWidth := m.width - 20
+	if maxValueWidth < 40 {
+		maxValueWidth = 40
+	}
+	if maxValueWidth > 100 {
+		maxValueWidth = 100
+	}
+
+	value := s.Value
+	for len(value) > maxValueWidth {
+		lines = append(lines, valueStyle.Render(value[:maxValueWidth]))
+		value = value[maxValueWidth:]
+	}
+	if len(value) > 0 {
+		lines = append(lines, valueStyle.Render(value))
+	}
+
+	content := strings.Join(lines, "\n")
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2).
+		MaxWidth(m.width - 10)
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+}
+
 func (m NodesModel) renderThreadPoolsTable() string {
-	if len(m.threadPools) == 0 {
+	var filtered []es.ThreadPoolInfo
+	for _, p := range m.threadPools {
+		if m.matchesFilter(p.NodeName + " " + p.Name + " " + p.PoolType) {
+			filtered = append(filtered, p)
+		}
+	}
+
+	if len(filtered) == 0 {
+		if m.filter.Value() != "" {
+			return "No matching thread pools"
+		}
 		return "No thread pools"
 	}
 
-	vr := m.visibleItems(len(m.threadPools))
+	vr := m.visibleItems(len(filtered))
 
 	var rows [][]string
-	for i := vr.start; i < vr.end && i < len(m.threadPools); i++ {
-		p := m.threadPools[i]
+	for i := vr.start; i < vr.end && i < len(filtered); i++ {
+		p := filtered[i]
 		rows = append(rows, []string{p.NodeName, p.Name, p.Active, p.Queue, p.Rejected, p.Completed, p.PoolSize, p.PoolType})
 	}
 

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/config"
@@ -52,11 +52,11 @@ Examples:
 	}
 
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
-	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, browser, mappings, nodes)")
+	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, browser, mappings, cluster, tasks)")
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
-	rootCmd.Flags().StringVar(&viewFlag, "view", "", "View for --render nodes (memory, disk, fielddata)")
+	rootCmd.Flags().StringVar(&viewFlag, "view", "", "View for --render cluster (memory, disk, fielddata, settings, threadpools)")
 
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
@@ -83,7 +83,14 @@ func formatVersion() string {
 func run(cmd *cobra.Command, args []string) error {
 	ui.SetTheme(themeFlag)
 
-	esURL, err := resolveESURL(args, renderFlag != "")
+	if renderFlag != "" {
+		return runRenderMode(args)
+	}
+
+	fmt.Print("\033[?1049h\033[H")
+	defer fmt.Print("\033[?1049l")
+
+	esURL, err := resolveESURL(args, false)
 	if err != nil {
 		return err
 	}
@@ -98,16 +105,31 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	if renderFlag != "" {
-		return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag)
-	}
-
-	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(ui.New(client, cfg), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return err
 	}
 	fmt.Print("\033[?1000l\033[?1002l\033[?1003l\033[?1006l")
 	return nil
+}
+
+func runRenderMode(args []string) error {
+	esURL, err := resolveESURL(args, true)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := config.ParseURL(esURL)
+	if err != nil {
+		return fmt.Errorf("config error: %w", err)
+	}
+
+	client, err := es.NewClient(cfg)
+	if err != nil {
+		return fmt.Errorf("client error: %w", err)
+	}
+
+	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag)
 }
 
 func resolveESURL(args []string, skipUI bool) (string, error) {
@@ -154,7 +176,7 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	}
 
 	picker := newClusterPickerModal(names)
-	p := tea.NewProgram(picker, tea.WithAltScreen())
+	p := tea.NewProgram(picker)
 	result, err := p.Run()
 	if err != nil {
 		return "", err
@@ -172,7 +194,6 @@ type clusterPickerModal struct {
 	form      *huh.Form
 	selected  string
 	cancelled bool
-	done      bool
 	width     int
 	height    int
 }
@@ -185,6 +206,13 @@ func newClusterPickerModal(names []string) *clusterPickerModal {
 		options[i] = huh.NewOption(name, name)
 	}
 
+	theme := huh.ThemeBase()
+	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(ui.ColorBlue).SetString("> ")
+	theme.Focused.SelectedOption = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
+	theme.Focused.UnselectedOption = lipgloss.NewStyle()
+	theme.Focused.Title = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
+	theme.Blurred = theme.Focused
+
 	m.form = huh.NewForm(
 		huh.NewGroup(
 			huh.NewSelect[string]().
@@ -192,7 +220,7 @@ func newClusterPickerModal(names []string) *clusterPickerModal {
 				Options(options...).
 				Value(&m.selected),
 		),
-	).WithShowHelp(false)
+	).WithShowHelp(false).WithTheme(theme)
 
 	return m
 }
@@ -210,7 +238,6 @@ func (m *clusterPickerModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			m.cancelled = true
-			m.done = true
 			return m, tea.Quit
 		}
 	}
@@ -221,7 +248,6 @@ func (m *clusterPickerModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if m.form.State == huh.StateCompleted {
-		m.done = true
 		return m, tea.Quit
 	}
 
@@ -233,17 +259,13 @@ func (m *clusterPickerModal) View() string {
 		return ""
 	}
 
-	boxWidth := 50
-	formView := m.form.View()
-
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ui.ColorBlue).
 		Padding(1, 2).
-		Width(boxWidth)
+		Width(50)
 
-	box := boxStyle.Render(formView)
-
+	box := boxStyle.Render(m.form.View())
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
@@ -323,7 +345,6 @@ func (m urlResolverModel) View() string {
 		Width(50)
 
 	box := boxStyle.Render(content)
-
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
@@ -342,7 +363,7 @@ func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI
 	}
 
 	m := newURLResolver(clusters, name)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	result, err := p.Run()
 	if err != nil {
 		return "", err
@@ -368,18 +389,18 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		overview.SetCluster(state)
 		fmt.Println(overview.View())
 
-	case "nodes":
+	case "cluster":
 		state, err := client.FetchNodesState(ctx)
 		if err != nil {
-			return fmt.Errorf("fetching nodes state: %w", err)
+			return fmt.Errorf("fetching cluster state: %w", err)
 		}
-		nodes := ui.NewNodes()
-		nodes.SetSize(width, height)
+		cluster := ui.NewNodes()
+		cluster.SetSize(width, height)
 		if view != "" {
-			nodes.SetView(view)
+			cluster.SetView(view)
 		}
-		nodes.SetState(state)
-		fmt.Println(nodes.View())
+		cluster.SetState(state)
+		fmt.Println(cluster.View())
 
 	case "workbench":
 		workbench := ui.NewWorkbench()
@@ -422,7 +443,7 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		fmt.Println(tasksModel.View())
 
 	default:
-		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, nodes, tasks)", tab)
+		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, cluster, tasks)", tab)
 	}
 	return nil
 }

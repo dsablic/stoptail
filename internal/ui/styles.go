@@ -21,7 +21,6 @@ var (
 	HeaderStyle      lipgloss.Style
 	TabStyle         lipgloss.Style
 	ActiveTabStyle   lipgloss.Style
-	PulseTabStyle    lipgloss.Style
 	InactiveTabStyle lipgloss.Style
 	StatusBarStyle   lipgloss.Style
 	HelpStyle        lipgloss.Style
@@ -77,11 +76,6 @@ func SetTheme(theme string) {
 		Padding(0, 2)
 
 	ActiveTabStyle = TabStyle.
-		Bold(true).
-		Foreground(ColorWhite).
-		Background(ActiveBg)
-
-	PulseTabStyle = TabStyle.
 		Bold(true).
 		Foreground(ColorOnAccent).
 		Background(ColorBlue)

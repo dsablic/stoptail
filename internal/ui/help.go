@@ -10,8 +10,6 @@ var helpGlobal = `## Global
 | Key | Action |
 |-----|--------|
 | Tab / Shift+Tab | Switch tabs |
-| b | Browser tab |
-| m | Mappings tab |
 | q / Ctrl+C | Quit |
 | ? | Toggle help |
 | r | Refresh |
@@ -78,14 +76,15 @@ var helpMappings = `## Mappings
 | up/down | Scroll |
 `
 
-var helpNodes = `## Nodes
+var helpCluster = `## Cluster
 
 | Key | Action |
 |-----|--------|
 | 1-5 | Switch view |
-| Ctrl+F | Search |
+| / | Filter |
+| Esc | Clear filter |
+| Enter | Details (Settings) |
 | up/down | Scroll |
-| r | Refresh |
 `
 
 var helpTasks = `## Tasks
@@ -121,8 +120,8 @@ func renderHelp(width, height, activeTab int) string {
 		tabHelp = helpBrowser
 	case TabMappings:
 		tabHelp = helpMappings
-	case TabNodes:
-		tabHelp = helpNodes
+	case TabCluster:
+		tabHelp = helpCluster
 	case TabTasks:
 		tabHelp = helpTasks
 	}

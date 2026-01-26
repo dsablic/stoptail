@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,7 +16,7 @@ const (
 	TabWorkbench
 	TabBrowser
 	TabMappings
-	TabNodes
+	TabCluster
 	TabTasks
 )
 
@@ -35,11 +34,10 @@ type Model struct {
 	activeTab    int
 	width        int
 	height       int
-	connected    bool
-	loading      bool
-	err          error
-	showHelp     bool
-	tabPulse     int
+	connected bool
+	loading   bool
+	err       error
+	showHelp  bool
 }
 
 type connectedMsg struct{ state *es.ClusterState }
@@ -49,7 +47,6 @@ type threadPoolsMsg struct{ pools []es.ThreadPoolInfo }
 type tasksMsg struct{ tasks []es.TaskInfo }
 type pendingTasksMsg struct{ tasks []es.PendingTask }
 type taskCancelledMsg struct{ err error }
-type pulseTickMsg struct{}
 type mappingsMsg struct {
 	mappings  *es.IndexMappings
 	analyzers []es.AnalyzerInfo
@@ -100,22 +97,17 @@ func (m Model) hasActiveInput() bool {
 		return m.browser.HasActiveInput()
 	case TabMappings:
 		return m.mappings.filterActive || m.mappings.search.Active()
+	case TabCluster:
+		return m.nodes.filterActive || m.nodes.settingDetail != nil
 	case TabTasks:
-		return m.tasks.confirming != "" || m.tasks.HasModal()
+		return m.tasks.confirming != "" || m.tasks.HasModal() || m.tasks.search.Active()
 	}
 	return false
 }
 
-func pulseTick() tea.Cmd {
-	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
-		return pulseTickMsg{}
-	})
-}
-
 func (m *Model) switchTab(tab int) tea.Cmd {
 	m.activeTab = tab
-	m.tabPulse = 4
-	return pulseTick()
+	return nil
 }
 
 func (m Model) Init() tea.Cmd {
@@ -240,12 +232,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-	case pulseTickMsg:
-		if m.tabPulse > 0 {
-			m.tabPulse--
-			return m, pulseTick()
-		}
-		return m, nil
 	case connectedMsg:
 		m.connected = true
 		m.loading = false
@@ -317,23 +303,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch m.activeTab {
 				case TabOverview, TabMappings:
 					return m, tea.Batch(m.spinner.Tick, m.connect())
-				case TabNodes:
+				case TabCluster:
 					return m, tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
 				case TabTasks:
 					return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				}
-			case "b":
-				m.workbench.Blur()
-				if m.cluster != nil {
-					m.browser.SetIndices(m.cluster.Indices)
-				}
-				return m, m.switchTab(TabBrowser)
-			case "m":
-				m.workbench.Blur()
-				if m.cluster != nil {
-					m.mappings.SetIndices(m.cluster.Indices)
-				}
-				return m, m.switchTab(TabMappings)
 			case "tab":
 				if m.showHelp {
 					break
@@ -355,8 +329,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.switchTab(TabMappings)
 				case TabMappings:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
-				case TabNodes:
+					return m, tea.Batch(m.switchTab(TabCluster), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
+				case TabCluster:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				case TabTasks:
@@ -382,8 +356,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 				case TabTasks:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabNodes), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
-				case TabNodes:
+					return m, tea.Batch(m.switchTab(TabCluster), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
+				case TabCluster:
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
@@ -422,7 +396,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
 				browserWidth := lipgloss.Width(InactiveTabStyle.Render("Browser"))
 				mappingsWidth := lipgloss.Width(InactiveTabStyle.Render("Mappings"))
-				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Nodes"))
+				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Cluster"))
 
 				if msg.X < overviewWidth {
 					m.activeTab = TabOverview
@@ -442,7 +416,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
 				} else if msg.X < overviewWidth+workbenchWidth+browserWidth+mappingsWidth+nodesWidth {
-					m.activeTab = TabNodes
+					m.activeTab = TabCluster
 					m.workbench.Blur()
 					m.loading = true
 					return m, tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools())
@@ -472,7 +446,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.browser, cmd = m.browser.Update(delegateMsg)
 		case TabMappings:
 			m.mappings, cmd = m.mappings.Update(delegateMsg)
-		case TabNodes:
+		case TabCluster:
 			m.nodes, cmd = m.nodes.Update(delegateMsg)
 		case TabTasks:
 			var cmd tea.Cmd
@@ -487,6 +461,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.width == 0 || m.height == 0 {
+		return ""
+	}
+
 	if m.showHelp {
 		return renderHelp(m.width, m.height, m.activeTab)
 	}
@@ -505,30 +483,25 @@ func (m Model) View() string {
 	headerText := fmt.Sprintf("stoptail · %s [%s]", m.cfg.MaskedURL(), status)
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
-	activeStyle := ActiveTabStyle
-	if m.tabPulse > 0 && m.tabPulse%2 == 0 {
-		activeStyle = PulseTabStyle
-	}
-
 	overviewTab := InactiveTabStyle.Render("Overview")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
 	browserTab := InactiveTabStyle.Render("Browser")
 	mappingsTab := InactiveTabStyle.Render("Mappings")
-	nodesTab := InactiveTabStyle.Render("Nodes")
+	nodesTab := InactiveTabStyle.Render("Cluster")
 	tasksTab := InactiveTabStyle.Render("Tasks")
 	switch m.activeTab {
 	case TabOverview:
-		overviewTab = activeStyle.Render("Overview")
+		overviewTab = ActiveTabStyle.Render("Overview")
 	case TabWorkbench:
-		workbenchTab = activeStyle.Render("Workbench")
+		workbenchTab = ActiveTabStyle.Render("Workbench")
 	case TabBrowser:
-		browserTab = activeStyle.Render("Browser")
+		browserTab = ActiveTabStyle.Render("Browser")
 	case TabMappings:
-		mappingsTab = activeStyle.Render("Mappings")
-	case TabNodes:
-		nodesTab = activeStyle.Render("Nodes")
+		mappingsTab = ActiveTabStyle.Render("Mappings")
+	case TabCluster:
+		nodesTab = ActiveTabStyle.Render("Cluster")
 	case TabTasks:
-		tasksTab = activeStyle.Render("Tasks")
+		tasksTab = ActiveTabStyle.Render("Tasks")
 	}
 	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, browserTab, mappingsTab, nodesTab, tasksTab)
 
@@ -558,7 +531,7 @@ func (m Model) View() string {
 			content = m.browser.View()
 		case TabMappings:
 			content = m.mappings.View()
-		case TabNodes:
+		case TabCluster:
 			content = m.nodes.View()
 		case TabTasks:
 			content = m.tasks.View()
@@ -577,11 +550,11 @@ func (m Model) View() string {
 	case TabBrowser:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: workbench  /: filter  ←→: panes  ↑↓: scroll  Ctrl+Y: copy"
 	case TabMappings:
-		statusText = "q: quit  Tab: nodes  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
-	case TabNodes:
-		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
+		statusText = "q: quit  Tab: cluster  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
+	case TabCluster:
+		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-5: views  /: filter  ↑↓: scroll"
 	case TabTasks:
-		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  Enter: details  c: cancel  ↑↓: select"
+		statusText = "q: quit  Tab: overview  Shift+Tab: cluster  r: refresh  Enter: details  c: cancel  ↑↓: select"
 	}
 
 	var clipboardMsg string

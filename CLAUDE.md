@@ -45,12 +45,12 @@ go build .
 ./stoptail --render workbench --width 120 --height 30 [cluster]
 ./stoptail --render workbench --width 120 --height 20 --body '{"invalid": json}' [cluster]
 ./stoptail --render mappings --width 120 --height 40 [cluster]
-./stoptail --render nodes --width 120 --height 40 [cluster]
-./stoptail --render nodes --view memory --width 120 --height 40 [cluster]
-./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
-./stoptail --render nodes --view fielddata --width 120 --height 40 [cluster]
-./stoptail --render nodes --view cluster --width 120 --height 40 [cluster]
-./stoptail --render nodes --view threadpools --width 120 --height 40 [cluster]
+./stoptail --render cluster --width 120 --height 40 [cluster]
+./stoptail --render cluster --view memory --width 120 --height 40 [cluster]
+./stoptail --render cluster --view disk --width 120 --height 40 [cluster]
+./stoptail --render cluster --view fielddata --width 120 --height 40 [cluster]
+./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
+./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -396,11 +396,11 @@ Always verify UI changes using the render flag before committing:
 ./stoptail --render overview --width 120 --height 40 [cluster]
 ./stoptail --render workbench --width 120 --height 30 [cluster]
 ./stoptail --render mappings --width 120 --height 40 [cluster]
-./stoptail --render nodes --width 120 --height 40 [cluster]
-./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
-./stoptail --render nodes --view fielddata --width 120 --height 40 [cluster]
-./stoptail --render nodes --view cluster --width 120 --height 40 [cluster]
-./stoptail --render nodes --view threadpools --width 120 --height 40 [cluster]
+./stoptail --render cluster --width 120 --height 40 [cluster]
+./stoptail --render cluster --view disk --width 120 --height 40 [cluster]
+./stoptail --render cluster --view fielddata --width 120 --height 40 [cluster]
+./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
+./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -430,7 +430,7 @@ When modifying `demo.tape`, always verify the generated `demo.gif` before commit
    - Filter shows filtered indices
    - Workbench shows correct path (`/products/_search`) and 200 response
    - Mappings tab shows field mappings with Ctrl+F search
-   - Nodes tab shows all 3 views (Memory, Disk, Fielddata)
+   - Cluster tab shows all 5 views (Memory, Disk, Fielddata, Settings, Threads)
    - Help overlay displays correctly
 
 **Before recording demo**:

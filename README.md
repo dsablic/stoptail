@@ -29,11 +29,11 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - View field types and properties (analyzer, index, doc_values, etc.)
   - See custom analyzers, tokenizers, and filters
   - Toggle to view index settings (shards, replicas, refresh interval, etc.)
-- **Nodes Tab**: Node statistics with 5 switchable views
+- **Cluster Tab**: Node statistics and cluster-wide information with 5 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
   - Fielddata: per-node/index/field fielddata breakdown
-  - Cluster: cluster settings (persistent, transient, defaults)
+  - Settings: cluster settings (persistent, transient, defaults)
   - Threads: thread pool stats (active, queue, rejected, completed)
 - **Tasks Tab**: Monitor long-running and pending operations
   - Reindex, update-by-query, delete-by-query tracking
@@ -131,9 +131,7 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
-| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Browser, Mappings, Nodes, Tasks) |
-| `b` | Jump to Browser tab |
-| `m` | Jump to Mappings tab |
+| `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Browser, Mappings, Cluster, Tasks) |
 | `r` | Refresh data |
 | `?` | Toggle help overlay |
 | `q` / `Ctrl+C` | Quit |
@@ -200,17 +198,19 @@ stoptail stores data in `~/.stoptail/`:
 | `s` | Toggle settings view |
 | `Up/Down` | Scroll |
 
-### Nodes Tab
+### Cluster Tab
 
 | Key | Action |
 |-----|--------|
 | `1` | Memory view |
 | `2` | Disk view |
 | `3` | Fielddata view |
-| `4` | Cluster settings view |
+| `4` | Settings view |
 | `5` | Thread pools view |
-| `Ctrl+F` | Search nodes |
-| `Up/Down` | Scroll |
+| `/` | Filter |
+| `Esc` | Clear filter |
+| `Enter` | View setting details (in Settings view) |
+| `Up/Down` | Scroll / select |
 
 ### Tasks Tab
 

@@ -75,7 +75,7 @@ Sleep 1s
 Type "h"
 Sleep 500ms
 
-# Go to Nodes tab (Tab twice: Browser -> Mappings -> Nodes)
+# Go to Cluster tab (Tab twice: Browser -> Mappings -> Cluster)
 Tab
 Sleep 500ms
 Tab
