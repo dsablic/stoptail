@@ -18,16 +18,18 @@ const (
 	ViewMemory NodesView = iota
 	ViewDisk
 	ViewFielddata
+	ViewClusterSettings
 )
 
 type NodesModel struct {
-	state      *es.NodesState
-	activeView NodesView
-	scrollY    int
-	width      int
-	height     int
-	loading    bool
-	search     SearchBar
+	state           *es.NodesState
+	clusterSettings *es.ClusterSettings
+	activeView      NodesView
+	scrollY         int
+	width           int
+	height          int
+	loading         bool
+	search          SearchBar
 }
 
 func NewNodes() NodesModel {
@@ -44,6 +46,10 @@ func (m *NodesModel) SetState(state *es.NodesState) {
 	m.scrollY = 0
 }
 
+func (m *NodesModel) SetClusterSettings(settings *es.ClusterSettings) {
+	m.clusterSettings = settings
+}
+
 func (m *NodesModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -57,6 +63,8 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewDisk
 	case "fielddata":
 		m.activeView = ViewFielddata
+	case "cluster":
+		m.activeView = ViewClusterSettings
 	}
 }
 
@@ -105,6 +113,8 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewDisk)
 		case "3":
 			m.selectView(ViewFielddata)
+		case "4":
+			m.selectView(ViewClusterSettings)
 		case "up", "k":
 			if m.scrollY > 0 {
 				m.scrollY--
@@ -169,7 +179,11 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 }
 
 func (m NodesModel) View() string {
-	if m.loading || m.state == nil {
+	if m.activeView == ViewClusterSettings {
+		if m.clusterSettings == nil {
+			return "Loading cluster settings..."
+		}
+	} else if m.loading || m.state == nil {
 		return "Loading..."
 	}
 
@@ -185,10 +199,14 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderDiskTable())
 	case ViewFielddata:
 		b.WriteString(m.renderFielddataTable())
+	case ViewClusterSettings:
+		b.WriteString(m.renderClusterSettingsTable())
 	}
 
 	b.WriteString("\n\n")
-	b.WriteString(m.renderLegend())
+	if m.activeView != ViewClusterSettings {
+		b.WriteString(m.renderLegend())
+	}
 
 	content := b.String()
 	if m.search.Active() {
@@ -207,6 +225,7 @@ func (m NodesModel) renderTabs() string {
 		{"1", "Memory", ViewMemory},
 		{"2", "Disk", ViewDisk},
 		{"3", "Fielddata", ViewFielddata},
+		{"4", "Cluster", ViewClusterSettings},
 	}
 
 	var parts []string
@@ -506,14 +525,22 @@ func (m NodesModel) visibleItems(total int) visibleRange {
 }
 
 func (m NodesModel) getItemCount() int {
-	if m.state == nil {
-		return 0
-	}
 	switch m.activeView {
 	case ViewMemory, ViewDisk:
+		if m.state == nil {
+			return 0
+		}
 		return len(m.state.Nodes)
 	case ViewFielddata:
+		if m.state == nil {
+			return 0
+		}
 		return len(m.aggregateFielddataByIndexField())
+	case ViewClusterSettings:
+		if m.clusterSettings == nil {
+			return 0
+		}
+		return len(m.getClusterSettingsList())
 	}
 	return 0
 }
@@ -635,4 +662,99 @@ func parseSize(s string) (int64, error) {
 	}
 
 	return int64(value * float64(multiplier)), nil
+}
+
+type clusterSetting struct {
+	Key    string
+	Value  string
+	Source string
+}
+
+func (m NodesModel) getClusterSettingsList() []clusterSetting {
+	if m.clusterSettings == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var settings []clusterSetting
+
+	for k, v := range m.clusterSettings.Transient {
+		settings = append(settings, clusterSetting{Key: k, Value: v, Source: "transient"})
+		seen[k] = true
+	}
+
+	for k, v := range m.clusterSettings.Persistent {
+		if !seen[k] {
+			settings = append(settings, clusterSetting{Key: k, Value: v, Source: "persistent"})
+			seen[k] = true
+		}
+	}
+
+	for k, v := range m.clusterSettings.Defaults {
+		if !seen[k] {
+			settings = append(settings, clusterSetting{Key: k, Value: v, Source: "default"})
+		}
+	}
+
+	sort.Slice(settings, func(i, j int) bool {
+		return settings[i].Key < settings[j].Key
+	})
+
+	return settings
+}
+
+func (m NodesModel) renderClusterSettingsTable() string {
+	settings := m.getClusterSettingsList()
+	if len(settings) == 0 {
+		return "No cluster settings"
+	}
+
+	keyWidth := 50
+	valueWidth := m.width - keyWidth - 15
+	if valueWidth < 20 {
+		valueWidth = 20
+	}
+
+	vr := m.visibleItems(len(settings))
+
+	var rows [][]string
+	for i := vr.start; i < vr.end && i < len(settings); i++ {
+		s := settings[i]
+		key := s.Key
+		if len(key) > keyWidth {
+			key = key[:keyWidth-1] + "~"
+		}
+		value := s.Value
+		if len(value) > valueWidth {
+			value = value[:valueWidth-1] + "~"
+		}
+		rows = append(rows, []string{key, value, s.Source})
+	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers("Setting", "Value", "Source").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			style := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return style.Bold(true).Foreground(ColorWhite)
+			}
+			if col == 2 {
+				if row >= 0 && row < len(rows) {
+					switch rows[row][2] {
+					case "transient":
+						return style.Foreground(ColorYellow)
+					case "persistent":
+						return style.Foreground(ColorBlue)
+					default:
+						return style.Foreground(ColorGray)
+					}
+				}
+			}
+			return style.Foreground(ColorWhite)
+		})
+
+	return t.Render()
 }

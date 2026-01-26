@@ -82,7 +82,7 @@ var helpNodes = `## Nodes
 
 | Key | Action |
 |-----|--------|
-| 1/2/3 | Switch view |
+| 1/2/3/4 | Switch view |
 | Ctrl+F | Search |
 | up/down | Scroll |
 | r | Refresh |

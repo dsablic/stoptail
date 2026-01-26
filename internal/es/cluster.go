@@ -137,6 +137,12 @@ type IndexSettings struct {
 	AllSettings     map[string]string
 }
 
+type ClusterSettings struct {
+	Persistent map[string]string
+	Transient  map[string]string
+	Defaults   map[string]string
+}
+
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
 	sort.Slice(shards, func(i, j int) bool {
 		if shards[i].Index != shards[j].Index {
@@ -1213,5 +1219,68 @@ func (c *Client) SearchDocuments(ctx context.Context, index string, after []inte
 	}
 
 	return result, nil
+}
+
+func (c *Client) FetchClusterSettings(ctx context.Context) (*ClusterSettings, error) {
+	res, err := c.es.Cluster.GetSettings(
+		c.es.Cluster.GetSettings.WithContext(ctx),
+		c.es.Cluster.GetSettings.WithFlatSettings(true),
+		c.es.Cluster.GetSettings.WithIncludeDefaults(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching cluster settings: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading cluster settings response: %w", err)
+	}
+
+	return parseClusterSettings(body)
+}
+
+func parseClusterSettings(data []byte) (*ClusterSettings, error) {
+	var response struct {
+		Persistent map[string]any `json:"persistent"`
+		Transient  map[string]any `json:"transient"`
+		Defaults   map[string]any `json:"defaults"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parsing cluster settings: %w", err)
+	}
+
+	settings := &ClusterSettings{
+		Persistent: flattenSettings(response.Persistent),
+		Transient:  flattenSettings(response.Transient),
+		Defaults:   flattenSettings(response.Defaults),
+	}
+
+	return settings, nil
+}
+
+func flattenSettings(m map[string]any) map[string]string {
+	result := make(map[string]string)
+	for k, rawVal := range m {
+		switch val := rawVal.(type) {
+		case string:
+			result[k] = val
+		case []any:
+			parts := make([]string, len(val))
+			for i, item := range val {
+				parts[i] = fmt.Sprintf("%v", item)
+			}
+			result[k] = "[" + strings.Join(parts, ", ") + "]"
+		default:
+			result[k] = fmt.Sprintf("%v", val)
+		}
+	}
+	return result
 }
 

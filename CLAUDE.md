@@ -49,6 +49,7 @@ go build .
 ./stoptail --render nodes --view memory --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view fielddata --width 120 --height 40 [cluster]
+./stoptail --render nodes --view cluster --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -397,6 +398,7 @@ Always verify UI changes using the render flag before committing:
 ./stoptail --render nodes --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view disk --width 120 --height 40 [cluster]
 ./stoptail --render nodes --view fielddata --width 120 --height 40 [cluster]
+./stoptail --render nodes --view cluster --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
