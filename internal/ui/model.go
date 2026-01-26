@@ -87,10 +87,6 @@ func New(client *es.Client, cfg *config.Config) Model {
 	}
 }
 
-func (m Model) overviewAcceptsGlobalKeys() bool {
-	return m.activeTab == TabOverview && !m.overview.filterActive && !m.overview.HasModal()
-}
-
 func (m Model) hasActiveInput() bool {
 	switch m.activeTab {
 	case TabOverview:
@@ -361,15 +357,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			return m, tea.Quit
-		case "enter":
-			if m.overviewAcceptsGlobalKeys() {
-				if idx := m.overview.SelectedIndex(); idx != "" {
-					m.workbench.Prefill(idx)
-					m.activeTab = TabWorkbench
-					m.workbench.Focus()
-					return m, nil
-				}
-			}
 		}
 	case IndexCreatedMsg, IndexDeletedMsg, AliasAddedMsg, AliasRemovedMsg:
 		m.overview, cmd = m.overview.Update(msg)

@@ -8,6 +8,8 @@ import (
 	"github.com/labtiva/stoptail/internal/es"
 )
 
+const shardsPerRow = 16
+
 type ShardPicker struct {
 	shards   []es.ShardInfo
 	selected int
@@ -20,15 +22,29 @@ func NewShardPicker(shards []es.ShardInfo) *ShardPicker {
 	}
 }
 
-func (p *ShardPicker) Next() {
+func (p *ShardPicker) Right() {
 	if p.selected < len(p.shards)-1 {
 		p.selected++
 	}
 }
 
-func (p *ShardPicker) Prev() {
+func (p *ShardPicker) Left() {
 	if p.selected > 0 {
 		p.selected--
+	}
+}
+
+func (p *ShardPicker) Down() {
+	next := p.selected + shardsPerRow
+	if next < len(p.shards) {
+		p.selected = next
+	}
+}
+
+func (p *ShardPicker) Up() {
+	next := p.selected - shardsPerRow
+	if next >= 0 {
+		p.selected = next
 	}
 }
 
@@ -40,16 +56,10 @@ func (p *ShardPicker) Selected() *es.ShardInfo {
 }
 
 func (p *ShardPicker) View() string {
-	var parts []string
+	var rows []string
+	var currentRow []string
 
 	for i, sh := range p.shards {
-		label := sh.Shard
-		if sh.Primary {
-			label += "p"
-		} else {
-			label += "r"
-		}
-
 		var bgColor lipgloss.Color
 		switch sh.State {
 		case "STARTED":
@@ -69,25 +79,34 @@ func (p *ShardPicker) View() string {
 		style := lipgloss.NewStyle().
 			Background(bgColor).
 			Foreground(ColorOnAccent).
-			Padding(0, 1)
+			Width(4).
+			Align(lipgloss.Center)
 
 		if i == p.selected {
-			style = style.Bold(true).Underline(true)
+			style = style.Reverse(true).Bold(true)
 		}
 
-		parts = append(parts, style.Render(label))
+		currentRow = append(currentRow, style.Render(sh.Shard))
+
+		if len(currentRow) >= shardsPerRow {
+			rows = append(rows, strings.Join(currentRow, " "))
+			currentRow = nil
+		}
+	}
+	if len(currentRow) > 0 {
+		rows = append(rows, strings.Join(currentRow, " "))
 	}
 
-	content := strings.Join(parts, " ")
+	content := strings.Join(rows, "\n")
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorBlue).
 		Padding(0, 1)
 
-	hint := lipgloss.NewStyle().Foreground(ColorGray).Render("  [←→ select, Enter confirm, Esc cancel]")
+	hint := lipgloss.NewStyle().Foreground(ColorGray).Render("[arrows select, Enter confirm, Esc cancel]")
 
-	return boxStyle.Render(content + hint)
+	return boxStyle.Render(content + "\n" + hint)
 }
 
 func RenderShardInfoModal(sh *es.ShardInfo, ae *es.AllocationExplain, width, height int) string {

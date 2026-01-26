@@ -116,17 +116,22 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			return m, cmd
 		}
 
-		if m.shardPicker != nil {
+		if m.shardPicker != nil && m.shardInfo == nil {
 			switch msg.String() {
 			case "left", "h":
-				m.shardPicker.Prev()
+				m.shardPicker.Left()
 				return m, nil
 			case "right", "l":
-				m.shardPicker.Next()
+				m.shardPicker.Right()
+				return m, nil
+			case "up", "k":
+				m.shardPicker.Up()
+				return m, nil
+			case "down", "j":
+				m.shardPicker.Down()
 				return m, nil
 			case "enter":
 				sh := m.shardPicker.Selected()
-				m.shardPicker = nil
 				if sh != nil {
 					return m.showShardInfo(sh)
 				}
@@ -1015,9 +1020,11 @@ func (m OverviewModel) renderShardLegend() string {
 }
 
 func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool) []string {
+	highlightBg := lipgloss.Color("#3a3a5a")
+
 	if len(shards) == 0 {
 		if highlight {
-			return []string{lipgloss.NewStyle().Width(width).Background(lipgloss.Color("#333333")).Render("")}
+			return []string{lipgloss.NewStyle().Width(width).Background(highlightBg).Render("")}
 		}
 		return []string{lipgloss.NewStyle().Width(width).Render("")}
 	}
@@ -1055,7 +1062,7 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 			MarginRight(1)
 
 		if highlight {
-			style = style.Underline(true)
+			style = style.Reverse(true)
 		}
 
 		styledShard := style.Render(sh.Shard)
@@ -1064,7 +1071,7 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 		if currentWidth+shardWidth > width && len(currentLine) > 0 {
 			lineStyle := lipgloss.NewStyle().Width(width)
 			if highlight {
-				lineStyle = lineStyle.Background(lipgloss.Color("#333333"))
+				lineStyle = lineStyle.Background(highlightBg)
 			}
 			lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
 			currentLine = nil
@@ -1078,14 +1085,14 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 	if len(currentLine) > 0 {
 		lineStyle := lipgloss.NewStyle().Width(width)
 		if highlight {
-			lineStyle = lineStyle.Background(lipgloss.Color("#333333"))
+			lineStyle = lineStyle.Background(highlightBg)
 		}
 		lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
 	}
 
 	if len(lines) == 0 {
 		if highlight {
-			lines = []string{lipgloss.NewStyle().Width(width).Background(lipgloss.Color("#333333")).Render("")}
+			lines = []string{lipgloss.NewStyle().Width(width).Background(highlightBg).Render("")}
 		} else {
 			lines = []string{lipgloss.NewStyle().Width(width).Render("")}
 		}
