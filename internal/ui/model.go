@@ -45,6 +45,7 @@ type nodesStateMsg struct{ state *es.NodesState }
 type clusterSettingsMsg struct{ settings *es.ClusterSettings }
 type threadPoolsMsg struct{ pools []es.ThreadPoolInfo }
 type hotThreadsMsg struct{ threads string }
+type templatesMsg struct{ templates []es.IndexTemplate }
 type tasksMsg struct{ tasks []es.TaskInfo }
 type pendingTasksMsg struct{ tasks []es.PendingTask }
 type taskCancelledMsg struct{ err error }
@@ -184,6 +185,25 @@ func (m Model) fetchHotThreads() tea.Cmd {
 	}
 }
 
+func (m Model) fetchTemplates() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		templates, err := m.client.FetchIndexTemplates(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return templatesMsg{templates}
+	}
+}
+
+func (m Model) fetchClusterTab() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads(), m.fetchTemplates())
+}
+
+func (m Model) fetchTasksTab() tea.Cmd {
+	return m.fetchTasksTab()
+}
+
 func (m Model) fetchTasks() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -259,6 +279,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodes.SetThreadPools(msg.pools)
 	case hotThreadsMsg:
 		m.nodes.SetHotThreads(msg.threads)
+	case templatesMsg:
+		m.nodes.SetTemplates(msg.templates)
 	case tasksMsg:
 		m.loading = false
 		m.tasks.SetTasks(msg.tasks)
@@ -292,7 +314,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			m.loading = true
-			return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
+			return m, m.fetchTasksTab()
 		}
 	case taskCancelRequestMsg:
 		return m, m.cancelTask(msg.taskID)
@@ -318,9 +340,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabOverview, TabMappings:
 					return m, tea.Batch(m.spinner.Tick, m.connect())
 				case TabCluster:
-					return m, tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads())
+					return m, m.fetchClusterTab()
 				case TabTasks:
-					return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
+					return m, m.fetchTasksTab()
 				}
 			case "tab":
 				if m.showHelp {
@@ -343,10 +365,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.switchTab(TabMappings)
 				case TabMappings:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabCluster), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads())
+					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
 				case TabCluster:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
+					return m, tea.Batch(m.switchTab(TabTasks), m.fetchTasksTab())
 				case TabTasks:
 					return m, m.switchTab(TabOverview)
 				}
@@ -367,10 +389,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.switchTab(TabBrowser)
 				case TabOverview:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabTasks), m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
+					return m, tea.Batch(m.switchTab(TabTasks), m.fetchTasksTab())
 				case TabTasks:
 					m.loading = true
-					return m, tea.Batch(m.switchTab(TabCluster), m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads())
+					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
 				case TabCluster:
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
@@ -433,12 +455,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.activeTab = TabCluster
 					m.workbench.Blur()
 					m.loading = true
-					return m, tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads())
+					return m, m.fetchClusterTab()
 				} else {
 					m.activeTab = TabTasks
 					m.workbench.Blur()
 					m.loading = true
-					return m, tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
+					return m, m.fetchTasksTab()
 				}
 				return m, nil
 			}
@@ -566,7 +588,7 @@ func (m Model) View() string {
 	case TabMappings:
 		statusText = "q: quit  Tab: cluster  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
 	case TabCluster:
-		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-5: views  /: filter  ↑↓: scroll"
+		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-7: views  /: filter  ↑↓: scroll"
 	case TabTasks:
 		statusText = "q: quit  Tab: overview  Shift+Tab: cluster  r: refresh  Enter: details  c: cancel  ↑↓: select"
 	}

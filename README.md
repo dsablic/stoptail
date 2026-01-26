@@ -30,13 +30,14 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - View field types and properties (analyzer, index, doc_values, etc.)
   - See custom analyzers, tokenizers, and filters
   - Toggle to view index settings (shards, replicas, refresh interval, etc.)
-- **Cluster Tab**: Node statistics and cluster-wide information with 6 switchable views
+- **Cluster Tab**: Node statistics and cluster-wide information with 7 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
   - Fielddata: per-node/index/field fielddata breakdown
   - Settings: cluster settings (persistent, transient, defaults)
   - Threads: thread pool stats (active, queue, rejected, completed)
   - Hot: hot threads diagnostic for CPU-intensive operations
+  - Templates: index templates with patterns, priority, and component templates
 - **Tasks Tab**: Monitor long-running and pending operations
   - Reindex, update-by-query, delete-by-query tracking
   - Force merge and snapshot operations
@@ -213,6 +214,7 @@ stoptail stores data in `~/.stoptail/`:
 | `4` | Settings view |
 | `5` | Thread pools view |
 | `6` | Hot threads view |
+| `7` | Templates view |
 | `/` | Filter |
 | `Esc` | Clear filter |
 | `Enter` | View setting details (in Settings view) |

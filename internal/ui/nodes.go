@@ -22,6 +22,7 @@ const (
 	ViewClusterSettings
 	ViewThreadPools
 	ViewHotThreads
+	ViewTemplates
 )
 
 type NodesModel struct {
@@ -29,6 +30,7 @@ type NodesModel struct {
 	clusterSettings  *es.ClusterSettings
 	threadPools      []es.ThreadPoolInfo
 	hotThreads       string
+	templates        []es.IndexTemplate
 	activeView       NodesView
 	scrollY          int
 	selectedSetting  int
@@ -90,6 +92,10 @@ func (m *NodesModel) SetHotThreads(threads string) {
 	m.hotThreads = threads
 }
 
+func (m *NodesModel) SetTemplates(templates []es.IndexTemplate) {
+	m.templates = templates
+}
+
 func (m *NodesModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -109,6 +115,8 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewThreadPools
 	case "hotthreads":
 		m.activeView = ViewHotThreads
+	case "templates":
+		m.activeView = ViewTemplates
 	}
 }
 
@@ -180,6 +188,8 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewThreadPools)
 		case "6":
 			m.selectView(ViewHotThreads)
+		case "7":
+			m.selectView(ViewTemplates)
 		case "enter":
 			if m.activeView == ViewClusterSettings {
 				filtered := m.getFilteredSettings()
@@ -309,6 +319,8 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderThreadPoolsTable())
 	case ViewHotThreads:
 		b.WriteString(m.renderHotThreads())
+	case ViewTemplates:
+		b.WriteString(m.renderTemplates())
 	}
 
 	b.WriteString("\n")
@@ -335,6 +347,7 @@ func (m NodesModel) renderTabs() string {
 		{"4", "Settings", ViewClusterSettings},
 		{"5", "Threads", ViewThreadPools},
 		{"6", "Hot", ViewHotThreads},
+		{"7", "Templates", ViewTemplates},
 	}
 
 	var parts []string
@@ -652,6 +665,8 @@ func (m NodesModel) getItemCount() int {
 		return len(m.threadPools)
 	case ViewHotThreads:
 		return m.countHotThreads()
+	case ViewTemplates:
+		return len(m.templates)
 	}
 	return 0
 }
@@ -1113,6 +1128,71 @@ func (m NodesModel) renderHotThreads() string {
 			if col == 2 && row >= 0 && row < len(rows) {
 				pctStr := strings.TrimSuffix(rows[row][2], "%")
 				return style.Inherit(m.percentStyle(pctStr))
+			}
+			return style.Foreground(ColorWhite)
+		})
+
+	return tbl.Render()
+}
+
+func (m NodesModel) renderTemplates() string {
+	if m.templates == nil {
+		return "Loading templates..."
+	}
+
+	if len(m.templates) == 0 {
+		return "No index templates found"
+	}
+
+	var filtered []es.IndexTemplate
+	for _, t := range m.templates {
+		searchText := t.Name + " " + strings.Join(t.IndexPatterns, " ")
+		if m.matchesFilter(searchText) {
+			filtered = append(filtered, t)
+		}
+	}
+
+	if len(filtered) == 0 {
+		return "No matching templates"
+	}
+
+	vr := m.visibleItems(len(filtered))
+
+	var rows [][]string
+	for i := vr.start; i < vr.end && i < len(filtered); i++ {
+		t := filtered[i]
+		patterns := strings.Join(t.IndexPatterns, ", ")
+		composed := strings.Join(t.ComposedOf, ", ")
+		dataStream := ""
+		if t.DataStream {
+			dataStream = "yes"
+		}
+		rows = append(rows, []string{
+			t.Name,
+			patterns,
+			fmt.Sprintf("%d", t.Priority),
+			t.NumberOfShards,
+			t.NumberOfReplicas,
+			composed,
+			dataStream,
+		})
+	}
+
+	tbl := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers("Name", "Patterns", "Pri", "Shards", "Replicas", "Composed Of", "DS").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			style := lipgloss.NewStyle().Padding(0, 1)
+			if row == table.HeaderRow {
+				return style.Bold(true).Foreground(ColorWhite)
+			}
+			if col == 2 && row >= 0 && row < len(rows) {
+				return style.Align(lipgloss.Right)
+			}
+			if col == 6 && row >= 0 && row < len(rows) && rows[row][6] == "yes" {
+				return style.Foreground(ColorBlue)
 			}
 			return style.Foreground(ColorWhite)
 		})

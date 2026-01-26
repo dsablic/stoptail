@@ -163,6 +163,17 @@ type PendingTask struct {
 	TimeInQueue       string `json:"time_in_queue"`
 }
 
+type IndexTemplate struct {
+	Name           string
+	IndexPatterns  []string
+	Priority       int
+	Version        int
+	ComposedOf     []string
+	NumberOfShards string
+	NumberOfReplicas string
+	DataStream     bool
+}
+
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
 	sort.Slice(shards, func(i, j int) bool {
 		if shards[i].Index != shards[j].Index {
@@ -1436,4 +1447,73 @@ func (c *Client) FetchRecovery(ctx context.Context) ([]RecoveryInfo, error) {
 	}
 
 	return recovery, nil
+}
+
+func (c *Client) FetchIndexTemplates(ctx context.Context) ([]IndexTemplate, error) {
+	res, err := c.es.Indices.GetIndexTemplate(
+		c.es.Indices.GetIndexTemplate.WithContext(ctx),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching index templates: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading templates response: %w", err)
+	}
+
+	var response struct {
+		IndexTemplates []struct {
+			Name     string `json:"name"`
+			Template struct {
+				IndexPatterns []string `json:"index_patterns"`
+				ComposedOf    []string `json:"composed_of"`
+				Priority      int      `json:"priority"`
+				Version       int      `json:"version"`
+				DataStream    *struct{} `json:"data_stream"`
+				Template      struct {
+					Settings struct {
+						Index struct {
+							NumberOfShards   string `json:"number_of_shards"`
+							NumberOfReplicas string `json:"number_of_replicas"`
+						} `json:"index"`
+					} `json:"settings"`
+				} `json:"template"`
+			} `json:"index_template"`
+		} `json:"index_templates"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing templates: %w", err)
+	}
+
+	var templates []IndexTemplate
+	for _, item := range response.IndexTemplates {
+		t := IndexTemplate{
+			Name:             item.Name,
+			IndexPatterns:    item.Template.IndexPatterns,
+			Priority:         item.Template.Priority,
+			Version:          item.Template.Version,
+			ComposedOf:       item.Template.ComposedOf,
+			NumberOfShards:   item.Template.Template.Settings.Index.NumberOfShards,
+			NumberOfReplicas: item.Template.Template.Settings.Index.NumberOfReplicas,
+			DataStream:       item.Template.DataStream != nil,
+		}
+		templates = append(templates, t)
+	}
+
+	sort.Slice(templates, func(i, j int) bool {
+		if templates[i].Priority != templates[j].Priority {
+			return templates[i].Priority > templates[j].Priority
+		}
+		return templates[i].Name < templates[j].Name
+	})
+
+	return templates, nil
 }
