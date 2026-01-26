@@ -670,18 +670,6 @@ func (m OverviewModel) visibleColumns() int {
 	return cols
 }
 
-func (m OverviewModel) maxScrollY() int {
-	if m.cluster == nil {
-		return 0
-	}
-	maxRows := m.maxVisibleNodes()
-	maxScroll := len(m.cluster.Nodes) - maxRows
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
-}
-
 func (m OverviewModel) maxVisibleNodes() int {
 	maxLinesPerNode := 4
 	rows := (m.height - 9) / maxLinesPerNode

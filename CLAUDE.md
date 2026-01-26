@@ -64,6 +64,10 @@ go test ./...
 # Run tests with verbose output
 go test -v ./...
 
+# Run linters (always run before committing)
+go vet ./...
+staticcheck ./...
+
 # Test query editor (syntax highlighting, cursor, selection, mouse handling)
 go run cmd/editor-test/main.go -test
 
@@ -126,7 +130,7 @@ When adding or modifying functionality, tests are required:
 5. **Config changes** - Update tests in `internal/config/config_test.go`
 6. **Sorting/filtering logic** - Test that results are ordered correctly and edge cases are handled
 
-Run `go test ./...` before committing to ensure all tests pass.
+Run `go test ./...` and `staticcheck ./...` before committing to ensure all tests pass and there are no linter warnings.
 
 ### Always Update Documentation
 

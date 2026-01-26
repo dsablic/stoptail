@@ -136,7 +136,8 @@ func (e Editor) parse() *sitter.Tree {
 	}
 	parser := sitter.NewParser()
 	parser.SetLanguage(jsonLanguage)
-	return parser.Parse(nil, []byte(content))
+	tree, _ := parser.ParseCtx(context.Background(), nil, []byte(content))
+	return tree
 }
 
 func (e Editor) highlightContent() string {
