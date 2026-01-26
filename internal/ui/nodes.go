@@ -964,11 +964,11 @@ func (m NodesModel) renderThreadPoolsTable() string {
 }
 
 type hotThread struct {
-	node    string
-	total   string
-	cpu     string
-	other   string
-	time    string
+	node       string
+	total      string
+	cpu        string
+	other      string
+	threadType string
 }
 
 func parseHotThread(node, line string) *hotThread {
@@ -995,13 +995,52 @@ func parseHotThread(node, line string) *hotThread {
 		}
 	}
 
-	parenStart := strings.Index(line, "(")
-	parenEnd := strings.Index(line, ")")
-	if parenStart > 0 && parenEnd > parenStart {
-		ht.time = line[parenStart+1 : parenEnd]
+	if idx := strings.Index(line, "thread '"); idx > 0 {
+		rest := line[idx+8:]
+		if end := strings.Index(rest, "'"); end > 0 {
+			threadName := rest[:end]
+			ht.threadType = extractThreadType(threadName)
+		}
 	}
 
 	return ht
+}
+
+func extractThreadType(threadName string) string {
+	bracketParts := strings.Split(threadName, "][")
+	if len(bracketParts) >= 2 {
+		part := strings.TrimPrefix(bracketParts[1], "[")
+		part = strings.TrimSuffix(part, "]")
+		if idx := strings.Index(part, "["); idx > 0 {
+			part = part[:idx]
+		}
+		return part
+	}
+	if strings.Contains(threadName, "lucene") {
+		return "merge"
+	}
+	if strings.Contains(threadName, "refresh") {
+		return "refresh"
+	}
+	if strings.Contains(threadName, "flush") {
+		return "flush"
+	}
+	return "other"
+}
+
+func threadTypeColor(threadType string) lipgloss.Color {
+	switch threadType {
+	case "search", "get":
+		return ColorBlue
+	case "write", "bulk", "index":
+		return ColorGreen
+	case "merge", "refresh", "flush", "force_merge":
+		return ColorYellow
+	case "management", "generic":
+		return ColorGray
+	default:
+		return ColorWhite
+	}
 }
 
 func (m NodesModel) renderHotThreads() string {
@@ -1055,13 +1094,13 @@ func (m NodesModel) renderHotThreads() string {
 	var rows [][]string
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		t := filtered[i]
-		rows = append(rows, []string{t.node, t.total, t.cpu, t.other, t.time})
+		rows = append(rows, []string{t.node, t.threadType, t.total, t.cpu, t.other})
 	}
 
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Node", "Total", "CPU", "Other", "Time").
+		Headers("Node", "Type", "Total", "CPU", "Other").
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
@@ -1069,7 +1108,10 @@ func (m NodesModel) renderHotThreads() string {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
 			if col == 1 && row >= 0 && row < len(rows) {
-				pctStr := strings.TrimSuffix(rows[row][1], "%")
+				return style.Foreground(threadTypeColor(rows[row][1]))
+			}
+			if col == 2 && row >= 0 && row < len(rows) {
+				pctStr := strings.TrimSuffix(rows[row][2], "%")
 				return style.Inherit(m.percentStyle(pctStr))
 			}
 			return style.Foreground(ColorWhite)
