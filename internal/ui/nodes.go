@@ -35,6 +35,8 @@ type NodesModel struct {
 	scrollY          int
 	selectedSetting  int
 	settingDetail    *clusterSetting
+	selectedTemplate int
+	templateDetail   *es.IndexTemplate
 	width            int
 	height           int
 	loading          bool
@@ -69,6 +71,23 @@ func (m NodesModel) getFilteredSettings() []clusterSetting {
 	for _, s := range allSettings {
 		if m.matchesFilter(s.Key + " " + s.Value + " " + s.Source) {
 			filtered = append(filtered, s)
+		}
+	}
+	return filtered
+}
+
+func (m NodesModel) getFilteredTemplates() []es.IndexTemplate {
+	if m.templates == nil {
+		return nil
+	}
+	if m.filter.Value() == "" {
+		return m.templates
+	}
+	var filtered []es.IndexTemplate
+	for _, t := range m.templates {
+		searchText := t.Name + " " + strings.Join(t.IndexPatterns, " ")
+		if m.matchesFilter(searchText) {
+			filtered = append(filtered, t)
 		}
 	}
 	return filtered
@@ -125,6 +144,8 @@ func (m *NodesModel) selectView(view NodesView) {
 	m.scrollY = 0
 	m.selectedSetting = 0
 	m.settingDetail = nil
+	m.selectedTemplate = 0
+	m.templateDetail = nil
 }
 
 func (m NodesModel) getMaxScroll() int {
@@ -154,12 +175,19 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				m.filter, cmd = m.filter.Update(msg)
 				m.scrollY = 0
 				m.selectedSetting = 0
+				m.selectedTemplate = 0
 				return m, cmd
 			}
 		}
 		if m.settingDetail != nil {
 			if msg.String() == "esc" || msg.String() == "enter" {
 				m.settingDetail = nil
+			}
+			return m, nil
+		}
+		if m.templateDetail != nil {
+			if msg.String() == "esc" || msg.String() == "enter" {
+				m.templateDetail = nil
 			}
 			return m, nil
 		}
@@ -174,6 +202,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				m.filter.SetValue("")
 				m.scrollY = 0
 				m.selectedSetting = 0
+				m.selectedTemplate = 0
 			}
 			return m, nil
 		case "1":
@@ -197,6 +226,12 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 					s := filtered[m.selectedSetting]
 					m.settingDetail = &s
 				}
+			} else if m.activeView == ViewTemplates {
+				filtered := m.getFilteredTemplates()
+				if m.selectedTemplate >= 0 && m.selectedTemplate < len(filtered) {
+					t := filtered[m.selectedTemplate]
+					m.templateDetail = &t
+				}
 			}
 			return m, nil
 		case "up", "k":
@@ -209,6 +244,17 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 					}
 					if m.selectedSetting < m.scrollY {
 						m.scrollY = m.selectedSetting
+					}
+				}
+			} else if m.activeView == ViewTemplates {
+				if m.selectedTemplate > 0 {
+					m.selectedTemplate--
+					maxVisible := m.height - 10
+					if maxVisible < 1 {
+						maxVisible = 10
+					}
+					if m.selectedTemplate < m.scrollY {
+						m.scrollY = m.selectedTemplate
 					}
 				}
 			} else if m.scrollY > 0 {
@@ -225,6 +271,18 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 					}
 					if m.selectedSetting >= m.scrollY+maxVisible {
 						m.scrollY = m.selectedSetting - maxVisible + 1
+					}
+				}
+			} else if m.activeView == ViewTemplates {
+				filtered := m.getFilteredTemplates()
+				if m.selectedTemplate < len(filtered)-1 {
+					m.selectedTemplate++
+					maxVisible := m.height - 10
+					if maxVisible < 1 {
+						maxVisible = 10
+					}
+					if m.selectedTemplate >= m.scrollY+maxVisible {
+						m.scrollY = m.selectedTemplate - maxVisible + 1
 					}
 				}
 			} else if m.scrollY < m.getMaxScroll() {
@@ -292,6 +350,13 @@ func (m NodesModel) View() string {
 		}
 		if m.settingDetail != nil {
 			return m.renderSettingDetailModal()
+		}
+	} else if m.activeView == ViewTemplates {
+		if m.templates == nil {
+			return "Loading templates..."
+		}
+		if m.templateDetail != nil {
+			return m.renderTemplateDetailModal()
 		}
 	} else if m.activeView == ViewThreadPools {
 		if m.threadPools == nil {
@@ -1144,13 +1209,7 @@ func (m NodesModel) renderTemplates() string {
 		return "No index templates found"
 	}
 
-	var filtered []es.IndexTemplate
-	for _, t := range m.templates {
-		searchText := t.Name + " " + strings.Join(t.IndexPatterns, " ")
-		if m.matchesFilter(searchText) {
-			filtered = append(filtered, t)
-		}
-	}
+	filtered := m.getFilteredTemplates()
 
 	if len(filtered) == 0 {
 		return "No matching templates"
@@ -1159,6 +1218,7 @@ func (m NodesModel) renderTemplates() string {
 	vr := m.visibleItems(len(filtered))
 
 	var rows [][]string
+	var rowIndices []int
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		t := filtered[i]
 		patterns := Truncate(strings.Join(t.IndexPatterns, ", "), 25)
@@ -1176,6 +1236,7 @@ func (m NodesModel) renderTemplates() string {
 			composed,
 			dataStream,
 		})
+		rowIndices = append(rowIndices, i)
 	}
 
 	tbl := table.New().
@@ -1188,6 +1249,9 @@ func (m NodesModel) renderTemplates() string {
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
+			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedTemplate {
+				return style.Background(ColorBlue).Foreground(ColorOnAccent)
+			}
 			if col == 2 && row >= 0 && row < len(rows) {
 				return style.Align(lipgloss.Right)
 			}
@@ -1198,4 +1262,63 @@ func (m NodesModel) renderTemplates() string {
 		})
 
 	return tbl.Render()
+}
+
+func (m NodesModel) renderTemplateDetailModal() string {
+	t := m.templateDetail
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
+
+	var lines []string
+	lines = append(lines, labelStyle.Render("Template: ")+valueStyle.Render(t.Name))
+	lines = append(lines, "")
+
+	lines = append(lines, labelStyle.Render("Index Patterns:"))
+	for _, p := range t.IndexPatterns {
+		lines = append(lines, "  "+valueStyle.Render(p))
+	}
+	lines = append(lines, "")
+
+	lines = append(lines, labelStyle.Render("Priority: ")+valueStyle.Render(fmt.Sprintf("%d", t.Priority)))
+	if t.Version > 0 {
+		lines = append(lines, labelStyle.Render("Version:  ")+valueStyle.Render(fmt.Sprintf("%d", t.Version)))
+	}
+	lines = append(lines, "")
+
+	if t.NumberOfShards != "" || t.NumberOfReplicas != "" {
+		lines = append(lines, labelStyle.Render("Settings:"))
+		if t.NumberOfShards != "" {
+			lines = append(lines, "  "+labelStyle.Render("Shards:   ")+valueStyle.Render(t.NumberOfShards))
+		}
+		if t.NumberOfReplicas != "" {
+			lines = append(lines, "  "+labelStyle.Render("Replicas: ")+valueStyle.Render(t.NumberOfReplicas))
+		}
+		lines = append(lines, "")
+	}
+
+	if len(t.ComposedOf) > 0 {
+		lines = append(lines, labelStyle.Render("Composed Of:"))
+		for _, c := range t.ComposedOf {
+			lines = append(lines, "  "+valueStyle.Render(c))
+		}
+		lines = append(lines, "")
+	}
+
+	if t.DataStream {
+		lines = append(lines, labelStyle.Render("Data Stream: ")+lipgloss.NewStyle().Foreground(ColorBlue).Render("yes"))
+	}
+
+	content := strings.Join(lines, "\n")
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2).
+		MaxWidth(m.width - 10)
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
