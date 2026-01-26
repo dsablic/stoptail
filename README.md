@@ -27,6 +27,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Toggle between tree and flat view
   - View field types and properties (analyzer, index, doc_values, etc.)
   - See custom analyzers, tokenizers, and filters
+  - Toggle to view index settings (shards, replicas, refresh interval, etc.)
 - **Nodes Tab**: Node statistics with 3 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments
   - Disk: disk usage, shard counts, versions
@@ -192,6 +193,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Left/Right` | Switch between index list and mapping panes |
 | `Enter` | Load mappings for selected index |
 | `t` | Toggle tree/flat view |
+| `s` | Toggle settings view |
 | `Up/Down` | Scroll |
 
 ### Nodes Tab

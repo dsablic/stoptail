@@ -73,6 +73,7 @@ var helpMappings = `## Mappings
 | left/right | Switch panes |
 | Enter | Load mappings |
 | t | Toggle tree view |
+| s | Toggle settings |
 | up/down | Scroll |
 `
 

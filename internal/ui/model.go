@@ -52,6 +52,10 @@ type mappingsMsg struct {
 	analyzers []es.AnalyzerInfo
 	err       error
 }
+type settingsMsg struct {
+	settings *es.IndexSettings
+	err      error
+}
 type errMsg struct{ err error }
 
 func New(client *es.Client, cfg *config.Config) Model {
@@ -178,6 +182,17 @@ func (m Model) fetchMappings(indexName string) tea.Cmd {
 	}
 }
 
+func (m Model) fetchSettings(indexName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		settings, err := m.client.FetchIndexSettings(ctx, indexName)
+		if err != nil {
+			return settingsMsg{err: err}
+		}
+		return settingsMsg{settings: settings}
+	}
+}
+
 func (m Model) cancelTask(taskID string) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
@@ -222,6 +237,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mappings.SetLoading(msg.indexName)
 		m.loading = true
 		return m, tea.Batch(m.spinner.Tick, m.fetchMappings(msg.indexName))
+	case fetchSettingsMsg:
+		m.mappings.settingsLoading = true
+		return m, m.fetchSettings(msg.indexName)
+	case settingsMsg:
+		m.mappings.settingsLoading = false
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.mappings.SetSettings(msg.settings)
+		}
+		return m, nil
 	case taskCancelledMsg:
 		m.tasks.ClearConfirming()
 		if msg.err != nil {
@@ -522,7 +548,7 @@ func (m Model) View() string {
 	case TabBrowser:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: workbench  /: filter  ←→: panes  ↑↓: scroll  Ctrl+Y: copy"
 	case TabMappings:
-		statusText = "q: quit  Tab: nodes  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  Ctrl+Y: copy  Ctrl+F: search"
+		statusText = "q: quit  Tab: nodes  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
 	case TabTasks:

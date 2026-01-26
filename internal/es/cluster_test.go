@@ -464,6 +464,59 @@ func TestParseTasksResponse(t *testing.T) {
 	}
 }
 
+func TestParseIndexSettings(t *testing.T) {
+	raw := `{"products":{"settings":{"index.creation_date":"1769163610124","index.number_of_replicas":"1","index.number_of_shards":"2","index.provided_name":"products","index.routing.allocation.include._tier_preference":"data_content","index.uuid":"0iA3VMGtS32YuFMvIPgeWw","index.version.created":"9039003"}}}`
+
+	settings, err := parseIndexSettings("products", []byte(raw))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if settings.IndexName != "products" {
+		t.Errorf("IndexName = %q, want %q", settings.IndexName, "products")
+	}
+	if settings.NumberOfShards != "2" {
+		t.Errorf("NumberOfShards = %q, want %q", settings.NumberOfShards, "2")
+	}
+	if settings.NumberOfReplicas != "1" {
+		t.Errorf("NumberOfReplicas = %q, want %q", settings.NumberOfReplicas, "1")
+	}
+	if settings.CreationDate != "1769163610124" {
+		t.Errorf("CreationDate = %q, want %q", settings.CreationDate, "1769163610124")
+	}
+	if settings.UUID != "0iA3VMGtS32YuFMvIPgeWw" {
+		t.Errorf("UUID = %q, want %q", settings.UUID, "0iA3VMGtS32YuFMvIPgeWw")
+	}
+	if settings.Version != "9039003" {
+		t.Errorf("Version = %q, want %q", settings.Version, "9039003")
+	}
+	if len(settings.AllSettings) != 7 {
+		t.Errorf("AllSettings has %d entries, want 7", len(settings.AllSettings))
+	}
+}
+
+func TestParseIndexSettingsWithArrays(t *testing.T) {
+	raw := `{"patents":{"settings":{"index.analysis.analyzer.custom_english.filter":["lowercase","english_stemmer"],"index.number_of_shards":"5","index.number_of_replicas":"0"}}}`
+
+	settings, err := parseIndexSettings("patents", []byte(raw))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if settings.NumberOfShards != "5" {
+		t.Errorf("NumberOfShards = %q, want %q", settings.NumberOfShards, "5")
+	}
+	if settings.NumberOfReplicas != "0" {
+		t.Errorf("NumberOfReplicas = %q, want %q", settings.NumberOfReplicas, "0")
+	}
+
+	filterVal := settings.AllSettings["index.analysis.analyzer.custom_english.filter"]
+	expected := "[lowercase, english_stemmer]"
+	if filterVal != expected {
+		t.Errorf("filter = %q, want %q", filterVal, expected)
+	}
+}
+
 func TestParseMappingResponse(t *testing.T) {
 	raw := `{
 		"products": {

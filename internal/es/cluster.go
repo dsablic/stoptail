@@ -124,6 +124,19 @@ type IndexMappings struct {
 	Analyzers  []AnalyzerInfo
 }
 
+type IndexSettings struct {
+	IndexName       string
+	NumberOfShards  string
+	NumberOfReplicas string
+	RefreshInterval string
+	Codec           string
+	CreationDate    string
+	UUID            string
+	Version         string
+	RoutingAllocation string
+	AllSettings     map[string]string
+}
+
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
 	sort.Slice(shards, func(i, j int) bool {
 		if shards[i].Index != shards[j].Index {
@@ -896,6 +909,84 @@ func parseAllocationExplain(data []byte) (*AllocationExplain, error) {
 	}
 
 	return result, nil
+}
+
+func (c *Client) FetchIndexSettings(ctx context.Context, indexName string) (*IndexSettings, error) {
+	res, err := c.es.Indices.GetSettings(
+		c.es.Indices.GetSettings.WithContext(ctx),
+		c.es.Indices.GetSettings.WithIndex(indexName),
+		c.es.Indices.GetSettings.WithFlatSettings(true),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching index settings: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading settings response: %w", err)
+	}
+
+	return parseIndexSettings(indexName, body)
+}
+
+func parseIndexSettings(indexName string, data []byte) (*IndexSettings, error) {
+	var response map[string]struct {
+		Settings map[string]any `json:"settings"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("parsing index settings: %w", err)
+	}
+
+	settings := &IndexSettings{
+		IndexName:   indexName,
+		AllSettings: make(map[string]string),
+	}
+
+	if indexData, ok := response[indexName]; ok {
+		for k, rawVal := range indexData.Settings {
+			var v string
+			switch val := rawVal.(type) {
+			case string:
+				v = val
+			case []any:
+				parts := make([]string, len(val))
+				for i, item := range val {
+					parts[i] = fmt.Sprintf("%v", item)
+				}
+				v = "[" + strings.Join(parts, ", ") + "]"
+			default:
+				v = fmt.Sprintf("%v", val)
+			}
+			settings.AllSettings[k] = v
+			switch k {
+			case "index.number_of_shards":
+				settings.NumberOfShards = v
+			case "index.number_of_replicas":
+				settings.NumberOfReplicas = v
+			case "index.refresh_interval":
+				settings.RefreshInterval = v
+			case "index.codec":
+				settings.Codec = v
+			case "index.creation_date":
+				settings.CreationDate = v
+			case "index.uuid":
+				settings.UUID = v
+			case "index.version.created":
+				settings.Version = v
+			case "index.routing.allocation.enable":
+				settings.RoutingAllocation = v
+			}
+		}
+	}
+
+	return settings, nil
 }
 
 func parseTasksResponse(data []byte) ([]TaskInfo, error) {

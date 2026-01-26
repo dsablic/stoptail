@@ -17,6 +17,13 @@ const (
 	PaneMappings
 )
 
+type MappingsViewMode int
+
+const (
+	ViewMappings MappingsViewMode = iota
+	ViewSettings
+)
+
 type MappingsModel struct {
 	indices       []es.IndexInfo
 	selectedIndex int
@@ -28,15 +35,23 @@ type MappingsModel struct {
 	filterText    string
 	treeView      bool
 	search        SearchBar
+	viewMode      MappingsViewMode
 
 	mappings      *es.IndexMappings
 	analyzers     []es.AnalyzerInfo
 	mappingScroll int
 	loadingIndex  string
 	clipboard     Clipboard
+
+	settings        *es.IndexSettings
+	settingsLoading bool
 }
 
 type fetchMappingsMsg struct {
+	indexName string
+}
+
+type fetchSettingsMsg struct {
 	indexName string
 }
 
@@ -65,6 +80,12 @@ func (m *MappingsModel) SetMappings(mappings *es.IndexMappings, analyzers []es.A
 	m.mappings = mappings
 	m.analyzers = analyzers
 	m.loadingIndex = ""
+	m.mappingScroll = 0
+}
+
+func (m *MappingsModel) SetSettings(settings *es.IndexSettings) {
+	m.settings = settings
+	m.settingsLoading = false
 	m.mappingScroll = 0
 }
 
@@ -122,19 +143,34 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				m.filterText = ""
 			}
 		case "t":
-			if m.activePane == PaneMappings {
+			if m.activePane == PaneMappings && m.viewMode == ViewMappings {
 				m.treeView = !m.treeView
+			}
+		case "s":
+			if m.activePane == PaneMappings {
+				if m.viewMode == ViewMappings {
+					m.viewMode = ViewSettings
+					return m, m.fetchSettingsCmd()
+				} else {
+					m.viewMode = ViewMappings
+				}
 			}
 		case "left", "h":
 			m.activePane = PaneIndices
 		case "right", "l":
 			if m.activePane == PaneIndices {
 				m.activePane = PaneMappings
+				if m.viewMode == ViewSettings {
+					return m, m.fetchSettingsCmd()
+				}
 				return m, m.fetchMappingsCmd()
 			}
 		case "enter":
 			if m.activePane == PaneIndices {
 				m.activePane = PaneMappings
+				if m.viewMode == ViewSettings {
+					return m, m.fetchSettingsCmd()
+				}
 				return m, m.fetchMappingsCmd()
 			}
 		case "up", "k":
@@ -265,6 +301,16 @@ func (m MappingsModel) fetchMappingsCmd() tea.Cmd {
 	}
 }
 
+func (m MappingsModel) fetchSettingsCmd() tea.Cmd {
+	indexName := m.SelectedIndexName()
+	if indexName == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return fetchSettingsMsg{indexName: indexName}
+	}
+}
+
 func (m MappingsModel) filteredIndices() []es.IndexInfo {
 	if m.filterText == "" {
 		return m.indices
@@ -351,7 +397,12 @@ func (m MappingsModel) View() string {
 	rightWidth := m.width - leftWidth - 5
 
 	leftPane := m.renderIndexList(leftWidth)
-	rightPane := m.renderMappingsPane(rightWidth)
+	var rightPane string
+	if m.viewMode == ViewSettings {
+		rightPane = m.renderSettingsPane(rightWidth)
+	} else {
+		rightPane = m.renderMappingsPane(rightWidth)
+	}
 
 	leftLines := strings.Split(leftPane, "\n")
 	rightLines := strings.Split(rightPane, "\n")
@@ -501,6 +552,101 @@ func (m MappingsModel) renderMappingsPane(width int) string {
 	if m.search.Active() {
 		b.WriteString(m.search.View(width - 4))
 		b.WriteString("\n")
+	}
+
+	return paneStyle.Render(b.String())
+}
+
+func (m MappingsModel) renderSettingsPane(width int) string {
+	borderColor := ColorGray
+	if m.activePane == PaneMappings {
+		borderColor = ColorBlue
+	}
+
+	paneStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Width(width).
+		Height(m.height - 2)
+
+	if m.settingsLoading {
+		return paneStyle.Render("Loading settings...")
+	}
+
+	if m.settings == nil {
+		hint := lipgloss.NewStyle().Foreground(ColorGray).Render("Press s to load settings")
+		return paneStyle.Render(hint)
+	}
+
+	var b strings.Builder
+
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+	b.WriteString(headerStyle.Render("Settings: " + m.settings.IndexName))
+	b.WriteString("\n")
+
+	toggleHint := lipgloss.NewStyle().Foreground(ColorGray).Render("[s: switch to mappings]")
+	b.WriteString(toggleHint)
+	b.WriteString("\n\n")
+
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
+
+	settings := []struct {
+		label string
+		value string
+	}{
+		{"Shards", m.settings.NumberOfShards},
+		{"Replicas", m.settings.NumberOfReplicas},
+		{"Refresh Interval", m.settings.RefreshInterval},
+		{"Codec", m.settings.Codec},
+		{"Created", m.settings.CreationDate},
+		{"UUID", m.settings.UUID},
+		{"Version", m.settings.Version},
+	}
+
+	if m.settings.RoutingAllocation != "" {
+		settings = append(settings, struct {
+			label string
+			value string
+		}{"Routing Allocation", m.settings.RoutingAllocation})
+	}
+
+	labelWidth := 18
+	for _, s := range settings {
+		if s.value != "" {
+			b.WriteString(labelStyle.Render(fmt.Sprintf("%-*s", labelWidth, s.label+":")))
+			b.WriteString(valueStyle.Render(s.value))
+			b.WriteString("\n")
+		}
+	}
+
+	if len(m.settings.AllSettings) > 0 {
+		b.WriteString("\n")
+		b.WriteString(headerStyle.Render("All Settings"))
+		b.WriteString("\n")
+
+		var keys []string
+		for k := range m.settings.AllSettings {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		maxVisible := max(m.height-15, 5)
+		endIdx := min(m.mappingScroll+maxVisible, len(keys))
+		startIdx := m.mappingScroll
+		if startIdx >= len(keys) {
+			startIdx = max(0, len(keys)-1)
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			k := keys[i]
+			v := m.settings.AllSettings[k]
+			keyTrunc := Truncate(k, width/2)
+			valTrunc := Truncate(v, width/2-2)
+			b.WriteString(labelStyle.Render(keyTrunc + ": "))
+			b.WriteString(valueStyle.Render(valTrunc))
+			b.WriteString("\n")
+		}
 	}
 
 	return paneStyle.Render(b.String())
