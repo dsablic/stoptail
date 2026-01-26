@@ -80,7 +80,7 @@ var helpCluster = `## Cluster
 
 | Key | Action |
 |-----|--------|
-| 1-5 | Switch view |
+| 1-6 | Switch view |
 | / | Filter |
 | Esc | Clear filter |
 | Enter | Details (Settings) |

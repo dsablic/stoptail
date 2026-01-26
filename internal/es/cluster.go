@@ -1369,3 +1369,28 @@ func (c *Client) FetchPendingTasks(ctx context.Context) ([]PendingTask, error) {
 	return response.Tasks, nil
 }
 
+func (c *Client) FetchHotThreads(ctx context.Context) (string, error) {
+	res, err := c.es.Nodes.HotThreads(
+		c.es.Nodes.HotThreads.WithContext(ctx),
+		c.es.Nodes.HotThreads.WithThreads(3),
+		c.es.Nodes.HotThreads.WithInterval(500*time.Millisecond),
+		c.es.Nodes.HotThreads.WithSnapshots(10),
+	)
+	if err != nil {
+		return "", fmt.Errorf("fetching hot threads: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return "", fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading hot threads response: %w", err)
+	}
+
+	return string(body), nil
+}
+

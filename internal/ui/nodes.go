@@ -21,12 +21,14 @@ const (
 	ViewFielddata
 	ViewClusterSettings
 	ViewThreadPools
+	ViewHotThreads
 )
 
 type NodesModel struct {
 	state            *es.NodesState
 	clusterSettings  *es.ClusterSettings
 	threadPools      []es.ThreadPoolInfo
+	hotThreads       string
 	activeView       NodesView
 	scrollY          int
 	selectedSetting  int
@@ -84,6 +86,10 @@ func (m *NodesModel) SetThreadPools(pools []es.ThreadPoolInfo) {
 	m.threadPools = pools
 }
 
+func (m *NodesModel) SetHotThreads(threads string) {
+	m.hotThreads = threads
+}
+
 func (m *NodesModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
@@ -101,6 +107,8 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewClusterSettings
 	case "threadpools":
 		m.activeView = ViewThreadPools
+	case "hotthreads":
+		m.activeView = ViewHotThreads
 	}
 }
 
@@ -170,6 +178,8 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewClusterSettings)
 		case "5":
 			m.selectView(ViewThreadPools)
+		case "6":
+			m.selectView(ViewHotThreads)
 		case "enter":
 			if m.activeView == ViewClusterSettings {
 				filtered := m.getFilteredSettings()
@@ -297,6 +307,8 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderClusterSettingsTable())
 	case ViewThreadPools:
 		b.WriteString(m.renderThreadPoolsTable())
+	case ViewHotThreads:
+		b.WriteString(m.renderHotThreads())
 	}
 
 	b.WriteString("\n")
@@ -322,6 +334,7 @@ func (m NodesModel) renderTabs() string {
 		{"3", "Fielddata", ViewFielddata},
 		{"4", "Settings", ViewClusterSettings},
 		{"5", "Threads", ViewThreadPools},
+		{"6", "Hot", ViewHotThreads},
 	}
 
 	var parts []string
@@ -921,4 +934,42 @@ func (m NodesModel) renderThreadPoolsTable() string {
 		})
 
 	return t.Render()
+}
+
+func (m NodesModel) renderHotThreads() string {
+	if m.hotThreads == "" {
+		return "No hot threads data. Press 'r' to refresh."
+	}
+
+	lines := strings.Split(m.hotThreads, "\n")
+	if m.filter.Value() != "" {
+		var filtered []string
+		for _, line := range lines {
+			if m.matchesFilter(line) {
+				filtered = append(filtered, line)
+			}
+		}
+		lines = filtered
+	}
+
+	if len(lines) == 0 {
+		return "No matching lines"
+	}
+
+	maxVisible := m.height - 8
+	if maxVisible < 1 {
+		maxVisible = 10
+	}
+
+	start := m.scrollY
+	if start > len(lines) {
+		start = len(lines)
+	}
+	end := start + maxVisible
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	visibleLines := lines[start:end]
+	return strings.Join(visibleLines, "\n")
 }
