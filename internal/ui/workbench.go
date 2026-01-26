@@ -57,8 +57,10 @@ type WorkbenchModel struct {
 	search       SearchBar
 	completion   CompletionState
 	fieldCache   map[string][]CompletionItem
-	lastIndex string
-	clipboard Clipboard
+	lastIndex    string
+	clipboard    Clipboard
+	bookmarkUI   BookmarkUI
+	bookmarks    *storage.Bookmarks
 }
 
 type executeResultMsg struct {
@@ -109,6 +111,8 @@ func NewWorkbench() WorkbenchModel {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
 
+	bookmarks, _ := storage.LoadBookmarks()
+
 	return WorkbenchModel{
 		methodIdx:  methodIdx,
 		path:       path,
@@ -121,6 +125,8 @@ func NewWorkbench() WorkbenchModel {
 		search:     NewSearchBar(),
 		fieldCache: make(map[string][]CompletionItem),
 		clipboard:  NewClipboard(),
+		bookmarkUI: NewBookmarkUI(),
+		bookmarks:  bookmarks,
 	}
 }
 
@@ -130,7 +136,7 @@ func (m *WorkbenchModel) SetClient(client *es.Client) {
 }
 
 func (m WorkbenchModel) HasActiveInput() bool {
-	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active()
+	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active() || m.bookmarkUI.Active()
 }
 
 func (m WorkbenchModel) ClipboardMessage() string {
@@ -267,6 +273,31 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 	case tea.KeyMsg:
 		m.clipboard.ClearMessage()
+		if m.bookmarkUI.Active() {
+			action, bookmark := m.bookmarkUI.HandleKey(msg)
+			switch action {
+			case BookmarkActionSave:
+				if bookmark != nil {
+					bookmark.Method = methods[m.methodIdx]
+					bookmark.Path = m.path.Value()
+					bookmark.Body = m.editor.Content()
+					m.bookmarks.Add(*bookmark)
+					_ = storage.SaveBookmarks(m.bookmarks)
+				}
+			case BookmarkActionLoad:
+				if bookmark != nil {
+					for i, method := range methods {
+						if method == bookmark.Method {
+							m.methodIdx = i
+							break
+						}
+					}
+					m.path.SetValue(bookmark.Path)
+					m.editor.SetContent(bookmark.Body)
+				}
+			}
+			return m, nil
+		}
 		if m.search.Active() {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
@@ -299,6 +330,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			if cmd := m.startExecution(); cmd != nil {
 				return m, cmd
 			}
+		case "ctrl+s":
+			return m, m.bookmarkUI.OpenSave()
+		case "ctrl+b":
+			m.bookmarkUI.OpenLoad()
+			return m, nil
 		case "ctrl+y":
 			var text string
 			switch m.focus {
@@ -821,6 +857,11 @@ func (m WorkbenchModel) View() string {
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " ")
 	}
+
+	if m.bookmarkUI.Active() {
+		return m.bookmarkUI.View(m.width, m.height)
+	}
+
 	return strings.Join(lines, "\n")
 }
 

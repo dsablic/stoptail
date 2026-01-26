@@ -39,6 +39,8 @@ var helpWorkbench = `## Workbench
 | Enter | Edit |
 | Tab | Autocomplete / next |
 | Ctrl+R | Execute |
+| Ctrl+S | Save bookmark |
+| Ctrl+B | Load bookmark |
 | Ctrl+F | Search response |
 | Enter/n | Next match |
 | Shift+Enter/N | Prev match |

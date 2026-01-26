@@ -18,6 +18,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
+  - Save and load query bookmarks (Ctrl+S/Ctrl+B)
 - **Browser Tab**: Document browser
   - Browse documents in any index
   - Three-pane layout: indices, document list, document detail
@@ -125,6 +126,7 @@ stoptail stores data in `~/.stoptail/`:
 |------|-------------|
 | `config.yaml` | Cluster configuration |
 | `history.json` | Workbench query history |
+| `bookmarks.json` | Saved query bookmarks |
 
 ## Keybindings
 
@@ -163,6 +165,8 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` | Activate editor |
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+R` | Execute request |
+| `Ctrl+S` | Save query as bookmark |
+| `Ctrl+B` | Load bookmark |
 | `Ctrl+F` | Search in response |
 | `Enter` / `n` | Next search match |
 | `Shift+Enter` / `N` | Previous search match |
