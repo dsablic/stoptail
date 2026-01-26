@@ -201,7 +201,7 @@ func (m Model) fetchClusterTab() tea.Cmd {
 }
 
 func (m Model) fetchTasksTab() tea.Cmd {
-	return m.fetchTasksTab()
+	return tea.Batch(m.spinner.Tick, m.fetchTasks(), m.fetchPendingTasks())
 }
 
 func (m Model) fetchTasks() tea.Cmd {
