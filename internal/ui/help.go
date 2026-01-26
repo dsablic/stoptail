@@ -90,6 +90,7 @@ var helpTasks = `## Tasks
 
 | Key | Action |
 |-----|--------|
+| Enter | Task details |
 | Ctrl+F | Search |
 | c | Cancel task |
 | y/n | Confirm |

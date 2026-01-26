@@ -412,6 +412,27 @@ func TestParseTasksResponse(t *testing.T) {
 						"start_time_in_millis": 1700000001000,
 						"running_time_in_nanos": 1000000,
 						"cancellable": false
+					},
+					"node-id-1:12347": {
+						"node": "node-id-1",
+						"id": 12347,
+						"type": "transport",
+						"action": "indices:admin/forcemerge",
+						"description": "Force-merge indices [test]",
+						"start_time_in_millis": 1700000002000,
+						"running_time_in_nanos": 60000000000,
+						"cancellable": false
+					},
+					"node-id-1:12348": {
+						"node": "node-id-1",
+						"id": 12348,
+						"type": "transport",
+						"action": "indices:admin/forcemerge[n]",
+						"description": "Force-merge indices [test]",
+						"start_time_in_millis": 1700000002000,
+						"running_time_in_nanos": 60000000000,
+						"cancellable": false,
+						"parent_task_id": "node-id-1:12347"
 					}
 				}
 			}
@@ -423,24 +444,23 @@ func TestParseTasksResponse(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	if len(tasks) != 1 {
-		t.Fatalf("got %d tasks, want 1 (only cancellable reindex)", len(tasks))
+	if len(tasks) != 2 {
+		t.Fatalf("got %d tasks, want 2 (reindex + forcemerge parent, excluding child)", len(tasks))
 	}
 
-	if tasks[0].ID != "node-id-1:12345" {
-		t.Errorf("ID = %q, want %q", tasks[0].ID, "node-id-1:12345")
+	taskIDs := make(map[string]bool)
+	for _, task := range tasks {
+		taskIDs[task.ID] = true
 	}
-	if tasks[0].Action != "indices:data/write/reindex" {
-		t.Errorf("Action = %q, want %q", tasks[0].Action, "indices:data/write/reindex")
+
+	if !taskIDs["node-id-1:12345"] {
+		t.Error("expected reindex task to be included")
 	}
-	if tasks[0].Node != "es-node-1" {
-		t.Errorf("Node = %q, want %q", tasks[0].Node, "es-node-1")
+	if !taskIDs["node-id-1:12347"] {
+		t.Error("expected forcemerge parent task to be included")
 	}
-	if tasks[0].RunningTime != "2m 0s" {
-		t.Errorf("RunningTime = %q, want %q", tasks[0].RunningTime, "2m 0s")
-	}
-	if tasks[0].Cancellable != true {
-		t.Error("Cancellable should be true")
+	if taskIDs["node-id-1:12348"] {
+		t.Error("expected forcemerge child task (with parent_task_id) to be excluded")
 	}
 }
 

@@ -208,6 +208,7 @@ stoptail stores data in `~/.stoptail/`:
 
 | Key | Action |
 |-----|--------|
+| `Enter` | View task details |
 | `Ctrl+F` | Search tasks |
 | `c` | Cancel selected task |
 | `y` | Confirm cancel |

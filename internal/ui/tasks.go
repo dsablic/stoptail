@@ -10,14 +10,15 @@ import (
 )
 
 type TasksModel struct {
-	tasks       []es.TaskInfo
-	selectedRow int
-	scrollY     int
-	width       int
-	height      int
-	loading     bool
-	confirming  string
-	search      SearchBar
+	tasks        []es.TaskInfo
+	selectedRow  int
+	scrollY      int
+	width        int
+	height       int
+	loading      bool
+	confirming   string
+	search       SearchBar
+	showingModal bool
 }
 
 func NewTasks() TasksModel {
@@ -54,6 +55,13 @@ func (m *TasksModel) ClearConfirming() {
 func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.showingModal {
+			if msg.String() == "esc" || msg.String() == "enter" || msg.String() == "q" {
+				m.showingModal = false
+			}
+			return m, nil
+		}
+
 		if m.search.Active() {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
@@ -85,6 +93,11 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		}
 
 		switch msg.String() {
+		case "enter":
+			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
+				m.showingModal = true
+			}
+			return m, nil
 		case "up", "k":
 			if m.selectedRow > 0 {
 				m.selectedRow--
@@ -120,7 +133,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 				m.scrollY = m.selectedRow - maxVisible + 1
 			}
 		case "c":
-			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
+			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) && m.tasks[m.selectedRow].Cancellable {
 				m.confirming = m.tasks[m.selectedRow].ID
 			}
 		case "ctrl+f":
@@ -187,6 +200,10 @@ func (m TasksModel) View() string {
 			Render("No long-running tasks found.\n\nThis view shows: reindex, update-by-query, delete-by-query,\nforce merge, and snapshot operations.")
 	}
 
+	if m.showingModal {
+		return m.renderDetailsModal()
+	}
+
 	maxVisible := m.maxVisibleRows()
 	endIdx := min(m.scrollY+maxVisible, len(m.tasks))
 
@@ -194,7 +211,10 @@ func (m TasksModel) View() string {
 	var rowStates []string
 	for i := m.scrollY; i < endIdx; i++ {
 		task := m.tasks[i]
-		cancelText := "[c]"
+		cancelText := "-"
+		if task.Cancellable {
+			cancelText = "[c]"
+		}
 		state := "normal"
 		if m.confirming == task.ID {
 			cancelText = "y/n?"
@@ -257,5 +277,47 @@ func (m TasksModel) truncateAction(action string) string {
 		return parts[len(parts)-1]
 	}
 	return action
+}
+
+func (m TasksModel) renderDetailsModal() string {
+	if m.selectedRow < 0 || m.selectedRow >= len(m.tasks) {
+		return ""
+	}
+	task := m.tasks[m.selectedRow]
+
+	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
+
+	cancellableText := "No"
+	if task.Cancellable {
+		cancellableText = "Yes"
+	}
+
+	content := strings.Join([]string{
+		labelStyle.Render("Task ID:     ") + valueStyle.Render(task.ID),
+		labelStyle.Render("Action:      ") + valueStyle.Render(task.Action),
+		labelStyle.Render("Node:        ") + valueStyle.Render(task.Node),
+		labelStyle.Render("Running:     ") + valueStyle.Render(task.RunningTime),
+		labelStyle.Render("Cancellable: ") + valueStyle.Render(cancellableText),
+		"",
+		labelStyle.Render("Description:"),
+		valueStyle.Render(task.Description),
+	}, "\n")
+
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2).
+		Width(70)
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func (m TasksModel) HasModal() bool {
+	return m.showingModal
 }
 

@@ -831,6 +831,7 @@ func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 				Description      string `json:"description"`
 				RunningTimeNanos int64  `json:"running_time_in_nanos"`
 				Cancellable      bool   `json:"cancellable"`
+				ParentTaskID     string `json:"parent_task_id"`
 			} `json:"tasks"`
 		} `json:"nodes"`
 	}
@@ -859,7 +860,7 @@ func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 	var tasks []TaskInfo
 	for nodeID, nodeData := range response.Nodes {
 		for taskID, task := range nodeData.Tasks {
-			if !task.Cancellable || !isTargetAction(task.Action) {
+			if !isTargetAction(task.Action) || task.ParentTaskID != "" {
 				continue
 			}
 

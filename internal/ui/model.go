@@ -98,7 +98,7 @@ func (m Model) hasActiveInput() bool {
 	case TabMappings:
 		return m.mappings.filterActive || m.mappings.search.Active()
 	case TabTasks:
-		return m.tasks.confirming != ""
+		return m.tasks.confirming != "" || m.tasks.HasModal()
 	}
 	return false
 }
@@ -526,7 +526,7 @@ func (m Model) View() string {
 	case TabNodes:
 		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-3: views  ↑↓: scroll"
 	case TabTasks:
-		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  c: cancel  ↑↓: select"
+		statusText = "q: quit  Tab: overview  Shift+Tab: nodes  r: refresh  Enter: details  c: cancel  ↑↓: select"
 	}
 
 	var clipboardMsg string
