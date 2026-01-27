@@ -439,10 +439,11 @@ This renders the UI to stdout without starting the full TUI, allowing visual ver
 
 When making UI changes (new tabs, new keybindings, layout changes), update `demo.tape` and regenerate `demo.gif`:
 
-1. **Build first**: `go build .`
-2. **Update demo.tape** to showcase the new functionality
-3. **Regenerate**: `vhs demo.tape`
-4. **Verify and commit** both `demo.tape` and `demo.gif`
+1. **Update demo.tape** to showcase the new functionality
+2. **Build and regenerate**: `go build . && rm -f ~/.stoptail/history.json && vhs demo.tape`
+3. **Verify and commit** both `demo.tape` and `demo.gif`
+
+**IMPORTANT**: Always build before running vhs - the demo uses `./stoptail` (local binary), not the installed version.
 
 ### Verify Demo GIF Before Committing
 
@@ -450,7 +451,7 @@ When making UI changes (new tabs, new keybindings, layout changes), update `demo
 
 When modifying `demo.tape`, always verify the generated `demo.gif` before committing:
 
-1. **Regenerate the demo**: `vhs demo.tape`
+1. **Regenerate the demo**: `go build . && rm -f ~/.stoptail/history.json && vhs demo.tape`
 2. **Extract frames for verification**:
    ```bash
    mkdir -p /tmp/demo-frames
@@ -465,8 +466,7 @@ When modifying `demo.tape`, always verify the generated `demo.gif` before commit
    - Help overlay displays correctly
 
 **Before recording demo**:
-- Build first: `go build .`
-- Clear history to start fresh: `rm ~/.stoptail/history.json`
+- Always use: `go build . && rm -f ~/.stoptail/history.json && vhs demo.tape`
 - Demo uses `./stoptail` (local build) not `stoptail` (may be old homebrew version)
 
 **Common demo.tape issues**:
