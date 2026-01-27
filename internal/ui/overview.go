@@ -139,7 +139,6 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			case "enter":
 				sh := m.shardPicker.Selected()
 				if sh != nil {
-					m.shardPicker = nil
 					return m.showShardInfo(sh)
 				}
 				return m, nil
@@ -1017,6 +1016,16 @@ func (m OverviewModel) renderGrid() string {
 }
 
 func (m OverviewModel) renderShardLegend() string {
+	grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
+
+	var countText string
+	if m.cluster != nil && m.cluster.Health != nil {
+		h := m.cluster.Health
+		countText = lipgloss.NewStyle().Foreground(HealthColor(h.Status)).Render(fmt.Sprintf("Primary shards: %d", h.ActivePrimaryShards))
+	} else {
+		countText = grayStyle.Render("Primary shards: -")
+	}
+
 	greenBadge := lipgloss.NewStyle().
 		Background(ColorGreen).
 		Foreground(ColorOnAccent).
@@ -1038,9 +1047,8 @@ func (m OverviewModel) renderShardLegend() string {
 		Padding(0, 1).
 		Render("U")
 
-	grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
-
-	return grayStyle.Render("Shards: ") +
+	return countText +
+		grayStyle.Render("  ") +
 		greenBadge + grayStyle.Render(" Primary") +
 		grayStyle.Render(" | ") +
 		blueBadge + grayStyle.Render(" Replica") +

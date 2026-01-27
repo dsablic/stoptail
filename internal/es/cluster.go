@@ -411,7 +411,15 @@ func parseAnalyzerInfo(name, kind string, raw json.RawMessage) AnalyzerInfo {
 	return info
 }
 
+type ClusterHealth struct {
+	Status              string `json:"status"`
+	ActivePrimaryShards int    `json:"active_primary_shards"`
+	ActiveShards        int    `json:"active_shards"`
+	UnassignedShards    int    `json:"unassigned_shards"`
+}
+
 type ClusterState struct {
+	Health  *ClusterHealth
 	Indices []IndexInfo
 	Nodes   []NodeInfo
 	Shards  []ShardInfo
@@ -445,7 +453,33 @@ func (c *Client) FetchClusterState(ctx context.Context) (*ClusterState, error) {
 	}
 	state.Aliases = aliases
 
+	health, err := c.fetchClusterHealth(ctx)
+	if err != nil {
+		return nil, err
+	}
+	state.Health = health
+
 	return state, nil
+}
+
+func (c *Client) fetchClusterHealth(ctx context.Context) (*ClusterHealth, error) {
+	res, err := c.es.Cluster.Health(c.es.Cluster.Health.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("fetching cluster health: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	var health ClusterHealth
+	if err := json.NewDecoder(res.Body).Decode(&health); err != nil {
+		return nil, fmt.Errorf("parsing cluster health: %w", err)
+	}
+
+	return &health, nil
 }
 
 func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
