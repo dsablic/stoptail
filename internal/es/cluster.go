@@ -629,7 +629,11 @@ func (s *ClusterState) GetAliasesForIndex(index string) []string {
 func (s *ClusterState) GetShardsForIndexAndNode(index, node string) []ShardInfo {
 	var shards []ShardInfo
 	for _, sh := range s.Shards {
-		if sh.Index == index && sh.Node == node {
+		shardNode := sh.Node
+		if idx := strings.Index(shardNode, " -> "); idx != -1 {
+			shardNode = shardNode[:idx]
+		}
+		if sh.Index == index && shardNode == node {
 			shards = append(shards, sh)
 		}
 	}
