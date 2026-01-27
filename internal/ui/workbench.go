@@ -798,7 +798,11 @@ func (m WorkbenchModel) View() string {
 	if m.focus == FocusBody {
 		bodyBorderColor = ColorBlue
 	}
-	errLine, errCol, errMsg := m.jsonError()
+	var errLine, errCol int
+	var errMsg string
+	if m.queryMode == ModeDSL {
+		errLine, errCol, errMsg = m.jsonError()
+	}
 
 	bodyContent := m.editor.View()
 	if errMsg != "" {
@@ -809,26 +813,32 @@ func (m WorkbenchModel) View() string {
 		bodyContent = m.overlayDropdown(bodyContent, dropdown)
 	}
 
-	bodyHeaderText := "Body"
+	var bodyHeaderText string
 	var bodyValidation string
-	if errMsg != "" {
-		bodyValidation = lipgloss.NewStyle().Foreground(ColorRed).Render(
-			fmt.Sprintf("✗ %d:%d", errLine, errCol))
+	if m.queryMode == ModeESSQL {
+		bodyHeaderText = "Body (ES|QL)"
+		bodyValidation = ""
 	} else {
-		jsonValid := lipgloss.NewStyle().Foreground(ColorGreen).Render("✓")
-		switch m.editor.validationState {
-		case ValidationPending:
-			bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorYellow).Render("⋯")
-		case ValidationValid:
-			bodyValidation = jsonValid
-		case ValidationInvalid:
-			esErr := m.editor.validationError
-			if len(esErr) > 30 {
-				esErr = esErr[:30] + "..."
+		bodyHeaderText = "Body"
+		if errMsg != "" {
+			bodyValidation = lipgloss.NewStyle().Foreground(ColorRed).Render(
+				fmt.Sprintf("✗ %d:%d", errLine, errCol))
+		} else {
+			jsonValid := lipgloss.NewStyle().Foreground(ColorGreen).Render("✓")
+			switch m.editor.validationState {
+			case ValidationPending:
+				bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorYellow).Render("⋯")
+			case ValidationValid:
+				bodyValidation = jsonValid
+			case ValidationInvalid:
+				esErr := m.editor.validationError
+				if len(esErr) > 30 {
+					esErr = esErr[:30] + "..."
+				}
+				bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorRed).Render("✗ "+esErr)
+			default:
+				bodyValidation = jsonValid
 			}
-			bodyValidation = jsonValid + " " + lipgloss.NewStyle().Foreground(ColorRed).Render("✗ "+esErr)
-		default:
-			bodyValidation = jsonValid
 		}
 	}
 	bodyHeader := lipgloss.NewStyle().Bold(true).Render(bodyHeaderText) + "  " + bodyValidation
