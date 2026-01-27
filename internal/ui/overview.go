@@ -712,7 +712,17 @@ func (m OverviewModel) View() string {
 
 	// Shard state filter indicator
 	if m.shardStateFilter != "" {
-		stateStyle := lipgloss.NewStyle().Padding(0, 1).Background(ColorYellow).Foreground(ColorOnAccent)
+		bgColor := ColorYellow
+		fgColor := lipgloss.Color("#000000")
+		switch m.shardStateFilter {
+		case "RELOCATING":
+			bgColor = ColorPurple
+			fgColor = ColorOnAccent
+		case "UNASSIGNED":
+			bgColor = ColorRed
+			fgColor = ColorOnAccent
+		}
+		stateStyle := lipgloss.NewStyle().Padding(0, 1).Background(bgColor).Foreground(fgColor)
 		b.WriteString(stateStyle.Render("Showing: " + m.shardStateFilter + " (Esc to clear)"))
 	}
 
