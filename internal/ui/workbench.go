@@ -1139,3 +1139,12 @@ func highlightJSON(input string) string {
 	}
 	return buf.String()
 }
+
+func highlightSQL(input string) string {
+	var buf bytes.Buffer
+	err := quick.Highlight(&buf, input, "sql", "terminal256", "monokai")
+	if err != nil {
+		return input
+	}
+	return buf.String()
+}
