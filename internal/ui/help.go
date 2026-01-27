@@ -39,7 +39,7 @@ var helpWorkbench = `## Workbench
 | Enter | Edit |
 | Tab | Autocomplete / next |
 | Ctrl+R | Execute |
-| Ctrl+E | Toggle DSL/ES|QL |
+| Ctrl+E | Toggle REST/ES|QL |
 | Ctrl+S | Save bookmark |
 | Ctrl+B | Load bookmark |
 | Ctrl+F | Search response |

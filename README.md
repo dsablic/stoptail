@@ -168,7 +168,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` | Activate editor |
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+R` | Execute request |
-| `Ctrl+E` | Toggle DSL/ES|QL mode |
+| `Ctrl+E` | Toggle REST/ES|QL mode |
 | `Ctrl+S` | Save query as bookmark |
 | `Ctrl+B` | Load bookmark |
 | `Ctrl+F` | Search in response |

@@ -32,7 +32,7 @@ const (
 type QueryMode int
 
 const (
-	ModeDSL QueryMode = iota
+	ModeREST QueryMode = iota
 	ModeESSQL
 )
 
@@ -125,7 +125,7 @@ func NewWorkbench() WorkbenchModel {
 	if last := history.LastByMode("esql"); last != nil {
 		esqlContent = last.Body
 	} else {
-		esqlContent = "FROM logs-* | LIMIT 10"
+		esqlContent = "FROM * | LIMIT 10"
 	}
 
 	editor.SetContent(dslContent)
@@ -150,7 +150,7 @@ func NewWorkbench() WorkbenchModel {
 		clipboard:   NewClipboard(),
 		bookmarkUI:  NewBookmarkUI(),
 		bookmarks:   bookmarks,
-		queryMode:   ModeDSL,
+		queryMode:   ModeREST,
 		dslContent:  dslContent,
 		dslPath:     dslPath,
 		esqlContent: esqlContent,
@@ -190,7 +190,7 @@ func (m *WorkbenchModel) Prefill(index string) {
 }
 
 func (m *WorkbenchModel) toggleMode() {
-	if m.queryMode == ModeDSL {
+	if m.queryMode == ModeREST {
 		m.dslContent = m.editor.Content()
 		m.dslPath = m.path.Value()
 		m.queryMode = ModeESSQL
@@ -198,7 +198,7 @@ func (m *WorkbenchModel) toggleMode() {
 		m.path.SetValue("/_query")
 	} else {
 		m.esqlContent = m.editor.Content()
-		m.queryMode = ModeDSL
+		m.queryMode = ModeREST
 		m.editor.SetContent(m.dslContent)
 		m.path.SetValue(m.dslPath)
 	}
@@ -420,7 +420,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				break
 			}
 			if m.focus == FocusBody {
-				if m.queryMode == ModeDSL {
+				if m.queryMode == ModeREST {
 					if m.completion.Active {
 						m.completion.MoveDown()
 						return m, nil
@@ -463,7 +463,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 
-		if m.focus == FocusBody && m.queryMode == ModeDSL {
+		if m.focus == FocusBody && m.queryMode == ModeREST {
 			if pair, ok := bracketPairs[msg.String()]; ok {
 				m.editor.InsertString(msg.String() + pair)
 				m.editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
@@ -485,7 +485,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmd = m.editor.Update(msg)
 			cmds = append(cmds, cmd)
 
-			if m.queryMode == ModeDSL {
+			if m.queryMode == ModeREST {
 				key := msg.String()
 				if len(key) == 1 || key == "backspace" || key == "enter" || key == "delete" {
 					m.editor.validationState = ValidationPending
@@ -531,8 +531,8 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				btnStyle := lipgloss.NewStyle().Padding(0, 1)
 
 				var modeView string
-				if m.queryMode == ModeDSL {
-					modeView = btnStyle.Bold(true).Render("[DSL]")
+				if m.queryMode == ModeREST {
+					modeView = btnStyle.Bold(true).Render("[REST]")
 				} else {
 					modeView = btnStyle.Bold(true).Render("[ES|QL]")
 				}
@@ -542,7 +542,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				pos = modeEnd + 1
 
 				var methodEnd int
-				if m.queryMode == ModeDSL {
+				if m.queryMode == ModeREST {
 					methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
 					methodEnd = pos + lipgloss.Width(methodView)
 					pos = methodEnd + 1
@@ -558,7 +558,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				pos = execEnd + 1
 
 				var fmtEnd int
-				if m.queryMode == ModeDSL {
+				if m.queryMode == ModeREST {
 					fmtBtn := btnStyle.Render("{ } Format")
 					fmtEnd = pos + lipgloss.Width(fmtBtn)
 					pos = fmtEnd + 2
@@ -575,7 +575,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 				if msg.X < modeEnd {
 					m.toggleMode()
-				} else if msg.X < methodEnd && m.queryMode == ModeDSL {
+				} else if msg.X < methodEnd && m.queryMode == ModeREST {
 					m.path.Blur()
 					m.editor.Blur()
 					m.focus = FocusMethod
@@ -587,7 +587,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					if cmd := m.startExecution(); cmd != nil {
 						return m, cmd
 					}
-				} else if msg.X < fmtEnd && m.queryMode == ModeDSL {
+				} else if msg.X < fmtEnd && m.queryMode == ModeREST {
 					m.prettyPrintBody()
 				} else if msg.X < histPrevEnd {
 					m.historyPrev()
@@ -818,14 +818,14 @@ func (m *WorkbenchModel) checkIndexChange() tea.Cmd {
 func (m WorkbenchModel) View() string {
 	modeStyle := lipgloss.NewStyle().Padding(0, 1).Bold(true)
 	var modeView string
-	if m.queryMode == ModeDSL {
-		modeView = modeStyle.Render("[DSL]")
+	if m.queryMode == ModeREST {
+		modeView = modeStyle.Render("[REST]")
 	} else {
 		modeView = modeStyle.Background(ColorBlue).Foreground(ColorOnAccent).Render("[ES|QL]")
 	}
 
 	var methodView string
-	if m.queryMode == ModeDSL {
+	if m.queryMode == ModeREST {
 		methodStyle := lipgloss.NewStyle().
 			Padding(0, 1).
 			Bold(true)
@@ -849,7 +849,7 @@ func (m WorkbenchModel) View() string {
 	}
 
 	var fmtBtn string
-	if m.queryMode == ModeDSL {
+	if m.queryMode == ModeREST {
 		fmtBtn = btnStyle.Render("{ } Format")
 	}
 
@@ -882,7 +882,7 @@ func (m WorkbenchModel) View() string {
 	}
 	var errLine, errCol int
 	var errMsg string
-	if m.queryMode == ModeDSL {
+	if m.queryMode == ModeREST {
 		errLine, errCol, errMsg = m.jsonError()
 	}
 
