@@ -87,7 +87,9 @@ func (p *ShardPicker) View() string {
 			} else {
 				bgColor = ColorBlue
 			}
-		case "RELOCATING", "INITIALIZING":
+		case "RELOCATING":
+			bgColor = ColorPurple
+		case "INITIALIZING":
 			bgColor = ColorYellow
 		case "UNASSIGNED":
 			bgColor = ColorRed
