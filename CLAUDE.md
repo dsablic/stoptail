@@ -446,20 +446,22 @@ When making UI changes (new tabs, new keybindings, layout changes), update `demo
 
 ### Verify Demo GIF Before Committing
 
+**CRITICAL: NEVER commit demo.gif without visual verification.** A broken demo (showing shell prompts instead of the app) is worse than no update.
+
 When modifying `demo.tape`, always verify the generated `demo.gif` before committing:
 
 1. **Regenerate the demo**: `vhs demo.tape`
 2. **Extract frames for verification**:
    ```bash
    mkdir -p /tmp/demo-frames
-   ffmpeg -i demo.gif -vf "select=not(mod(n\\,50))" -vsync vfr /tmp/demo-frames/frame_%03d.png
+   ffmpeg -i demo.gif -vf "select=not(mod(n\\,30))" -vsync vfr /tmp/demo-frames/frame_%03d.png
    ```
 3. **Check key frames** to verify:
+   - **NO shell prompts visible** (if you see `$` prompt, the app crashed - demo is broken)
    - Overview tab shows `es-node-1` (not Docker container ID)
    - Filter shows filtered indices
-   - Workbench shows correct path (`/products/_search`) and 200 response
-   - Mappings tab shows field mappings with Ctrl+F search
-   - Cluster tab shows all 6 views (Memory, Disk, Fielddata, Settings, Threads, Hot)
+   - Workbench shows `[REST]` label and correct layout
+   - Cluster tab shows views (Memory, Disk, etc.)
    - Help overlay displays correctly
 
 **Before recording demo**:
