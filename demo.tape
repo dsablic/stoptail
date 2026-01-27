@@ -43,9 +43,21 @@ Sleep 500ms
 Escape
 Sleep 1s
 
-# Go to Browser tab (Tab twice: Overview -> Workbench -> Browser)
+# Go to Workbench tab
 Tab
+Sleep 1s
+
+# Show REST mode - type a path (focus is already on path)
+Type "/products/_search"
 Sleep 500ms
+
+# Tab to body and type query
+Tab
+Type `{"query": {"match_all": {}}}`
+Sleep 500ms
+
+# Tab to response then to next tab (Browser)
+Tab
 Tab
 Sleep 1s
 
