@@ -734,13 +734,24 @@ func (m *WorkbenchModel) checkIndexChange() tea.Cmd {
 }
 
 func (m WorkbenchModel) View() string {
-	methodStyle := lipgloss.NewStyle().
-		Padding(0, 1).
-		Bold(true)
-	if m.focus == FocusMethod {
-		methodStyle = methodStyle.Background(ColorBlue).Foreground(ColorOnAccent)
+	modeStyle := lipgloss.NewStyle().Padding(0, 1).Bold(true)
+	var modeView string
+	if m.queryMode == ModeDSL {
+		modeView = modeStyle.Render("[DSL]")
+	} else {
+		modeView = modeStyle.Background(ColorBlue).Foreground(ColorOnAccent).Render("[ES|QL]")
 	}
-	methodView := methodStyle.Render(methods[m.methodIdx] + " ▼")
+
+	var methodView string
+	if m.queryMode == ModeDSL {
+		methodStyle := lipgloss.NewStyle().
+			Padding(0, 1).
+			Bold(true)
+		if m.focus == FocusMethod {
+			methodStyle = methodStyle.Background(ColorBlue).Foreground(ColorOnAccent)
+		}
+		methodView = methodStyle.Render(methods[m.methodIdx] + " ▼")
+	}
 
 	pathBorderColor := ColorGray
 	if m.focus == FocusPath {
@@ -754,14 +765,27 @@ func (m WorkbenchModel) View() string {
 	if m.executing {
 		execBtn = btnStyle.Render(m.spinner.View())
 	}
-	fmtBtn := btnStyle.Render("{ } Format")
+
+	var fmtBtn string
+	if m.queryMode == ModeDSL {
+		fmtBtn = btnStyle.Render("{ } Format")
+	}
+
 	histPrev := btnStyle.Render("◀")
 	histNext := btnStyle.Render("▶")
 
-	topRow := lipgloss.JoinHorizontal(lipgloss.Center,
-		methodView, " ", pathView, "  ",
-		execBtn, " ", fmtBtn, "  ",
-		histPrev, histNext)
+	var topRowParts []string
+	topRowParts = append(topRowParts, modeView)
+	if methodView != "" {
+		topRowParts = append(topRowParts, " ", methodView)
+	}
+	topRowParts = append(topRowParts, " ", pathView, "  ", execBtn)
+	if fmtBtn != "" {
+		topRowParts = append(topRowParts, " ", fmtBtn)
+	}
+	topRowParts = append(topRowParts, "  ", histPrev, histNext)
+
+	topRow := lipgloss.JoinHorizontal(lipgloss.Center, topRowParts...)
 
 	// Split panes: account for borders (2 chars each pane) and divider (1 char)
 	// Total = 2 * (innerWidth + 2) + 1 = width
