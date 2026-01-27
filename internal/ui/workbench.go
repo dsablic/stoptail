@@ -523,27 +523,53 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			if msg.Y < topRowHeight+1 {
 				btnStyle := lipgloss.NewStyle().Padding(0, 1)
-				methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
-				pathView := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.path.View())
-				execBtn := btnStyle.Render("▶ Run")
-				fmtBtn := btnStyle.Render("{ } Format")
-				histPrev := btnStyle.Render("◀")
-				histNext := btnStyle.Render("▶")
+
+				var modeView string
+				if m.queryMode == ModeDSL {
+					modeView = btnStyle.Bold(true).Render("[DSL]")
+				} else {
+					modeView = btnStyle.Bold(true).Render("[ES|QL]")
+				}
 
 				pos := 0
-				methodEnd := pos + lipgloss.Width(methodView)
-				pos = methodEnd + 1
+				modeEnd := pos + lipgloss.Width(modeView)
+				pos = modeEnd + 1
+
+				var methodEnd int
+				if m.queryMode == ModeDSL {
+					methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
+					methodEnd = pos + lipgloss.Width(methodView)
+					pos = methodEnd + 1
+				} else {
+					methodEnd = pos
+				}
+
+				pathView := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(m.path.View())
 				pathEnd := pos + lipgloss.Width(pathView)
 				pos = pathEnd + 2
+				execBtn := btnStyle.Render("▶ Run")
 				execEnd := pos + lipgloss.Width(execBtn)
 				pos = execEnd + 1
-				fmtEnd := pos + lipgloss.Width(fmtBtn)
-				pos = fmtEnd + 2
+
+				var fmtEnd int
+				if m.queryMode == ModeDSL {
+					fmtBtn := btnStyle.Render("{ } Format")
+					fmtEnd = pos + lipgloss.Width(fmtBtn)
+					pos = fmtEnd + 2
+				} else {
+					fmtEnd = pos
+					pos += 2
+				}
+
+				histPrev := btnStyle.Render("◀")
 				histPrevEnd := pos + lipgloss.Width(histPrev)
 				pos = histPrevEnd
+				histNext := btnStyle.Render("▶")
 				histNextEnd := pos + lipgloss.Width(histNext)
 
-				if msg.X < methodEnd {
+				if msg.X < modeEnd {
+					m.toggleMode()
+				} else if msg.X < methodEnd && m.queryMode == ModeDSL {
 					m.path.Blur()
 					m.editor.Blur()
 					m.focus = FocusMethod
@@ -555,7 +581,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					if cmd := m.startExecution(); cmd != nil {
 						return m, cmd
 					}
-				} else if msg.X < fmtEnd {
+				} else if msg.X < fmtEnd && m.queryMode == ModeDSL {
 					m.prettyPrintBody()
 				} else if msg.X < histPrevEnd {
 					m.historyPrev()
