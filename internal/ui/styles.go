@@ -8,6 +8,7 @@ var (
 	ColorYellow lipgloss.Color
 	ColorRed    lipgloss.Color
 	ColorBlue   lipgloss.Color
+	ColorPurple lipgloss.Color
 	ColorGray   lipgloss.Color
 	ColorWhite  lipgloss.Color
 
@@ -45,6 +46,7 @@ func SetTheme(theme string) {
 		ColorYellow = lipgloss.Color("#eab308")
 		ColorRed = lipgloss.Color("#ef4444")
 		ColorBlue = lipgloss.Color("#3b82f6")
+		ColorPurple = lipgloss.Color("#a855f7")
 		ColorGray = lipgloss.Color("#9ca3af")
 		ColorWhite = lipgloss.Color("#f9fafb")
 		HeaderBg = lipgloss.Color("#1f2937")
@@ -57,6 +59,7 @@ func SetTheme(theme string) {
 		ColorYellow = lipgloss.Color("#ca8a04")
 		ColorRed = lipgloss.Color("#dc2626")
 		ColorBlue = lipgloss.Color("#2563eb")
+		ColorPurple = lipgloss.Color("#9333ea")
 		ColorGray = lipgloss.Color("#6b7280")
 		ColorWhite = lipgloss.Color("#111827")
 		HeaderBg = lipgloss.Color("#e5e7eb")

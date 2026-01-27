@@ -9,7 +9,8 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
 - **Overview Tab**: Visual shard grid showing nodes vs indices with colored shard boxes
   - Green: Primary shards
   - Blue: Replica shards
-  - Yellow: Relocating shards
+  - Purple: Relocating shards
+  - Yellow: Initializing shards
   - Red: Unassigned shards
   - Select any cell to view shard info (with allocation explain for problem shards)
 - **Workbench Tab**: Full request editor like Kibana Dev Tools

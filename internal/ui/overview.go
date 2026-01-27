@@ -1036,11 +1036,16 @@ func (m OverviewModel) renderShardLegend() string {
 		Foreground(ColorOnAccent).
 		Padding(0, 1).
 		Render("R")
+	purpleBadge := lipgloss.NewStyle().
+		Background(ColorPurple).
+		Foreground(ColorOnAccent).
+		Padding(0, 1).
+		Render("R")
 	yellowBadge := lipgloss.NewStyle().
 		Background(ColorYellow).
 		Foreground(lipgloss.Color("#000000")).
 		Padding(0, 1).
-		Render("R")
+		Render("I")
 	redBadge := lipgloss.NewStyle().
 		Background(ColorRed).
 		Foreground(ColorOnAccent).
@@ -1053,7 +1058,9 @@ func (m OverviewModel) renderShardLegend() string {
 		grayStyle.Render(" | ") +
 		blueBadge + grayStyle.Render(" Replica") +
 		grayStyle.Render(" | ") +
-		yellowBadge + grayStyle.Render(" Relocating/Initializing") +
+		purpleBadge + grayStyle.Render(" Relocating") +
+		grayStyle.Render(" | ") +
+		yellowBadge + grayStyle.Render(" Initializing") +
 		grayStyle.Render(" | ") +
 		redBadge + grayStyle.Render(" Unassigned")
 }
@@ -1083,13 +1090,12 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 
 		switch sh.State {
 		case "RELOCATING":
+			bgColor = ColorPurple
+		case "INITIALIZING":
 			bgColor = ColorYellow
 			fgColor = lipgloss.Color("#000000")
 		case "UNASSIGNED":
 			bgColor = ColorRed
-		case "INITIALIZING":
-			bgColor = ColorYellow
-			fgColor = lipgloss.Color("#000000")
 		}
 
 		style := lipgloss.NewStyle().
