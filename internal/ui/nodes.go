@@ -93,6 +93,75 @@ func (m NodesModel) getFilteredTemplates() []es.IndexTemplate {
 	return filtered
 }
 
+func (m NodesModel) getRowCounts() (filtered, total int) {
+	switch m.activeView {
+	case ViewMemory, ViewDisk:
+		total = len(m.state.Nodes)
+		for _, node := range m.state.Nodes {
+			if m.matchesFilter(node.Name + " " + node.Version) {
+				filtered++
+			}
+		}
+	case ViewFielddata:
+		fdData := m.aggregateFielddataByIndexField()
+		total = len(fdData)
+		for _, fd := range fdData {
+			if m.matchesFilter(fd.Index + " " + fd.Field) {
+				filtered++
+			}
+		}
+	case ViewClusterSettings:
+		allSettings := m.getClusterSettingsList()
+		total = len(allSettings)
+		filtered = len(m.getFilteredSettings())
+	case ViewThreadPools:
+		total = len(m.threadPools)
+		for _, p := range m.threadPools {
+			if m.matchesFilter(p.NodeName + " " + p.Name + " " + p.PoolType) {
+				filtered++
+			}
+		}
+	case ViewHotThreads:
+		total, filtered = m.countHotThreads()
+	case ViewTemplates:
+		if m.templates != nil {
+			total = len(m.templates)
+			filtered = len(m.getFilteredTemplates())
+		}
+	}
+	return filtered, total
+}
+
+func (m NodesModel) countHotThreads() (total, filtered int) {
+	if m.hotThreads == "" {
+		return 0, 0
+	}
+	var currentNode string
+	lines := strings.Split(m.hotThreads, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "::: {") {
+			end := strings.Index(line[5:], "}")
+			if end > 0 {
+				currentNode = line[5 : 5+end]
+			}
+		} else if currentNode != "" {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Hot threads at") || trimmed == "" {
+				continue
+			}
+			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
+				if ht := parseHotThread(currentNode, trimmed); ht != nil {
+					total++
+					if m.matchesFilter(ht.node + " " + ht.total + " " + ht.cpu) {
+						filtered++
+					}
+				}
+			}
+		}
+	}
+	return total, filtered
+}
+
 func (m *NodesModel) SetState(state *es.NodesState) {
 	m.state = state
 	m.loading = state == nil
@@ -391,10 +460,17 @@ func (m NodesModel) View() string {
 	b.WriteString("\n")
 
 	filterStyle := lipgloss.NewStyle().Padding(0, 1)
+	countStyle := lipgloss.NewStyle().Foreground(ColorGray)
+	filtered, total := m.getRowCounts()
 	if m.filterActive {
 		b.WriteString(filterStyle.Render("Filter: " + m.filter.View()))
+		if m.filter.Value() != "" {
+			b.WriteString(countStyle.Render(fmt.Sprintf(" (%d/%d)", filtered, total)))
+		}
 	} else if m.filter.Value() != "" {
-		b.WriteString(filterStyle.Render("Filter: " + m.filter.Value() + " (Esc to clear)"))
+		b.WriteString(filterStyle.Render("Filter: " + m.filter.Value()))
+		b.WriteString(countStyle.Render(fmt.Sprintf(" (%d/%d)", filtered, total)))
+		b.WriteString(filterStyle.Render(" (Esc to clear)"))
 	}
 
 	return b.String()
@@ -729,36 +805,12 @@ func (m NodesModel) getItemCount() int {
 	case ViewThreadPools:
 		return len(m.threadPools)
 	case ViewHotThreads:
-		return m.countHotThreads()
+		total, _ := m.countHotThreads()
+		return total
 	case ViewTemplates:
 		return len(m.templates)
 	}
 	return 0
-}
-
-func (m NodesModel) countHotThreads() int {
-	if m.hotThreads == "" {
-		return 0
-	}
-	count := 0
-	var currentNode string
-	lines := strings.Split(m.hotThreads, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "::: {") {
-			end := strings.Index(line[5:], "}")
-			if end > 0 {
-				currentNode = line[5 : 5+end]
-			} else {
-				currentNode = "unknown"
-			}
-		} else if currentNode != "" {
-			trimmed := strings.TrimSpace(line)
-			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
-				count++
-			}
-		}
-	}
-	return count
 }
 
 func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {
