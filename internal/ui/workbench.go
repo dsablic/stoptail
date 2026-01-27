@@ -475,6 +475,18 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 
 		switch m.focus {
+		case FocusMethod:
+			switch msg.String() {
+			case "up":
+				m.methodIdx = (m.methodIdx - 1 + len(methods)) % len(methods)
+				return m, nil
+			case "down":
+				m.methodIdx = (m.methodIdx + 1) % len(methods)
+				return m, nil
+			case "enter":
+				m.cycleFocus()
+				return m, nil
+			}
 		case FocusPath:
 			m.path, cmd = m.path.Update(msg)
 			cmds = append(cmds, cmd)
