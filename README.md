@@ -18,6 +18,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
+  - ES|QL mode for SQL-like queries (Ctrl+E to toggle)
   - Save and load query bookmarks (Ctrl+S/Ctrl+B)
 - **Browser Tab**: Document browser
   - Browse documents in any index
@@ -166,6 +167,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` | Activate editor |
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+R` | Execute request |
+| `Ctrl+E` | Toggle DSL/ES|QL mode |
 | `Ctrl+S` | Save query as bookmark |
 | `Ctrl+B` | Load bookmark |
 | `Ctrl+F` | Search in response |
