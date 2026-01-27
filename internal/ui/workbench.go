@@ -636,10 +636,15 @@ func (m *WorkbenchModel) startExecution() tea.Cmd {
 }
 
 func (m *WorkbenchModel) addToHistory() {
+	var mode string
+	if m.queryMode == ModeESSQL {
+		mode = "esql"
+	}
 	entry := storage.HistoryEntry{
 		Method: methods[m.methodIdx],
 		Path:   m.path.Value(),
 		Body:   m.editor.Content(),
+		Mode:   mode,
 	}
 
 	if m.history.Add(entry) {
@@ -653,13 +658,23 @@ func (m *WorkbenchModel) historyPrev() {
 		return
 	}
 
-	if m.historyIdx == -1 {
-		m.historyIdx = len(m.history.Entries) - 1
-	} else if m.historyIdx > 0 {
-		m.historyIdx--
+	targetMode := ""
+	if m.queryMode == ModeESSQL {
+		targetMode = "esql"
 	}
 
-	m.loadHistoryEntry()
+	start := m.historyIdx
+	if start == -1 {
+		start = len(m.history.Entries)
+	}
+
+	for i := start - 1; i >= 0; i-- {
+		if m.history.Entries[i].Mode == targetMode {
+			m.historyIdx = i
+			m.loadHistoryEntry()
+			return
+		}
+	}
 }
 
 func (m *WorkbenchModel) historyNext() {
@@ -667,12 +682,19 @@ func (m *WorkbenchModel) historyNext() {
 		return
 	}
 
-	if m.historyIdx < len(m.history.Entries)-1 {
-		m.historyIdx++
-		m.loadHistoryEntry()
-	} else {
-		m.historyIdx = -1
+	targetMode := ""
+	if m.queryMode == ModeESSQL {
+		targetMode = "esql"
 	}
+
+	for i := m.historyIdx + 1; i < len(m.history.Entries); i++ {
+		if m.history.Entries[i].Mode == targetMode {
+			m.historyIdx = i
+			m.loadHistoryEntry()
+			return
+		}
+	}
+	m.historyIdx = -1
 }
 
 func (m *WorkbenchModel) loadHistoryEntry() {
