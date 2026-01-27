@@ -401,13 +401,15 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				break
 			}
 			if m.focus == FocusBody {
-				if m.completion.Active {
-					m.completion.MoveDown()
-					return m, nil
-				}
-				if m.editor.IsKeyCompletionPosition() {
-					m.triggerCompletion()
-					return m, nil
+				if m.queryMode == ModeDSL {
+					if m.completion.Active {
+						m.completion.MoveDown()
+						return m, nil
+					}
+					if m.editor.IsKeyCompletionPosition() {
+						m.triggerCompletion()
+						return m, nil
+					}
 				}
 				m.editor.InsertString("  ")
 				return m, nil
@@ -442,7 +444,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 
-		if m.focus == FocusBody {
+		if m.focus == FocusBody && m.queryMode == ModeDSL {
 			if pair, ok := bracketPairs[msg.String()]; ok {
 				m.editor.InsertString(msg.String() + pair)
 				m.editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
@@ -464,20 +466,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmd = m.editor.Update(msg)
 			cmds = append(cmds, cmd)
 
-			key := msg.String()
-			if len(key) == 1 || key == "backspace" || key == "enter" || key == "delete" {
-				m.editor.validationState = ValidationPending
-				cmds = append(cmds, m.editor.triggerValidation())
-			}
+			if m.queryMode == ModeDSL {
+				key := msg.String()
+				if len(key) == 1 || key == "backspace" || key == "enter" || key == "delete" {
+					m.editor.validationState = ValidationPending
+					cmds = append(cmds, m.editor.triggerValidation())
+				}
 
-			if m.completion.Active {
-				if len(key) == 1 || key == "backspace" {
-					col := m.editor.LineInfo().CharOffset
-					if col > m.completion.TriggerCol {
-						query := m.getCompletionQuery()
-						m.completion.Filter(query)
-					} else {
-						m.completion.Close()
+				if m.completion.Active {
+					if len(key) == 1 || key == "backspace" {
+						col := m.editor.LineInfo().CharOffset
+						if col > m.completion.TriggerCol {
+							query := m.getCompletionQuery()
+							m.completion.Filter(query)
+						} else {
+							m.completion.Close()
+						}
 					}
 				}
 			}
@@ -699,9 +703,20 @@ func (m *WorkbenchModel) updateSearchMatches() {
 func (m WorkbenchModel) execute() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		method := methods[m.methodIdx]
-		path := m.path.Value()
-		body := m.editor.Content()
+		var method, path, body string
+
+		if m.queryMode == ModeESSQL {
+			method = "POST"
+			path = m.path.Value()
+			query := m.editor.Content()
+			escaped, _ := json.Marshal(query)
+			body = fmt.Sprintf(`{"query":%s}`, string(escaped))
+		} else {
+			method = methods[m.methodIdx]
+			path = m.path.Value()
+			body = m.editor.Content()
+		}
+
 		result := m.client.Request(ctx, method, path, body)
 		return executeResultMsg{result}
 	}
