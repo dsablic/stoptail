@@ -70,6 +70,7 @@ type WorkbenchModel struct {
 	bookmarks    *storage.Bookmarks
 	queryMode    QueryMode
 	dslContent   string
+	dslPath      string
 	esqlContent  string
 }
 
@@ -98,10 +99,11 @@ func NewWorkbench() WorkbenchModel {
 	history, _ := storage.LoadHistory()
 
 	methodIdx := 0
-	var dslContent, esqlContent string
+	var dslContent, dslPath, esqlContent string
 
 	if last := history.LastByMode(""); last != nil {
 		path.SetValue(last.Path)
+		dslPath = last.Path
 		var pretty bytes.Buffer
 		if err := json.Indent(&pretty, []byte(last.Body), "", "  "); err == nil {
 			dslContent = pretty.String()
@@ -116,6 +118,7 @@ func NewWorkbench() WorkbenchModel {
 		}
 	} else {
 		path.SetValue("/_search")
+		dslPath = "/_search"
 		dslContent = "{}"
 	}
 
@@ -149,6 +152,7 @@ func NewWorkbench() WorkbenchModel {
 		bookmarks:   bookmarks,
 		queryMode:   ModeDSL,
 		dslContent:  dslContent,
+		dslPath:     dslPath,
 		esqlContent: esqlContent,
 	}
 }
@@ -188,6 +192,7 @@ func (m *WorkbenchModel) Prefill(index string) {
 func (m *WorkbenchModel) toggleMode() {
 	if m.queryMode == ModeDSL {
 		m.dslContent = m.editor.Content()
+		m.dslPath = m.path.Value()
 		m.queryMode = ModeESSQL
 		m.editor.SetContent(m.esqlContent)
 		m.path.SetValue("/_query")
@@ -195,6 +200,7 @@ func (m *WorkbenchModel) toggleMode() {
 		m.esqlContent = m.editor.Content()
 		m.queryMode = ModeDSL
 		m.editor.SetContent(m.dslContent)
+		m.path.SetValue(m.dslPath)
 	}
 }
 
