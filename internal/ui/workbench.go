@@ -172,6 +172,19 @@ func (m *WorkbenchModel) Prefill(index string) {
 	m.editor.SetContent("{}")
 }
 
+func (m *WorkbenchModel) toggleMode() {
+	if m.queryMode == ModeDSL {
+		m.dslContent = m.editor.Content()
+		m.queryMode = ModeESSQL
+		m.editor.SetContent(m.esqlContent)
+		m.path.SetValue("/_query")
+	} else {
+		m.esqlContent = m.editor.Content()
+		m.queryMode = ModeDSL
+		m.editor.SetContent(m.dslContent)
+	}
+}
+
 func (m *WorkbenchModel) Focus() {
 	m.path.Focus()
 	m.focus = FocusPath
@@ -354,6 +367,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				text = m.responseText
 			}
 			m.clipboard.Copy(text)
+			return m, nil
+		case "ctrl+e":
+			m.toggleMode()
 			return m, nil
 		case "ctrl+c":
 			if m.focus == FocusBody && m.editor.selection.Active {
