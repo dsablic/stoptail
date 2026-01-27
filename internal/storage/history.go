@@ -10,6 +10,7 @@ type HistoryEntry struct {
 	Method string `json:"method"`
 	Path   string `json:"path"`
 	Body   string `json:"body"`
+	Mode   string `json:"mode,omitempty"`
 }
 
 type History struct {
@@ -85,7 +86,7 @@ func (h *History) Add(entry HistoryEntry) bool {
 		return false
 	}
 	for _, e := range h.Entries {
-		if e.Method == entry.Method && e.Path == entry.Path && e.Body == entry.Body {
+		if e.Method == entry.Method && e.Path == entry.Path && e.Body == entry.Body && e.Mode == entry.Mode {
 			return false
 		}
 	}
@@ -97,6 +98,16 @@ func (h *History) Last() *HistoryEntry {
 	for i := len(h.Entries) - 1; i >= 0; i-- {
 		if h.Entries[i].Path != "" {
 			return &h.Entries[i]
+		}
+	}
+	return nil
+}
+
+func (h *History) LastByMode(mode string) *HistoryEntry {
+	for i := len(h.Entries) - 1; i >= 0; i-- {
+		entry := &h.Entries[i]
+		if entry.Path != "" && entry.Mode == mode {
+			return entry
 		}
 	}
 	return nil
