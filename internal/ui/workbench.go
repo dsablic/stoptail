@@ -29,6 +29,13 @@ const (
 	completionMaxVisible = 8
 )
 
+type QueryMode int
+
+const (
+	ModeDSL QueryMode = iota
+	ModeESSQL
+)
+
 var methods = []string{"GET", "POST", "PUT", "DELETE", "HEAD"}
 
 var bracketPairs = map[string]string{
@@ -61,6 +68,9 @@ type WorkbenchModel struct {
 	clipboard    Clipboard
 	bookmarkUI   BookmarkUI
 	bookmarks    *storage.Bookmarks
+	queryMode    QueryMode
+	dslContent   string
+	esqlContent  string
 }
 
 type executeResultMsg struct {
