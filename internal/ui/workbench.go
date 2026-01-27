@@ -98,13 +98,15 @@ func NewWorkbench() WorkbenchModel {
 	history, _ := storage.LoadHistory()
 
 	methodIdx := 0
-	if last := history.Last(); last != nil {
+	var dslContent, esqlContent string
+
+	if last := history.LastByMode(""); last != nil {
 		path.SetValue(last.Path)
 		var pretty bytes.Buffer
 		if err := json.Indent(&pretty, []byte(last.Body), "", "  "); err == nil {
-			editor.SetContent(pretty.String())
+			dslContent = pretty.String()
 		} else {
-			editor.SetContent(last.Body)
+			dslContent = last.Body
 		}
 		for i, m := range methods {
 			if m == last.Method {
@@ -114,8 +116,16 @@ func NewWorkbench() WorkbenchModel {
 		}
 	} else {
 		path.SetValue("/_search")
-		editor.SetContent("{}")
+		dslContent = "{}"
 	}
+
+	if last := history.LastByMode("esql"); last != nil {
+		esqlContent = last.Body
+	} else {
+		esqlContent = "FROM logs-* | LIMIT 10"
+	}
+
+	editor.SetContent(dslContent)
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -124,19 +134,22 @@ func NewWorkbench() WorkbenchModel {
 	bookmarks, _ := storage.LoadBookmarks()
 
 	return WorkbenchModel{
-		methodIdx:  methodIdx,
-		path:       path,
-		editor:     editor,
-		response:   vp,
-		focus:      FocusNone,
-		history:    history,
-		historyIdx: -1,
-		spinner:    s,
-		search:     NewSearchBar(),
-		fieldCache: make(map[string][]CompletionItem),
-		clipboard:  NewClipboard(),
-		bookmarkUI: NewBookmarkUI(),
-		bookmarks:  bookmarks,
+		methodIdx:   methodIdx,
+		path:        path,
+		editor:      editor,
+		response:    vp,
+		focus:       FocusNone,
+		history:     history,
+		historyIdx:  -1,
+		spinner:     s,
+		search:      NewSearchBar(),
+		fieldCache:  make(map[string][]CompletionItem),
+		clipboard:   NewClipboard(),
+		bookmarkUI:  NewBookmarkUI(),
+		bookmarks:   bookmarks,
+		queryMode:   ModeDSL,
+		dslContent:  dslContent,
+		esqlContent: esqlContent,
 	}
 }
 
