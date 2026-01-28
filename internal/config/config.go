@@ -92,6 +92,7 @@ func (c *Config) DisplayHost() string {
 type ClusterEntry struct {
 	URL        string `yaml:"url"`
 	URLCommand string `yaml:"url_command"`
+	AWSProfile string `yaml:"aws_profile"`
 }
 
 type ClustersConfig struct {

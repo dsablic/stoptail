@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	yaml2 "gopkg.in/yaml.v3"
+)
 
 func TestParseURL(t *testing.T) {
 	tests := []struct {
@@ -212,5 +216,26 @@ func TestMaskedURL(t *testing.T) {
 				t.Errorf("MaskedURL() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadClustersConfig_AWSProfile(t *testing.T) {
+	yaml := `clusters:
+  aws-prod:
+    url: https://search-test.us-east-1.es.amazonaws.com
+    aws_profile: production
+  aws-default:
+    url: https://search-dev.us-west-2.es.amazonaws.com
+`
+	var cfg ClustersConfig
+	if err := yaml2.Unmarshal([]byte(yaml), &cfg); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if cfg.Clusters["aws-prod"].AWSProfile != "production" {
+		t.Errorf("AWSProfile = %q, want %q", cfg.Clusters["aws-prod"].AWSProfile, "production")
+	}
+	if cfg.Clusters["aws-default"].AWSProfile != "" {
+		t.Errorf("AWSProfile = %q, want empty", cfg.Clusters["aws-default"].AWSProfile)
 	}
 }
