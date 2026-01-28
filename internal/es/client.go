@@ -25,7 +25,18 @@ func NewClient(cfg *config.Config) (*Client, error) {
 		Addresses: []string{cfg.Host},
 	}
 
-	if cfg.Username != "" {
+	var httpTransport http.RoundTripper = &http.Transport{
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
+
+	if cfg.IsAWS() {
+		transport, err := newAWSTransport(cfg)
+		if err != nil {
+			return nil, err
+		}
+		esCfg.Transport = transport
+		httpTransport = transport
+	} else if cfg.Username != "" {
 		esCfg.Username = cfg.Username
 		esCfg.Password = cfg.Password
 	}
@@ -38,7 +49,7 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	return &Client{
 		es:         es,
 		cfg:        cfg,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: httpTransport},
 	}, nil
 }
 
