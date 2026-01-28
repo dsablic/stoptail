@@ -13,9 +13,16 @@ import (
 )
 
 type Config struct {
-	Host     string
-	Username string
-	Password string
+	Host       string
+	Username   string
+	Password   string
+	AWSRegion  string
+	AWSService string
+	AWSProfile string
+}
+
+func (c *Config) IsAWS() bool {
+	return c.AWSRegion != ""
 }
 
 func parseAWSEndpoint(host string) (region, service string, ok bool) {
@@ -52,7 +59,10 @@ func ParseURL(rawURL string) (*Config, error) {
 		Host: fmt.Sprintf("%s://%s", u.Scheme, u.Host),
 	}
 
-	if u.User != nil {
+	if region, service, ok := parseAWSEndpoint(u.Host); ok {
+		cfg.AWSRegion = region
+		cfg.AWSService = service
+	} else if u.User != nil {
 		cfg.Username = u.User.Username()
 		cfg.Password, _ = u.User.Password()
 	}
