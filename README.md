@@ -121,6 +121,34 @@ If no argument is provided and multiple clusters are configured, you'll be promp
 
 **Note:** The legacy path `~/.stoptail.yaml` is still supported for backwards compatibility.
 
+### AWS OpenSearch
+
+stoptail automatically detects AWS OpenSearch endpoints and uses AWS SigV4 authentication:
+
+```yaml
+clusters:
+  # AWS OpenSearch (managed) - auto-detected from URL
+  aws-prod:
+    url: https://search-mycluster.us-east-1.es.amazonaws.com
+
+  # AWS OpenSearch Serverless - also auto-detected
+  aws-serverless:
+    url: https://abc123xyz.us-west-2.aoss.amazonaws.com
+
+  # With specific AWS profile
+  aws-staging:
+    url: https://search-staging.eu-west-1.es.amazonaws.com
+    aws_profile: staging-account
+```
+
+**Credentials** are resolved using the standard AWS SDK chain:
+1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+2. Shared credentials file (`~/.aws/credentials`)
+3. IAM role (for EC2/ECS/Lambda)
+4. SSO credentials (`aws sso login`)
+
+Use `aws_profile` to select a specific profile from `~/.aws/credentials` or `~/.aws/config`.
+
 ### Data Storage
 
 stoptail stores data in `~/.stoptail/`:

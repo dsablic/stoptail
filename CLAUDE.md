@@ -503,6 +503,10 @@ clusters:
     url: https://user:pass@es-prod:9200
   staging:
     url_command: "vault read -field=url secret/es-staging"
+  # AWS OpenSearch (auto-detected from URL)
+  aws-prod:
+    url: https://search-mycluster.us-east-1.es.amazonaws.com
+    aws_profile: production  # optional
 ```
 
 Note: `url_command` executes shell commands - this is intentional for secrets management integration.
