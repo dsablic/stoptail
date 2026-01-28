@@ -71,6 +71,40 @@ func TestEnsureConfigDir(t *testing.T) {
 	}
 }
 
+func TestParseAWSEndpoint(t *testing.T) {
+	tests := []struct {
+		host    string
+		region  string
+		service string
+		ok      bool
+	}{
+		{"search-my-domain.us-east-1.es.amazonaws.com", "us-east-1", "es", true},
+		{"vpc-my-domain.eu-west-1.es.amazonaws.com", "eu-west-1", "es", true},
+		{"search-test.ap-southeast-2.es.amazonaws.com", "ap-southeast-2", "es", true},
+		{"abc123xyz.us-west-2.aoss.amazonaws.com", "us-west-2", "aoss", true},
+		{"collection.eu-central-1.aoss.amazonaws.com", "eu-central-1", "aoss", true},
+		{"localhost:9200", "", "", false},
+		{"elasticsearch.example.com", "", "", false},
+		{"es.amazonaws.com", "", "", false},
+		{"", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			region, service, ok := parseAWSEndpoint(tt.host)
+			if ok != tt.ok {
+				t.Errorf("ok = %v, want %v", ok, tt.ok)
+			}
+			if region != tt.region {
+				t.Errorf("region = %q, want %q", region, tt.region)
+			}
+			if service != tt.service {
+				t.Errorf("service = %q, want %q", service, tt.service)
+			}
+		})
+	}
+}
+
 func TestMaskedURL(t *testing.T) {
 	tests := []struct {
 		name string

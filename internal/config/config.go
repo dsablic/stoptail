@@ -18,6 +18,26 @@ type Config struct {
 	Password string
 }
 
+func parseAWSEndpoint(host string) (region, service string, ok bool) {
+	host = strings.ToLower(host)
+
+	if strings.HasSuffix(host, ".es.amazonaws.com") {
+		parts := strings.Split(host, ".")
+		if len(parts) >= 5 {
+			return parts[len(parts)-4], "es", true
+		}
+	}
+
+	if strings.HasSuffix(host, ".aoss.amazonaws.com") {
+		parts := strings.Split(host, ".")
+		if len(parts) >= 5 {
+			return parts[len(parts)-4], "aoss", true
+		}
+	}
+
+	return "", "", false
+}
+
 func ParseURL(rawURL string) (*Config, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
