@@ -13,10 +13,10 @@ import (
 
 const (
 	TabOverview = iota
+	TabCluster
 	TabWorkbench
 	TabBrowser
 	TabMappings
-	TabCluster
 	TabTasks
 )
 
@@ -350,6 +350,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				switch m.activeTab {
 				case TabOverview:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
+				case TabCluster:
 					m.workbench.Blur()
 					return m, m.switchTab(TabWorkbench)
 				case TabWorkbench:
@@ -364,9 +367,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, m.switchTab(TabMappings)
 				case TabMappings:
-					m.loading = true
-					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
-				case TabCluster:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabTasks), m.fetchTasksTab())
 				case TabTasks:
@@ -377,9 +377,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					break
 				}
 				switch m.activeTab {
+				case TabCluster:
+					return m, m.switchTab(TabOverview)
 				case TabWorkbench:
 					m.workbench.Blur()
-					return m, m.switchTab(TabOverview)
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
 				case TabBrowser:
 					return m, m.switchTab(TabWorkbench)
 				case TabMappings:
@@ -387,17 +390,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.browser.SetIndices(m.cluster.Indices)
 					}
 					return m, m.switchTab(TabBrowser)
-				case TabOverview:
-					m.loading = true
-					return m, tea.Batch(m.switchTab(TabTasks), m.fetchTasksTab())
 				case TabTasks:
-					m.loading = true
-					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
-				case TabCluster:
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
 					return m, m.switchTab(TabMappings)
+				case TabOverview:
+					m.loading = true
+					return m, tea.Batch(m.switchTab(TabTasks), m.fetchTasksTab())
 				}
 			}
 		}
@@ -429,33 +429,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
+				clusterWidth := lipgloss.Width(InactiveTabStyle.Render("Cluster"))
 				workbenchWidth := lipgloss.Width(InactiveTabStyle.Render("Workbench"))
 				browserWidth := lipgloss.Width(InactiveTabStyle.Render("Browser"))
 				mappingsWidth := lipgloss.Width(InactiveTabStyle.Render("Mappings"))
-				nodesWidth := lipgloss.Width(InactiveTabStyle.Render("Cluster"))
 
 				if msg.X < overviewWidth {
 					m.activeTab = TabOverview
 					m.workbench.Blur()
-				} else if msg.X < overviewWidth+workbenchWidth {
+				} else if msg.X < overviewWidth+clusterWidth {
+					m.activeTab = TabCluster
+					m.workbench.Blur()
+					m.loading = true
+					return m, m.fetchClusterTab()
+				} else if msg.X < overviewWidth+clusterWidth+workbenchWidth {
 					m.activeTab = TabWorkbench
-				} else if msg.X < overviewWidth+workbenchWidth+browserWidth {
+				} else if msg.X < overviewWidth+clusterWidth+workbenchWidth+browserWidth {
 					m.activeTab = TabBrowser
 					m.workbench.Blur()
 					if m.cluster != nil {
 						m.browser.SetIndices(m.cluster.Indices)
 					}
-				} else if msg.X < overviewWidth+workbenchWidth+browserWidth+mappingsWidth {
+				} else if msg.X < overviewWidth+clusterWidth+workbenchWidth+browserWidth+mappingsWidth {
 					m.activeTab = TabMappings
 					m.workbench.Blur()
 					if m.cluster != nil {
 						m.mappings.SetIndices(m.cluster.Indices)
 					}
-				} else if msg.X < overviewWidth+workbenchWidth+browserWidth+mappingsWidth+nodesWidth {
-					m.activeTab = TabCluster
-					m.workbench.Blur()
-					m.loading = true
-					return m, m.fetchClusterTab()
 				} else {
 					m.activeTab = TabTasks
 					m.workbench.Blur()
@@ -520,26 +520,26 @@ func (m Model) View() string {
 	header := HeaderStyle.Width(m.width).Render(headerText)
 
 	overviewTab := InactiveTabStyle.Render("Overview")
+	clusterTab := InactiveTabStyle.Render("Cluster")
 	workbenchTab := InactiveTabStyle.Render("Workbench")
 	browserTab := InactiveTabStyle.Render("Browser")
 	mappingsTab := InactiveTabStyle.Render("Mappings")
-	nodesTab := InactiveTabStyle.Render("Cluster")
 	tasksTab := InactiveTabStyle.Render("Tasks")
 	switch m.activeTab {
 	case TabOverview:
 		overviewTab = ActiveTabStyle.Render("Overview")
+	case TabCluster:
+		clusterTab = ActiveTabStyle.Render("Cluster")
 	case TabWorkbench:
 		workbenchTab = ActiveTabStyle.Render("Workbench")
 	case TabBrowser:
 		browserTab = ActiveTabStyle.Render("Browser")
 	case TabMappings:
 		mappingsTab = ActiveTabStyle.Render("Mappings")
-	case TabCluster:
-		nodesTab = ActiveTabStyle.Render("Cluster")
 	case TabTasks:
 		tasksTab = ActiveTabStyle.Render("Tasks")
 	}
-	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, workbenchTab, browserTab, mappingsTab, nodesTab, tasksTab)
+	tabs := lipgloss.JoinHorizontal(lipgloss.Top, overviewTab, clusterTab, workbenchTab, browserTab, mappingsTab, tasksTab)
 
 	// Content
 	contentHeight := m.height - 4
@@ -577,20 +577,20 @@ func (m Model) View() string {
 	var statusText string
 	switch m.activeTab {
 	case TabOverview:
-		statusText = "q: quit  Tab: workbench  Shift+Tab: tasks  r: refresh  /: filter  ←→: index  ↑↓: node  Enter: shard info  .: system"
+		statusText = "q: quit  Tab: cluster  Shift+Tab: tasks  r: refresh  /: filter  ←→: index  ↑↓: node  Enter: shard info  .: system"
 		if m.overview.showSystem {
 			statusText += " [on]"
 		}
+	case TabCluster:
+		statusText = "q: quit  Tab: workbench  Shift+Tab: overview  r: refresh  1-7: views  /: filter  ↑↓: scroll"
 	case TabWorkbench:
-		statusText = "q: quit  Tab: browser  Shift+Tab: overview  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+		statusText = "q: quit  Tab: browser  Shift+Tab: cluster  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
 	case TabBrowser:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: workbench  /: filter  ←→: panes  ↑↓: scroll  Ctrl+Y: copy"
 	case TabMappings:
-		statusText = "q: quit  Tab: cluster  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
-	case TabCluster:
-		statusText = "q: quit  Tab: tasks  Shift+Tab: mappings  r: refresh  1-7: views  /: filter  ↑↓: scroll"
+		statusText = "q: quit  Tab: tasks  Shift+Tab: browser  r: refresh  /: filter  ←→: panes  ↑↓: scroll  t: tree  s: settings  Ctrl+Y: copy  Ctrl+F: search"
 	case TabTasks:
-		statusText = "q: quit  Tab: overview  Shift+Tab: cluster  r: refresh  Enter: details  c: cancel  ↑↓: select"
+		statusText = "q: quit  Tab: overview  Shift+Tab: mappings  r: refresh  Enter: details  c: cancel  ↑↓: select"
 	}
 
 	var clipboardMsg string
