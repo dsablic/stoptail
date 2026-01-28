@@ -90,7 +90,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Print("\033[?1049h\033[H")
 	defer fmt.Print("\033[?1049l")
 
-	esURL, err := resolveESURL(args, false)
+	esURL, awsProfile, err := resolveESURL(args, false)
 	if err != nil {
 		return err
 	}
@@ -99,6 +99,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
+	cfg.AWSProfile = awsProfile
 
 	client, err := es.NewClient(cfg)
 	if err != nil {
@@ -114,7 +115,7 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 func runRenderMode(args []string) error {
-	esURL, err := resolveESURL(args, true)
+	esURL, awsProfile, err := resolveESURL(args, true)
 	if err != nil {
 		return err
 	}
@@ -123,6 +124,7 @@ func runRenderMode(args []string) error {
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
+	cfg.AWSProfile = awsProfile
 
 	client, err := es.NewClient(cfg)
 	if err != nil {
@@ -132,42 +134,42 @@ func runRenderMode(args []string) error {
 	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag)
 }
 
-func resolveESURL(args []string, skipUI bool) (string, error) {
+func resolveESURL(args []string, skipUI bool) (string, string, error) {
 	if err := config.EnsureConfigDir(); err != nil {
-		return "", fmt.Errorf("creating config dir: %w", err)
+		return "", "", fmt.Errorf("creating config dir: %w", err)
 	}
 
 	clusters, err := config.LoadClustersConfig()
 	if err != nil {
-		return "", fmt.Errorf("loading clusters config: %w", err)
+		return "", "", fmt.Errorf("loading clusters config: %w", err)
 	}
 
 	if len(args) > 0 {
 		arg := args[0]
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
-			return arg, nil
+			return arg, "", nil
 		}
 		if clusters != nil {
 			return resolveURLWithProgress(clusters, arg, skipUI)
 		}
-		return "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
+		return "", "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
 
 	if envURL := os.Getenv("ES_URL"); envURL != "" {
-		return envURL, nil
+		return envURL, "", nil
 	}
 
 	if clusters != nil && len(clusters.Clusters) > 0 {
 		if skipUI {
-			return "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
+			return "", "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
 		}
 		return selectCluster(clusters)
 	}
 
-	return "http://localhost:9200", nil
+	return "http://localhost:9200", "", nil
 }
 
-func selectCluster(clusters *config.ClustersConfig) (string, error) {
+func selectCluster(clusters *config.ClustersConfig) (string, string, error) {
 	names := clusters.ClusterNames()
 	sort.Strings(names)
 
@@ -179,12 +181,12 @@ func selectCluster(clusters *config.ClustersConfig) (string, error) {
 	p := tea.NewProgram(picker)
 	result, err := p.Run()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	m := result.(*clusterPickerModal)
 	if m.cancelled {
-		return "", fmt.Errorf("cancelled")
+		return "", "", fmt.Errorf("cancelled")
 	}
 
 	return resolveURLWithProgress(clusters, m.selected, false)
@@ -348,31 +350,32 @@ func (m urlResolverModel) View() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
 }
 
-func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (string, error) {
+func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (string, string, error) {
 	entry, ok := clusters.Clusters[name]
 	if !ok {
-		return "", fmt.Errorf("cluster %q not found", name)
+		return "", "", fmt.Errorf("cluster %q not found", name)
 	}
 
 	if entry.URL != "" {
-		return entry.URL, nil
+		return entry.URL, entry.AWSProfile, nil
 	}
 
 	if skipUI {
-		return clusters.ResolveURL(name)
+		url, err := clusters.ResolveURL(name)
+		return url, entry.AWSProfile, err
 	}
 
 	m := newURLResolver(clusters, name)
 	p := tea.NewProgram(m)
 	result, err := p.Run()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	resolved := result.(urlResolverModel)
 	if resolved.err != nil {
-		return "", resolved.err
+		return "", "", resolved.err
 	}
-	return resolved.url, nil
+	return resolved.url, entry.AWSProfile, nil
 }
 
 func renderAndExit(client *es.Client, tab string, width, height int, body, view string) error {
