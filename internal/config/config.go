@@ -75,6 +75,9 @@ func (c *Config) MaskedURL() string {
 	if err != nil || u == nil {
 		return c.Host
 	}
+	if c.IsAWS() {
+		return fmt.Sprintf("%s (AWS %s)", strings.TrimPrefix(u.Host, "www."), c.AWSRegion)
+	}
 	if c.Username != "" {
 		return fmt.Sprintf("%s:***@%s", c.Username, u.Host)
 	}

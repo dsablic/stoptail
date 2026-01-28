@@ -207,6 +207,24 @@ func TestMaskedURL(t *testing.T) {
 			}(),
 			want: "myuser:***@es.example.com:9200",
 		},
+		{
+			name: "AWS OpenSearch",
+			cfg: &Config{
+				Host:       "https://search-my-domain.us-east-1.es.amazonaws.com",
+				AWSRegion:  "us-east-1",
+				AWSService: "es",
+			},
+			want: "search-my-domain.us-east-1.es.amazonaws.com (AWS us-east-1)",
+		},
+		{
+			name: "AWS OpenSearch Serverless",
+			cfg: &Config{
+				Host:       "https://abc123.us-west-2.aoss.amazonaws.com",
+				AWSRegion:  "us-west-2",
+				AWSService: "aoss",
+			},
+			want: "abc123.us-west-2.aoss.amazonaws.com (AWS us-west-2)",
+		},
 	}
 
 	for _, tt := range tests {
