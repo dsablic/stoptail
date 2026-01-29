@@ -373,10 +373,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, cmd
 			}
 		case "ctrl+s":
-			return m, m.bookmarkUI.OpenSave()
+			if m.focus != FocusBody {
+				return m, m.bookmarkUI.OpenSave()
+			}
 		case "ctrl+b":
-			m.bookmarkUI.OpenLoad()
-			return m, nil
+			if m.focus != FocusBody {
+				m.bookmarkUI.OpenLoad()
+				return m, nil
+			}
 		case "ctrl+y":
 			var text string
 			switch m.focus {
@@ -388,8 +392,10 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.clipboard.Copy(text)
 			return m, nil
 		case "ctrl+e":
-			m.toggleMode()
-			return m, nil
+			if m.focus != FocusBody {
+				m.toggleMode()
+				return m, nil
+			}
 		case "ctrl+c":
 			if m.focus == FocusBody && m.editor.selection.Active {
 				text := m.editor.GetSelectedText()
