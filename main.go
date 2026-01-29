@@ -106,7 +106,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	p := tea.NewProgram(ui.New(client, cfg), tea.WithMouseCellMotion(), tea.WithFilter(cmdKeyFilter))
+	p := tea.NewProgram(ui.New(client, cfg), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return err
 	}
@@ -451,32 +451,3 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 	return nil
 }
 
-func cmdKeyFilter(_ tea.Model, msg tea.Msg) tea.Msg {
-	s, ok := msg.(fmt.Stringer)
-	if !ok {
-		return msg
-	}
-	str := s.String()
-	if len(str) < 5 || str[:4] != "?CSI" {
-		return msg
-	}
-	switch {
-	case strings.Contains(str, "59 57 68"):
-		return tea.KeyMsg{Type: tea.KeyHome}
-	case strings.Contains(str, "59 57 67"):
-		return tea.KeyMsg{Type: tea.KeyEnd}
-	case strings.Contains(str, "59 57 65"):
-		return tea.KeyMsg{Type: tea.KeyCtrlHome}
-	case strings.Contains(str, "59 57 66"):
-		return tea.KeyMsg{Type: tea.KeyCtrlEnd}
-	case strings.Contains(str, "59 49 48 68"):
-		return tea.KeyMsg{Type: tea.KeyShiftHome}
-	case strings.Contains(str, "59 49 48 67"):
-		return tea.KeyMsg{Type: tea.KeyShiftEnd}
-	case strings.Contains(str, "59 49 48 65"):
-		return tea.KeyMsg{Type: tea.KeyCtrlShiftHome}
-	case strings.Contains(str, "59 49 48 66"):
-		return tea.KeyMsg{Type: tea.KeyCtrlShiftEnd}
-	}
-	return msg
-}

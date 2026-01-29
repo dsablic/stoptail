@@ -12,9 +12,7 @@ require (
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/elastic/go-elasticsearch/v8 v8.19.1
-	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
 	github.com/spf13/cobra v1.10.2
-	github.com/tree-sitter/tree-sitter-json v0.24.8
 	gopkg.in/yaml.v3 v3.0.1
 )
 

@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/es"
-	sitter "github.com/smacker/go-tree-sitter"
 )
 
 type ValidationState int
@@ -129,80 +128,6 @@ func (e Editor) renderGutter(width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (e Editor) parse() *sitter.Tree {
-	content := e.textarea.Value()
-	if content == "" {
-		return nil
-	}
-	parser := sitter.NewParser()
-	parser.SetLanguage(jsonLanguage)
-	tree, _ := parser.ParseCtx(context.Background(), nil, []byte(content))
-	return tree
-}
-
-func (e Editor) highlightContent() string {
-	content := e.textarea.Value()
-	if content == "" {
-		return ""
-	}
-
-	tree := e.parse()
-	if tree == nil {
-		return content
-	}
-
-	return e.applyHighlighting(content, tree.RootNode())
-}
-
-func (e Editor) getASTPath(cursorOffset int) []string {
-	tree := e.parse()
-	if tree == nil {
-		return nil
-	}
-
-	content := []byte(e.textarea.Value())
-
-	row, col := e.offsetToRowCol(cursorOffset)
-
-	root := tree.RootNode()
-	node := root.NamedDescendantForPointRange(
-		sitter.Point{Row: uint32(row), Column: uint32(col)},
-		sitter.Point{Row: uint32(row), Column: uint32(col)},
-	)
-
-	var path []string
-	cursorNode := node
-	for node != nil {
-		if node.Type() == "pair" {
-			keyNode := node.ChildByFieldName("key")
-			if keyNode == nil && node.ChildCount() > 0 {
-				keyNode = node.Child(0)
-			}
-			if keyNode != nil && keyNode.Type() == "string" {
-				if !nodeContains(keyNode, cursorNode) {
-					start := keyNode.StartByte() + 1
-					end := keyNode.EndByte() - 1
-					if start < end && int(end) <= len(content) {
-						key := string(content[start:end])
-						path = append([]string{key}, path...)
-					}
-				}
-			}
-		}
-		node = node.Parent()
-	}
-
-	return path
-}
-
-func nodeContains(ancestor, descendant *sitter.Node) bool {
-	for n := descendant; n != nil; n = n.Parent() {
-		if n.Equal(ancestor) {
-			return true
-		}
-	}
-	return false
-}
 
 func (e Editor) IsKeyCompletionPosition() bool {
 	content := e.textarea.Value()
@@ -286,82 +211,6 @@ func (e Editor) getCursorOffset() int {
 	}
 	offset += col
 	return offset
-}
-
-func (e Editor) offsetToRowCol(offset int) (row, col int) {
-	content := e.textarea.Value()
-	for i, ch := range content {
-		if i >= offset {
-			break
-		}
-		if ch == '\n' {
-			row++
-			col = 0
-		} else {
-			col++
-		}
-	}
-	return row, col
-}
-
-func (e Editor) applyHighlighting(content string, root *sitter.Node) string {
-	type highlight struct {
-		start, end int
-		color      lipgloss.Color
-	}
-	var highlights []highlight
-
-	var walk func(node *sitter.Node)
-	walk = func(node *sitter.Node) {
-		nodeType := node.Type()
-		start := int(node.StartByte())
-		end := int(node.EndByte())
-
-		switch nodeType {
-		case "string":
-			parent := node.Parent()
-			if parent != nil && parent.Type() == "pair" {
-				firstChild := parent.Child(0)
-				if firstChild != nil && firstChild.Equal(node) {
-					highlights = append(highlights, highlight{start, end, ColorBlue})
-				} else {
-					highlights = append(highlights, highlight{start, end, ColorGreen})
-				}
-			} else {
-				highlights = append(highlights, highlight{start, end, ColorGreen})
-			}
-		case "number":
-			highlights = append(highlights, highlight{start, end, ColorYellow})
-		case "true", "false":
-			highlights = append(highlights, highlight{start, end, lipgloss.Color("#c586c0")})
-		case "null":
-			highlights = append(highlights, highlight{start, end, lipgloss.Color("#c586c0")})
-		}
-
-		for i := 0; i < int(node.ChildCount()); i++ {
-			walk(node.Child(i))
-		}
-	}
-	walk(root)
-
-	if len(highlights) == 0 {
-		return content
-	}
-
-	var result strings.Builder
-	lastEnd := 0
-	for _, h := range highlights {
-		if h.start > lastEnd {
-			result.WriteString(content[lastEnd:h.start])
-		}
-		style := lipgloss.NewStyle().Foreground(h.color)
-		result.WriteString(style.Render(content[h.start:h.end]))
-		lastEnd = h.end
-	}
-	if lastEnd < len(content) {
-		result.WriteString(content[lastEnd:])
-	}
-	return result.String()
 }
 
 func (e *Editor) SetSize(width, height int) {
@@ -484,141 +333,26 @@ func (e Editor) renderWithSelection(content string) string {
 }
 
 func (e Editor) renderPlainWithCursor(content string, cursorLine, cursorCol int) string {
-	highlighted := e.highlightContent()
-	if highlighted == "" {
-		highlighted = content
-	}
-
-	lines := strings.Split(highlighted, "\n")
+	lines := strings.Split(content, "\n")
 	if cursorLine < 0 || cursorLine >= len(lines) {
-		return highlighted
+		return content
 	}
 
-	contentLines := strings.Split(content, "\n")
-	if cursorLine >= len(contentLines) {
-		return highlighted
+	line := lines[cursorLine]
+	runes := []rune(line)
+	if cursorCol > len(runes) {
+		cursorCol = len(runes)
 	}
 
-	plainLine := contentLines[cursorLine]
-	plainRunes := []rune(plainLine)
-	if cursorCol > len(plainRunes) {
-		cursorCol = len(plainRunes)
-	}
-
-	highlightedLine := lines[cursorLine]
-	lines[cursorLine] = insertCursorInHighlightedLine(highlightedLine, plainRunes, cursorCol)
-	return strings.Join(lines, "\n")
-}
-
-func insertCursorInHighlightedLine(highlighted string, plainRunes []rune, cursorCol int) string {
 	cursorStyle := lipgloss.NewStyle().Reverse(true)
-
-	if cursorCol >= len(plainRunes) {
-		return highlighted + cursorStyle.Render(" ")
-	}
-
-	charAtCursor := string(plainRunes[cursorCol])
-	startPos, endPos := findCharBounds(highlighted, cursorCol)
-
-	before := highlighted[:startPos]
-	after := highlighted[endPos:]
-
-	activeColor := extractActiveColor(before)
-	var cursorChar string
-	if activeColor != "" {
-		cursorChar = "\x1b[7;" + activeColor + "m" + charAtCursor + "\x1b[0m"
+	var newLine string
+	if cursorCol >= len(runes) {
+		newLine = line + cursorStyle.Render(" ")
 	} else {
-		cursorChar = cursorStyle.Render(charAtCursor)
+		newLine = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
 	}
-
-	return before + cursorChar + after
-}
-
-func findCharBounds(s string, visualCol int) (start, end int) {
-	visualPos := 0
-	i := 0
-
-	for i < len(s) && visualPos < visualCol {
-		if s[i] == '\x1b' {
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			continue
-		}
-		_, size := utf8DecodeRune(s[i:])
-		visualPos++
-		i += size
-	}
-
-	for i < len(s) && s[i] == '\x1b' {
-		for i < len(s) && s[i] != 'm' {
-			i++
-		}
-		if i < len(s) {
-			i++
-		}
-	}
-	start = i
-
-	if i < len(s) {
-		_, size := utf8DecodeRune(s[i:])
-		end = i + size
-	} else {
-		end = i
-	}
-
-	for end < len(s) && s[end] == '\x1b' {
-		for end < len(s) && s[end] != 'm' {
-			end++
-		}
-		if end < len(s) {
-			end++
-		}
-	}
-
-	return start, end
-}
-
-func extractActiveColor(s string) string {
-	lastColor := ""
-	i := 0
-	for i < len(s) {
-		if s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '[' {
-			start := i + 2
-			end := start
-			for end < len(s) && s[end] != 'm' {
-				end++
-			}
-			if end < len(s) {
-				code := s[start:end]
-				if code == "0" {
-					lastColor = ""
-				} else {
-					lastColor = code
-				}
-			}
-			i = end + 1
-		} else {
-			i++
-		}
-	}
-	return lastColor
-}
-
-func utf8DecodeRune(s string) (rune, int) {
-	if len(s) == 0 {
-		return 0, 0
-	}
-	for i := 1; i <= 4 && i <= len(s); i++ {
-		r := []rune(s[:i])
-		if len(r) == 1 {
-			return r[0], i
-		}
-	}
-	return rune(s[0]), 1
+	lines[cursorLine] = newLine
+	return strings.Join(lines, "\n")
 }
 
 func (e Editor) View() string {
@@ -646,7 +380,7 @@ func (e Editor) View() string {
 	} else if e.textarea.Focused() {
 		displayContent = e.renderPlainWithCursor(content, cursorLine, cursorCol)
 	} else {
-		displayContent = e.highlightContent()
+		displayContent = content
 	}
 
 	displayLines := strings.Split(displayContent, "\n")
