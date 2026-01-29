@@ -578,3 +578,60 @@ func (e *Editor) SetSelection(startLine, startCol, endLine, endCol int) {
 	e.selection.EndCol = endCol
 	e.selection.Active = true
 }
+
+func (e *Editor) SelectAll() {
+	content := e.textarea.Value()
+	if content == "" {
+		return
+	}
+	lines := strings.Split(content, "\n")
+	lastLine := len(lines) - 1
+	lastCol := len(lines[lastLine])
+	e.SetSelection(0, 0, lastLine, lastCol)
+}
+
+func (e *Editor) DeleteSelection() {
+	if !e.selection.Active {
+		return
+	}
+	content := e.textarea.Value()
+	lines := strings.Split(content, "\n")
+
+	startLine, startCol := e.selection.StartLine, e.selection.StartCol
+	endLine, endCol := e.selection.EndLine, e.selection.EndCol
+
+	if startLine > endLine || (startLine == endLine && startCol > endCol) {
+		startLine, endLine = endLine, startLine
+		startCol, endCol = endCol, startCol
+	}
+
+	var result strings.Builder
+	for i, line := range lines {
+		if i < startLine {
+			result.WriteString(line)
+			result.WriteString("\n")
+		} else if i == startLine && i == endLine {
+			result.WriteString(line[:startCol])
+			result.WriteString(line[endCol:])
+			if i < len(lines)-1 {
+				result.WriteString("\n")
+			}
+		} else if i == startLine {
+			result.WriteString(line[:startCol])
+		} else if i == endLine {
+			result.WriteString(line[endCol:])
+			if i < len(lines)-1 {
+				result.WriteString("\n")
+			}
+		} else if i > endLine {
+			result.WriteString(line)
+			if i < len(lines)-1 {
+				result.WriteString("\n")
+			}
+		}
+	}
+
+	e.textarea.SetValue(result.String())
+	e.setCursorPosition(startLine, startCol)
+	e.selection.Active = false
+}

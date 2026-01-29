@@ -47,7 +47,9 @@ var helpWorkbench = `## Workbench
 | Enter/n | Next match |
 | Shift+Enter/N | Prev match |
 | Ctrl+Y | Copy body/response |
+| Ctrl+A | Select all (body) |
 | Ctrl+C | Copy selection |
+| Ctrl+V | Paste |
 | Shift+Arrow | Select text |
 | Up/Down | Navigate |
 | Esc | Cancel |

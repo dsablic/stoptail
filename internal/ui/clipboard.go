@@ -47,6 +47,26 @@ func (c *Clipboard) Copy(text string) bool {
 	return true
 }
 
+func (c *Clipboard) Paste() (string, bool) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("pbpaste")
+	case "linux":
+		cmd = exec.Command("xclip", "-selection", "clipboard", "-o")
+	case "windows":
+		cmd = exec.Command("powershell", "-command", "Get-Clipboard")
+	default:
+		return "", false
+	}
+
+	out, err := cmd.Output()
+	if err != nil {
+		return "", false
+	}
+	return string(out), true
+}
+
 func (c *Clipboard) Message() string {
 	return c.message
 }

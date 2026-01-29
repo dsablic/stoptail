@@ -410,6 +410,21 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				}
 				return m, nil
 			}
+		case "ctrl+a":
+			if m.focus == FocusBody {
+				m.editor.SelectAll()
+				return m, nil
+			}
+		case "ctrl+v":
+			if m.focus == FocusBody {
+				if text, ok := m.clipboard.Paste(); ok && text != "" {
+					if m.editor.selection.Active {
+						m.editor.DeleteSelection()
+					}
+					m.editor.InsertString(text)
+				}
+				return m, nil
+			}
 		case "n", "ctrl+n":
 			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
 				if match := m.search.NextMatch(); match >= 0 {

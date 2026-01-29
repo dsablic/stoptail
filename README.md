@@ -204,7 +204,9 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` / `n` | Next search match |
 | `Shift+Enter` / `N` | Previous search match |
 | `Ctrl+Y` | Copy body or response to clipboard |
+| `Ctrl+A` | Select all text in body |
 | `Ctrl+C` | Copy selected text |
+| `Ctrl+V` | Paste from clipboard |
 | `Shift+Arrow` | Select text |
 | `Shift+Home/End` | Select to line start/end |
 | `Up/Down` | Navigate completions (when open) |
