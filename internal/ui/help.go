@@ -50,6 +50,8 @@ var helpWorkbench = `## Workbench
 | Ctrl+A | Select all (body) |
 | Ctrl+C | Copy selection |
 | Ctrl+V | Paste |
+| Ctrl+Z | Undo |
+| Ctrl+Shift+Z | Redo |
 | Shift+Arrow | Select text |
 | Up/Down | Navigate |
 | Esc | Cancel |

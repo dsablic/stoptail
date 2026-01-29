@@ -49,6 +49,13 @@ type Editor struct {
 	cursorLine      int
 	cursorCol       int
 	cursorSet       bool
+	undoStack       []editorState
+	redoStack       []editorState
+}
+
+type editorState struct {
+	content    string
+	cursorPos  int
 }
 
 func NewEditor() Editor {
@@ -484,6 +491,11 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 			return e.handleShiftArrow(keyMsg)
 		case "left", "right", "up", "down", "home", "end":
 			e.selection.Active = false
+		default:
+			key := keyMsg.String()
+			if len(key) == 1 || key == "backspace" || key == "delete" || key == "enter" {
+				e.SaveState()
+			}
 		}
 	}
 
@@ -634,4 +646,53 @@ func (e *Editor) DeleteSelection() {
 	e.textarea.SetValue(result.String())
 	e.setCursorPosition(startLine, startCol)
 	e.selection.Active = false
+}
+
+func (e *Editor) SaveState() {
+	state := editorState{
+		content:   e.textarea.Value(),
+		cursorPos: e.getCursorOffset(),
+	}
+	if len(e.undoStack) > 0 && e.undoStack[len(e.undoStack)-1].content == state.content {
+		return
+	}
+	e.undoStack = append(e.undoStack, state)
+	if len(e.undoStack) > 100 {
+		e.undoStack = e.undoStack[1:]
+	}
+	e.redoStack = nil
+}
+
+func (e *Editor) Undo() bool {
+	if len(e.undoStack) == 0 {
+		return false
+	}
+	current := editorState{
+		content:   e.textarea.Value(),
+		cursorPos: e.getCursorOffset(),
+	}
+	e.redoStack = append(e.redoStack, current)
+
+	state := e.undoStack[len(e.undoStack)-1]
+	e.undoStack = e.undoStack[:len(e.undoStack)-1]
+	e.textarea.SetValue(state.content)
+	e.textarea.SetCursor(state.cursorPos)
+	return true
+}
+
+func (e *Editor) Redo() bool {
+	if len(e.redoStack) == 0 {
+		return false
+	}
+	current := editorState{
+		content:   e.textarea.Value(),
+		cursorPos: e.getCursorOffset(),
+	}
+	e.undoStack = append(e.undoStack, current)
+
+	state := e.redoStack[len(e.redoStack)-1]
+	e.redoStack = e.redoStack[:len(e.redoStack)-1]
+	e.textarea.SetValue(state.content)
+	e.textarea.SetCursor(state.cursorPos)
+	return true
 }

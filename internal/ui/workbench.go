@@ -418,11 +418,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "ctrl+v":
 			if m.focus == FocusBody {
 				if text, ok := m.clipboard.Paste(); ok && text != "" {
+					m.editor.SaveState()
 					if m.editor.selection.Active {
 						m.editor.DeleteSelection()
 					}
 					m.editor.InsertString(text)
 				}
+				return m, nil
+			}
+		case "ctrl+z":
+			if m.focus == FocusBody {
+				m.editor.Undo()
+				return m, nil
+			}
+		case "ctrl+shift+z":
+			if m.focus == FocusBody {
+				m.editor.Redo()
 				return m, nil
 			}
 		case "n", "ctrl+n":

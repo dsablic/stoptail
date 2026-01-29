@@ -207,6 +207,8 @@ stoptail stores data in `~/.stoptail/`:
 | `Ctrl+A` | Select all text in body |
 | `Ctrl+C` | Copy selected text |
 | `Ctrl+V` | Paste from clipboard |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
 | `Shift+Arrow` | Select text |
 | `Shift+Home/End` | Select to line start/end |
 | `Up/Down` | Navigate completions (when open) |
