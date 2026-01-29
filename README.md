@@ -197,6 +197,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Tab` | Trigger autocomplete (in body) / cycle focus |
 | `Ctrl+R` | Execute request |
 | `Ctrl+E` | Toggle REST/ES|QL mode |
+| `Alt+F` | Format JSON body |
 | `Ctrl+S` | Save query as bookmark |
 | `Ctrl+B` | Load bookmark |
 | `Ctrl+F` | Search in response |

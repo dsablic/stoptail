@@ -396,6 +396,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.toggleMode()
 				return m, nil
 			}
+		case "alt+f":
+			if m.queryMode == ModeREST {
+				m.prettyPrintBody()
+				return m, nil
+			}
 		case "ctrl+c":
 			if m.focus == FocusBody && m.editor.selection.Active {
 				text := m.editor.GetSelectedText()

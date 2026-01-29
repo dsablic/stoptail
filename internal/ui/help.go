@@ -40,6 +40,7 @@ var helpWorkbench = `## Workbench
 | Tab | Autocomplete / next |
 | Ctrl+R | Execute |
 | Ctrl+E | Toggle REST/ES|QL |
+| Alt+F | Format JSON |
 | Ctrl+S | Save bookmark |
 | Ctrl+B | Load bookmark |
 | Ctrl+F | Search response |

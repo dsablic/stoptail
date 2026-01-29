@@ -584,7 +584,7 @@ func (m Model) View() string {
 	case TabCluster:
 		statusText = "q: quit  Tab: workbench  Shift+Tab: overview  r: refresh  1-7: views  /: filter  ↑↓: scroll"
 	case TabWorkbench:
-		statusText = "q: quit  Tab: browser  Shift+Tab: cluster  Ctrl+R: execute  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
+		statusText = "q: quit  Tab: browser  Shift+Tab: cluster  Ctrl+R: execute  Alt+F: format  Ctrl+Y: copy  Ctrl+F: search  Esc: deactivate"
 	case TabBrowser:
 		statusText = "q: quit  Tab: mappings  Shift+Tab: workbench  /: filter  ←→: panes  ↑↓: scroll  Ctrl+Y: copy"
 	case TabMappings:
