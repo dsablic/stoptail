@@ -559,6 +559,10 @@ func (e *Editor) SetCursor(pos int) {
 	e.textarea.SetCursor(pos)
 }
 
+func (e Editor) CursorOffset() int {
+	return e.getCursorOffset()
+}
+
 func (e *Editor) ClearSelection() {
 	e.selection.Active = false
 }

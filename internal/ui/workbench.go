@@ -690,7 +690,16 @@ func (m *WorkbenchModel) prettyPrintBody() {
 	}
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, []byte(val), "", "  "); err == nil {
-		m.editor.SetContent(pretty.String())
+		newContent := pretty.String()
+		if newContent == val {
+			return
+		}
+		cursorPos := m.editor.CursorOffset()
+		m.editor.SetContent(newContent)
+		if cursorPos > len(newContent) {
+			cursorPos = len(newContent)
+		}
+		m.editor.SetCursor(cursorPos)
 	}
 }
 
