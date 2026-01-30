@@ -18,13 +18,13 @@ type NodesView int
 const (
 	ViewMemory NodesView = iota
 	ViewDisk
-	ViewFielddata
-	ViewClusterSettings
 	ViewThreadPools
 	ViewHotThreads
-	ViewTemplates
-	ViewDeprecations
+	ViewFielddata
 	ViewShardHealth
+	ViewTemplates
+	ViewClusterSettings
+	ViewDeprecations
 )
 
 type NodesModel struct {
@@ -314,19 +314,19 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 		case "2":
 			m.selectView(ViewDisk)
 		case "3":
-			m.selectView(ViewFielddata)
-		case "4":
-			m.selectView(ViewClusterSettings)
-		case "5":
 			m.selectView(ViewThreadPools)
-		case "6":
+		case "4":
 			m.selectView(ViewHotThreads)
+		case "5":
+			m.selectView(ViewFielddata)
+		case "6":
+			m.selectView(ViewShardHealth)
 		case "7":
 			m.selectView(ViewTemplates)
 		case "8":
-			m.selectView(ViewDeprecations)
+			m.selectView(ViewClusterSettings)
 		case "9":
-			m.selectView(ViewShardHealth)
+			m.selectView(ViewDeprecations)
 		case "enter":
 			if m.activeView == ViewClusterSettings {
 				filtered := m.getFilteredSettings()
@@ -424,13 +424,13 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				}{
 					{"[1:Memory]", ViewMemory},
 					{"[2:Disk]", ViewDisk},
-					{"[3:Fielddata]", ViewFielddata},
-					{"[4:Settings]", ViewClusterSettings},
-					{"[5:Threads]", ViewThreadPools},
-					{"[6:Hot]", ViewHotThreads},
+					{"[3:Threads]", ViewThreadPools},
+					{"[4:Hot]", ViewHotThreads},
+					{"[5:Fielddata]", ViewFielddata},
+					{"[6:Shards]", ViewShardHealth},
 					{"[7:Templates]", ViewTemplates},
-					{"[8:Deprecations]", ViewDeprecations},
-					{"[9:Shards]", ViewShardHealth},
+					{"[8:Settings]", ViewClusterSettings},
+					{"[9:Deprecations]", ViewDeprecations},
 				}
 
 				pos := 0
@@ -533,13 +533,13 @@ func (m NodesModel) renderTabs() string {
 	}{
 		{"1", "Memory", ViewMemory},
 		{"2", "Disk", ViewDisk},
-		{"3", "Fielddata", ViewFielddata},
-		{"4", "Settings", ViewClusterSettings},
-		{"5", "Threads", ViewThreadPools},
-		{"6", "Hot", ViewHotThreads},
+		{"3", "Threads", ViewThreadPools},
+		{"4", "Hot", ViewHotThreads},
+		{"5", "Fielddata", ViewFielddata},
+		{"6", "Shards", ViewShardHealth},
 		{"7", "Templates", ViewTemplates},
-		{"8", "Deprecations", ViewDeprecations},
-		{"9", "Shards", ViewShardHealth},
+		{"8", "Settings", ViewClusterSettings},
+		{"9", "Deprecations", ViewDeprecations},
 	}
 
 	var parts []string
