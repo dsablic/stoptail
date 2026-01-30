@@ -14,6 +14,7 @@ const (
 	ModalNone ModalType = iota
 	ModalCreateIndex
 	ModalDeleteIndex
+	ModalCloseIndex
 	ModalAddAlias
 	ModalRemoveAlias
 	ModalError
@@ -78,6 +79,26 @@ func NewDeleteIndexModal(indexName string) *Modal {
 					}
 					return nil
 				}),
+		),
+	).WithShowHelp(false).WithShowErrors(true)
+
+	return m
+}
+
+func NewCloseIndexModal(indexName string) *Modal {
+	m := &Modal{
+		modalType: ModalCloseIndex,
+		indexName: indexName,
+	}
+
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(fmt.Sprintf("Close index '%s'?", indexName)).
+				Description("Closed indices cannot be read or written to.").
+				Affirmative("Close").
+				Negative("Cancel").
+				Value(&m.confirmed),
 		),
 	).WithShowHelp(false).WithShowErrors(true)
 

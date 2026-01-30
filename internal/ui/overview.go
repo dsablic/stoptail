@@ -23,6 +23,8 @@ type ModalInitMsg struct{}
 
 type IndexCreatedMsg struct{ Err error }
 type IndexDeletedMsg struct{ Err error }
+type IndexOpenedMsg struct{ Err error }
+type IndexClosedMsg struct{ Err error }
 type AliasAddedMsg struct{ Err error }
 type AliasRemovedMsg struct{ Err error }
 type AllocationExplainMsg struct {
@@ -299,6 +301,15 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.modal = NewRemoveAliasModal(m.SelectedIndex(), aliases)
 				return m, func() tea.Msg { return ModalInitMsg{} }
 			}
+		case "o":
+			if idx := m.getSelectedIndexInfo(); idx != nil && idx.Status == "close" {
+				return m, m.openIndexCmd(idx.Name)
+			}
+		case "x":
+			if idx := m.getSelectedIndexInfo(); idx != nil && idx.Status == "open" {
+				m.modal = NewCloseIndexModal(idx.Name)
+				return m, func() tea.Msg { return ModalInitMsg{} }
+			}
 		case "enter":
 			if m.shardInfo != nil {
 				m.shardInfo = nil
@@ -339,6 +350,20 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			return m, func() tea.Msg { return ModalInitMsg{} }
 		}
 		m.selectedIndex = 0
+		return m, nil
+	case IndexOpenedMsg:
+		m.operationMsg = ""
+		if msg.Err != nil {
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
+		}
+		return m, nil
+	case IndexClosedMsg:
+		m.operationMsg = ""
+		if msg.Err != nil {
+			m.modal = NewErrorModal(msg.Err.Error())
+			return m, func() tea.Msg { return ModalInitMsg{} }
+		}
 		return m, nil
 	case AliasAddedMsg:
 		m.operationMsg = ""
@@ -392,6 +417,16 @@ func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
 		m.operationMsg = "Deleting index..."
 		return m, tea.Batch(m.spinner.Tick, m.deleteIndexCmd(indexName))
 
+	case ModalCloseIndex:
+		if m.modal.Confirmed() {
+			indexName := m.modal.IndexName()
+			m.modal = nil
+			m.operationMsg = "Closing index..."
+			return m, tea.Batch(m.spinner.Tick, m.closeIndexCmd(indexName))
+		}
+		m.modal = nil
+		return m, nil
+
 	case ModalAddAlias:
 		aliasName := m.modal.AliasName()
 		indexName := m.modal.IndexName()
@@ -444,6 +479,26 @@ func (m OverviewModel) deleteIndexCmd(name string) tea.Cmd {
 		}
 		err := m.client.DeleteIndex(context.Background(), name)
 		return IndexDeletedMsg{Err: err}
+	}
+}
+
+func (m OverviewModel) openIndexCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return IndexOpenedMsg{Err: fmt.Errorf("no client")}
+		}
+		err := m.client.OpenIndex(context.Background(), name)
+		return IndexOpenedMsg{Err: err}
+	}
+}
+
+func (m OverviewModel) closeIndexCmd(name string) tea.Cmd {
+	return func() tea.Msg {
+		if m.client == nil {
+			return IndexClosedMsg{Err: fmt.Errorf("no client")}
+		}
+		err := m.client.CloseIndex(context.Background(), name)
+		return IndexClosedMsg{Err: err}
 	}
 }
 
@@ -664,6 +719,14 @@ func (m OverviewModel) SelectedIndex() string {
 	return ""
 }
 
+func (m OverviewModel) getSelectedIndexInfo() *es.IndexInfo {
+	indices := m.filteredIndices()
+	if m.selectedIndex >= 0 && m.selectedIndex < len(indices) {
+		return &indices[m.selectedIndex]
+	}
+	return nil
+}
+
 func (m OverviewModel) HasModal() bool {
 	return m.modal != nil || m.allocationExplain != nil || m.shardPicker != nil || m.shardInfo != nil
 }
@@ -832,9 +895,13 @@ func (m OverviewModel) renderGrid() string {
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
 		if i >= m.scrollX && i < m.scrollX+visibleCols {
+			color := HealthColor(idx.Health)
+			if idx.Status == "close" {
+				color = ColorGray
+			}
 			nameStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
-				Foreground(HealthColor(idx.Health)).
+				Foreground(color).
 				Bold(true)
 			if i == m.selectedIndex {
 				nameStyle = nameStyle.Reverse(true)
@@ -955,7 +1022,8 @@ func (m OverviewModel) renderGrid() string {
 			if i >= m.scrollX && i < m.scrollX+visibleCols {
 				shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
 				isSelectedCell := isSelectedNode && i == m.selectedIndex
-				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell)
+				isClosed := idx.Status == "close"
+				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell, isClosed)
 				shardLines = append(shardLines, lines)
 				if len(lines) > maxLines {
 					maxLines = len(lines)
@@ -1024,7 +1092,8 @@ func (m OverviewModel) renderGrid() string {
 			if i >= m.scrollX && i < m.scrollX+visibleCols {
 				shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
 				isSelectedCell := isSelectedUnassigned && i == m.selectedIndex
-				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell)
+				isClosed := idx.Status == "close"
+				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell, isClosed)
 				shardLines = append(shardLines, lines)
 				if len(lines) > maxLines {
 					maxLines = len(lines)
@@ -1113,7 +1182,7 @@ func (m OverviewModel) renderShardLegend() string {
 		redBadge + grayStyle.Render(" Unassigned")
 }
 
-func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool) []string {
+func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool, closed bool) []string {
 	highlightBg := lipgloss.Color("#3a3a5a")
 
 	if len(shards) == 0 {
@@ -1129,21 +1198,26 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 
 	for _, sh := range shards {
 		var bgColor, fgColor lipgloss.Color
-		if sh.Primary {
-			bgColor = ColorGreen
+		if closed {
+			bgColor = ColorGray
+			fgColor = lipgloss.Color("#666666")
 		} else {
-			bgColor = ColorBlue
-		}
-		fgColor = ColorOnAccent
+			if sh.Primary {
+				bgColor = ColorGreen
+			} else {
+				bgColor = ColorBlue
+			}
+			fgColor = ColorOnAccent
 
-		switch sh.State {
-		case "RELOCATING":
-			bgColor = ColorPurple
-		case "INITIALIZING":
-			bgColor = ColorYellow
-			fgColor = lipgloss.Color("#000000")
-		case "UNASSIGNED":
-			bgColor = ColorRed
+			switch sh.State {
+			case "RELOCATING":
+				bgColor = ColorPurple
+			case "INITIALIZING":
+				bgColor = ColorYellow
+				fgColor = lipgloss.Color("#000000")
+			case "UNASSIGNED":
+				bgColor = ColorRed
+			}
 		}
 
 		style := lipgloss.NewStyle().

@@ -30,6 +30,7 @@ var helpOverview = `## Overview
 | . | Toggle system indices |
 | c | Create index |
 | d | Delete index |
+| o/x | Open/close index |
 | a/A | Add/remove alias |
 `
 

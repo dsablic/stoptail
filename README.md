@@ -13,6 +13,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Yellow: Initializing shards
   - Red: Unassigned shards
   - Select any cell to view shard info (with allocation explain for problem shards)
+  - Index management: create, delete, open, close indices
 - **Workbench Tab**: Full request editor like Kibana Dev Tools
   - Support for GET, POST, PUT, DELETE, HEAD methods
   - JSON syntax highlighting in responses
@@ -192,6 +193,8 @@ stoptail stores data in `~/.stoptail/`:
 | `Enter` | Show shard info (picker if multiple shards) |
 | `c` | Create new index |
 | `d` | Delete selected index |
+| `o` | Open closed index |
+| `x` | Close selected index |
 | `a` | Add alias to selected index |
 | `A` | Remove alias from selected index |
 

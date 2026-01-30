@@ -14,6 +14,7 @@ import (
 type IndexInfo struct {
 	Name          string `json:"index"`
 	Health        string `json:"health"`
+	Status        string `json:"status"`
 	DocsCount     string `json:"docs.count"`
 	StoreSize     string `json:"store.size"`
 	PriStoreSize  string `json:"pri.store.size"`
@@ -647,7 +648,7 @@ func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
 		c.es.Cat.Indices.WithContext(ctx),
 		c.es.Cat.Indices.WithFormat("json"),
 		c.es.Cat.Indices.WithExpandWildcards("all"),
-		c.es.Cat.Indices.WithH("index", "health", "docs.count", "store.size", "pri.store.size", "pri", "rep"),
+		c.es.Cat.Indices.WithH("index", "health", "status", "docs.count", "store.size", "pri.store.size", "pri", "rep"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching indices: %w", err)
@@ -1080,6 +1081,40 @@ func (c *Client) DeleteIndex(ctx context.Context, name string) error {
 	)
 	if err != nil {
 		return fmt.Errorf("deleting index: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
+func (c *Client) OpenIndex(ctx context.Context, name string) error {
+	res, err := c.es.Indices.Open(
+		[]string{name},
+		c.es.Indices.Open.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("opening index: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
+}
+
+func (c *Client) CloseIndex(ctx context.Context, name string) error {
+	res, err := c.es.Indices.Close(
+		[]string{name},
+		c.es.Indices.Close.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("closing index: %w", err)
 	}
 	defer res.Body.Close()
 

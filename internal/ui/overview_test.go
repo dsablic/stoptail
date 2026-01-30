@@ -18,7 +18,7 @@ func TestRenderShardBoxes_ThreeDigitShards(t *testing.T) {
 	}
 
 	width := 25
-	lines := m.renderShardBoxesWithHighlight(shards, width, false)
+	lines := m.renderShardBoxesWithHighlight(shards, width, false, false)
 
 	for i, line := range lines {
 		visibleWidth := len([]rune(stripANSI(line)))
@@ -30,7 +30,7 @@ func TestRenderShardBoxes_ThreeDigitShards(t *testing.T) {
 
 func TestRenderShardBoxes_EmptyShards(t *testing.T) {
 	m := OverviewModel{}
-	lines := m.renderShardBoxesWithHighlight([]es.ShardInfo{}, 25, false)
+	lines := m.renderShardBoxesWithHighlight([]es.ShardInfo{}, 25, false, false)
 
 	if len(lines) != 1 {
 		t.Errorf("Expected 1 line for empty shards, got %d", len(lines))
