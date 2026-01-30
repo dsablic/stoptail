@@ -23,6 +23,8 @@ const (
 	ViewThreadPools
 	ViewHotThreads
 	ViewTemplates
+	ViewDeprecations
+	ViewShardHealth
 )
 
 type NodesModel struct {
@@ -31,6 +33,8 @@ type NodesModel struct {
 	threadPools      []es.ThreadPoolInfo
 	hotThreads       string
 	templates        []es.IndexTemplate
+	deprecations     *es.DeprecationInfo
+	shardHealth      []es.ShardHealth
 	activeView       NodesView
 	scrollY          int
 	selectedSetting  int
@@ -128,6 +132,14 @@ func (m NodesModel) getRowCounts() (filtered, total int) {
 			total = len(m.templates)
 			filtered = len(m.getFilteredTemplates())
 		}
+	case ViewDeprecations:
+		if m.deprecations != nil {
+			total = len(m.deprecations.Deprecations)
+			filtered = len(m.getFilteredDeprecations())
+		}
+	case ViewShardHealth:
+		total = len(m.shardHealth)
+		filtered = len(m.getFilteredShardHealth())
 	}
 	return filtered, total
 }
@@ -162,6 +174,7 @@ func (m NodesModel) countHotThreads() (total, filtered int) {
 	return total, filtered
 }
 
+
 func (m *NodesModel) SetState(state *es.NodesState) {
 	m.state = state
 	m.loading = state == nil
@@ -182,6 +195,24 @@ func (m *NodesModel) SetHotThreads(threads string) {
 
 func (m *NodesModel) SetTemplates(templates []es.IndexTemplate) {
 	m.templates = templates
+}
+
+func (m *NodesModel) SetDeprecations(deprecations *es.DeprecationInfo) {
+	m.deprecations = deprecations
+}
+
+func (m *NodesModel) SetShardHealth(indices []es.IndexInfo) {
+	var health []es.ShardHealth
+	for _, idx := range indices {
+		health = append(health, es.AnalyzeShardHealth(idx))
+	}
+	sort.Slice(health, func(i, j int) bool {
+		if health[i].Status != health[j].Status {
+			return health[i].Status > health[j].Status
+		}
+		return health[i].IndexName < health[j].IndexName
+	})
+	m.shardHealth = health
 }
 
 func (m *NodesModel) SetSize(width, height int) {
@@ -205,6 +236,10 @@ func (m *NodesModel) SetView(view string) {
 		m.activeView = ViewHotThreads
 	case "templates":
 		m.activeView = ViewTemplates
+	case "deprecations":
+		m.activeView = ViewDeprecations
+	case "shardhealth":
+		m.activeView = ViewShardHealth
 	}
 }
 
@@ -288,6 +323,10 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			m.selectView(ViewHotThreads)
 		case "7":
 			m.selectView(ViewTemplates)
+		case "8":
+			m.selectView(ViewDeprecations)
+		case "9":
+			m.selectView(ViewShardHealth)
 		case "enter":
 			if m.activeView == ViewClusterSettings {
 				filtered := m.getFilteredSettings()
@@ -386,6 +425,12 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 					{"[1:Memory]", ViewMemory},
 					{"[2:Disk]", ViewDisk},
 					{"[3:Fielddata]", ViewFielddata},
+					{"[4:Settings]", ViewClusterSettings},
+					{"[5:Threads]", ViewThreadPools},
+					{"[6:Hot]", ViewHotThreads},
+					{"[7:Templates]", ViewTemplates},
+					{"[8:Deprecations]", ViewDeprecations},
+					{"[9:Shards]", ViewShardHealth},
 				}
 
 				pos := 0
@@ -455,6 +500,10 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderHotThreads())
 	case ViewTemplates:
 		b.WriteString(m.renderTemplates())
+	case ViewDeprecations:
+		b.WriteString(m.renderDeprecations())
+	case ViewShardHealth:
+		b.WriteString(m.renderShardHealth())
 	}
 
 	b.WriteString("\n")
@@ -489,6 +538,8 @@ func (m NodesModel) renderTabs() string {
 		{"5", "Threads", ViewThreadPools},
 		{"6", "Hot", ViewHotThreads},
 		{"7", "Templates", ViewTemplates},
+		{"8", "Deprecations", ViewDeprecations},
+		{"9", "Shards", ViewShardHealth},
 	}
 
 	var parts []string
@@ -519,6 +570,7 @@ func (m NodesModel) renderMemoryTable() string {
 		return "No nodes found"
 	}
 
+	headers := []string{"node", "version", "heap%", "heap", "fielddata", "query_cache", "segments"}
 	var rows [][]string
 	var pctValues []string
 	visibleNodes := m.visibleItems(len(filtered))
@@ -537,9 +589,12 @@ func (m NodesModel) renderMemoryTable() string {
 		})
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	t := table.New().
-		Headers("node", "version", "heap%", "heap", "fielddata", "query_cache", "segments").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
@@ -576,6 +631,7 @@ func (m NodesModel) renderDiskTable() string {
 		return "No nodes found"
 	}
 
+	headers := []string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards"}
 	var rows [][]string
 	var pctValues []string
 	visibleNodes := m.visibleItems(len(filtered))
@@ -594,9 +650,12 @@ func (m NodesModel) renderDiskTable() string {
 		})
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	t := table.New().
-		Headers("node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
@@ -659,7 +718,7 @@ func (m NodesModel) getTotalHeap() int64 {
 		if heapMax == "" {
 			continue
 		}
-		heapBytes, err := parseSize(heapMax)
+		heapBytes, err := ParseSize(heapMax)
 		if err == nil {
 			totalHeap += heapBytes
 		}
@@ -699,6 +758,7 @@ func (m NodesModel) renderFielddataTable() string {
 		totalPercentage = float64(totalFielddata) / float64(totalHeap) * 100
 	}
 
+	headers := []string{"index", "field", "size", "heap%"}
 	var rows [][]string
 	var pctValues []string
 	visibleItems := m.visibleItems(len(filtered))
@@ -724,9 +784,12 @@ func (m NodesModel) renderFielddataTable() string {
 		})
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	t := table.New().
-		Headers("index", "field", "size", "heap%").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
 		StyleFunc(func(row, col int) lipgloss.Style {
@@ -809,6 +872,13 @@ func (m NodesModel) getItemCount() int {
 		return total
 	case ViewTemplates:
 		return len(m.templates)
+	case ViewDeprecations:
+		if m.deprecations == nil {
+			return 0
+		}
+		return len(m.getFilteredDeprecations())
+	case ViewShardHealth:
+		return len(m.getFilteredShardHealth())
 	}
 	return 0
 }
@@ -854,49 +924,6 @@ func formatBytes(bytes int64) string {
 	}
 }
 
-func parseSize(s string) (int64, error) {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-		tb = gb * 1024
-	)
-
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return 0, fmt.Errorf("empty size string")
-	}
-
-	var multiplier int64 = 1
-	var numStr string
-
-	if strings.HasSuffix(s, "tb") {
-		multiplier = tb
-		numStr = strings.TrimSuffix(s, "tb")
-	} else if strings.HasSuffix(s, "gb") {
-		multiplier = gb
-		numStr = strings.TrimSuffix(s, "gb")
-	} else if strings.HasSuffix(s, "mb") {
-		multiplier = mb
-		numStr = strings.TrimSuffix(s, "mb")
-	} else if strings.HasSuffix(s, "kb") {
-		multiplier = kb
-		numStr = strings.TrimSuffix(s, "kb")
-	} else if strings.HasSuffix(s, "b") {
-		multiplier = 1
-		numStr = strings.TrimSuffix(s, "b")
-	} else {
-		numStr = s
-	}
-
-	numStr = strings.TrimSpace(numStr)
-	value, err := strconv.ParseFloat(numStr, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid size format: %s", s)
-	}
-
-	return int64(value * float64(multiplier)), nil
-}
 
 type clusterSetting struct {
 	Key    string
@@ -947,32 +974,25 @@ func (m NodesModel) renderClusterSettingsTable() string {
 		return "No cluster settings"
 	}
 
-	keyWidth := 45
-	valueWidth := 40
-
 	vr := m.visibleItems(len(filtered))
 
+	headers := []string{"Setting", "Value", "Source"}
 	var rows [][]string
 	var rowIndices []int
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		s := filtered[i]
-		key := s.Key
-		if len(key) > keyWidth {
-			key = key[:keyWidth-1] + "~"
-		}
-		value := s.Value
-		if len(value) > valueWidth {
-			value = value[:valueWidth-1] + "~"
-		}
-		rows = append(rows, []string{key, value, s.Source})
+		rows = append(rows, []string{s.Key, s.Value, s.Source})
 		rowIndices = append(rowIndices, i)
 	}
+
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
 
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Setting", "Value", "Source").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
@@ -981,8 +1001,8 @@ func (m NodesModel) renderClusterSettingsTable() string {
 			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedSetting {
 				return style.Background(ColorBlue).Foreground(ColorOnAccent)
 			}
-			if col == 2 && row >= 0 && row < len(rows) {
-				switch rows[row][2] {
+			if col == 2 && row >= 0 && row < len(fittedRows) {
+				switch fittedRows[row][2] {
 				case "transient":
 					return style.Foreground(ColorYellow)
 				case "persistent":
@@ -1057,34 +1077,38 @@ func (m NodesModel) renderThreadPoolsTable() string {
 
 	vr := m.visibleItems(len(filtered))
 
+	headers := []string{"Node", "Pool", "Active", "Queue", "Rejected", "Completed", "Size", "Type"}
 	var rows [][]string
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		p := filtered[i]
 		rows = append(rows, []string{p.NodeName, p.Name, p.Active, p.Queue, p.Rejected, p.Completed, p.PoolSize, p.PoolType})
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Node", "Pool", "Active", "Queue", "Rejected", "Completed", "Size", "Type").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
-			if row >= 0 && row < len(rows) {
+			if row >= 0 && row < len(fittedRows) {
 				switch col {
 				case 2:
-					if rows[row][2] != "0" {
+					if fittedRows[row][2] != "0" {
 						return style.Foreground(ColorGreen)
 					}
 				case 3:
-					if rows[row][3] != "0" {
+					if fittedRows[row][3] != "0" {
 						return style.Foreground(ColorYellow)
 					}
 				case 4:
-					if rows[row][4] != "0" {
+					if fittedRows[row][4] != "0" {
 						return style.Foreground(ColorRed)
 					}
 				}
@@ -1223,27 +1247,31 @@ func (m NodesModel) renderHotThreads() string {
 
 	vr := m.visibleItems(len(filtered))
 
+	headers := []string{"Node", "Type", "Total", "CPU", "Other"}
 	var rows [][]string
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		t := filtered[i]
 		rows = append(rows, []string{t.node, t.threadType, t.total, t.cpu, t.other})
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Node", "Type", "Total", "CPU", "Other").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
-			if col == 1 && row >= 0 && row < len(rows) {
-				return style.Foreground(threadTypeColor(rows[row][1]))
+			if col == 1 && row >= 0 && row < len(fittedRows) {
+				return style.Foreground(threadTypeColor(fittedRows[row][1]))
 			}
-			if col == 2 && row >= 0 && row < len(rows) {
-				pctStr := strings.TrimSuffix(rows[row][2], "%")
+			if col == 2 && row >= 0 && row < len(fittedRows) {
+				pctStr := strings.TrimSuffix(fittedRows[row][2], "%")
 				return style.Inherit(m.percentStyle(pctStr))
 			}
 			return style.Foreground(ColorWhite)
@@ -1269,19 +1297,20 @@ func (m NodesModel) renderTemplates() string {
 
 	vr := m.visibleItems(len(filtered))
 
+	headers := []string{"Name", "Patterns", "Pri", "S/R", "Composed Of", "DS"}
 	var rows [][]string
 	var rowIndices []int
 	for i := vr.start; i < vr.end && i < len(filtered); i++ {
 		t := filtered[i]
-		patterns := Truncate(strings.Join(t.IndexPatterns, ", "), 25)
-		composed := Truncate(strings.Join(t.ComposedOf, ", "), 20)
+		patterns := strings.Join(t.IndexPatterns, ", ")
+		composed := strings.Join(t.ComposedOf, ", ")
 		dataStream := ""
 		if t.DataStream {
 			dataStream = "Y"
 		}
 		shards := t.NumberOfShards + "/" + t.NumberOfReplicas
 		rows = append(rows, []string{
-			Truncate(t.Name, 20),
+			t.Name,
 			patterns,
 			fmt.Sprintf("%d", t.Priority),
 			shards,
@@ -1291,11 +1320,14 @@ func (m NodesModel) renderTemplates() string {
 		rowIndices = append(rowIndices, i)
 	}
 
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
 	tbl := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers("Name", "Patterns", "Pri", "S/R", "Composed Of", "DS").
-		Rows(rows...).
+		Headers(headers...).
+		Rows(fittedRows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			style := lipgloss.NewStyle().Padding(0, 1)
 			if row == table.HeaderRow {
@@ -1304,10 +1336,10 @@ func (m NodesModel) renderTemplates() string {
 			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedTemplate {
 				return style.Background(ColorBlue).Foreground(ColorOnAccent)
 			}
-			if col == 2 && row >= 0 && row < len(rows) {
+			if col == 2 && row >= 0 && row < len(fittedRows) {
 				return style.Align(lipgloss.Right)
 			}
-			if col == 5 && row >= 0 && row < len(rows) && rows[row][5] == "Y" {
+			if col == 5 && row >= 0 && row < len(fittedRows) && fittedRows[row][5] == "Y" {
 				return style.Foreground(ColorBlue)
 			}
 			return style.Foreground(ColorWhite)
@@ -1373,4 +1405,169 @@ func (m NodesModel) renderTemplateDetailModal() string {
 
 	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+}
+
+func (m NodesModel) renderDeprecations() string {
+	if m.deprecations == nil {
+		return "Loading deprecations..."
+	}
+
+	if len(m.deprecations.Deprecations) == 0 {
+		return lipgloss.NewStyle().Foreground(ColorGreen).Render("No deprecations found")
+	}
+
+	filtered := m.getFilteredDeprecations()
+	visible := m.visibleItems(len(filtered))
+
+	headers := []string{"level", "category", "resource", "message"}
+	var rows [][]string
+	for i := visible.start; i < visible.end; i++ {
+		dep := filtered[i]
+		resource := dep.Resource
+		if resource == "" {
+			resource = "-"
+		}
+		rows = append(rows, []string{dep.Level, dep.Category, resource, dep.Message})
+	}
+
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers(headers...).
+		Rows(fittedRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+			}
+			if row >= 0 && row < len(filtered) {
+				if col == 0 {
+					switch filtered[row].Level {
+					case "critical":
+						return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+					case "warning":
+						return lipgloss.NewStyle().Foreground(ColorYellow)
+					}
+				}
+			}
+			return lipgloss.NewStyle()
+		})
+
+	return t.Render()
+}
+
+func (m NodesModel) getFilteredDeprecations() []es.Deprecation {
+	if m.deprecations == nil {
+		return nil
+	}
+	if m.filter.Value() == "" {
+		return m.deprecations.Deprecations
+	}
+	filterVal := strings.ToLower(m.filter.Value())
+	var filtered []es.Deprecation
+	for _, dep := range m.deprecations.Deprecations {
+		if strings.Contains(strings.ToLower(dep.Message), filterVal) ||
+			strings.Contains(strings.ToLower(dep.Category), filterVal) ||
+			strings.Contains(strings.ToLower(dep.Resource), filterVal) {
+			filtered = append(filtered, dep)
+		}
+	}
+	return filtered
+}
+
+func (m NodesModel) getFilteredShardHealth() []es.ShardHealth {
+	if m.filter.Value() == "" {
+		return m.shardHealth
+	}
+	filterVal := strings.ToLower(m.filter.Value())
+	var filtered []es.ShardHealth
+	for _, h := range m.shardHealth {
+		if strings.Contains(strings.ToLower(h.IndexName), filterVal) ||
+			strings.Contains(strings.ToLower(h.StatusText), filterVal) {
+			filtered = append(filtered, h)
+		}
+	}
+	return filtered
+}
+
+func (m NodesModel) renderShardHealth() string {
+	if len(m.shardHealth) == 0 {
+		return "No indices found"
+	}
+
+	filtered := m.getFilteredShardHealth()
+	visible := m.visibleItems(len(filtered))
+
+	headers := []string{"index", "shards", "size", "avg shard", "docs/shard", "status"}
+	var rows [][]string
+	for i := visible.start; i < visible.end; i++ {
+		h := filtered[i]
+		avgShard := "-"
+		if h.AvgShardSize > 0 {
+			avgShard = formatShardSize(h.AvgShardSize)
+		}
+		docsPerShard := "-"
+		if h.AvgDocsPerShard > 0 {
+			docsPerShard = FormatNumber(fmt.Sprintf("%d", h.AvgDocsPerShard))
+		}
+		rows = append(rows, []string{
+			h.IndexName,
+			fmt.Sprintf("%d", h.ShardCount),
+			formatShardSize(h.TotalSize),
+			avgShard,
+			docsPerShard,
+			h.StatusText,
+		})
+	}
+
+	widths := AutoColumnWidths(headers, rows, m.width)
+	fittedRows := FitColumns(rows, widths)
+
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
+		Headers(headers...).
+		Rows(fittedRows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+			}
+			if col == 5 && row >= 0 && row < len(filtered) {
+				switch filtered[row].Status {
+				case es.ShardHealthCritical:
+					return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+				case es.ShardHealthWarning:
+					return lipgloss.NewStyle().Foreground(ColorYellow)
+				case es.ShardHealthOK:
+					return lipgloss.NewStyle().Foreground(ColorGreen)
+				}
+			}
+			return lipgloss.NewStyle()
+		})
+
+	return t.Render()
+}
+
+func formatShardSize(b int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+		tb = gb * 1024
+	)
+
+	switch {
+	case b >= tb:
+		return fmt.Sprintf("%.1ftb", float64(b)/float64(tb))
+	case b >= gb:
+		return fmt.Sprintf("%.1fgb", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1fmb", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1fkb", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%db", b)
+	}
 }

@@ -56,7 +56,7 @@ Examples:
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
-	rootCmd.Flags().StringVar(&viewFlag, "view", "", "View for --render cluster (memory, disk, fielddata, settings, threadpools)")
+	rootCmd.Flags().StringVar(&viewFlag, "view", "", "View for --render cluster (memory, disk, fielddata, settings, threadpools, hotthreads, templates, deprecations)")
 
 	rootCmd.SetVersionTemplate("{{.Version}}\n")
 
@@ -403,6 +403,13 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 			cluster.SetView(view)
 		}
 		cluster.SetState(state)
+		if view == "deprecations" {
+			deprecations, err := client.FetchDeprecations(ctx)
+			if err != nil {
+				return fmt.Errorf("fetching deprecations: %w", err)
+			}
+			cluster.SetDeprecations(deprecations)
+		}
 		fmt.Println(cluster.View())
 
 	case "workbench":

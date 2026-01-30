@@ -46,6 +46,7 @@ type clusterSettingsMsg struct{ settings *es.ClusterSettings }
 type threadPoolsMsg struct{ pools []es.ThreadPoolInfo }
 type hotThreadsMsg struct{ threads string }
 type templatesMsg struct{ templates []es.IndexTemplate }
+type deprecationsMsg struct{ deprecations *es.DeprecationInfo }
 type tasksMsg struct{ tasks []es.TaskInfo }
 type pendingTasksMsg struct{ tasks []es.PendingTask }
 type taskCancelledMsg struct{ err error }
@@ -196,8 +197,19 @@ func (m Model) fetchTemplates() tea.Cmd {
 	}
 }
 
+func (m Model) fetchDeprecations() tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		deprecations, err := m.client.FetchDeprecations(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return deprecationsMsg{deprecations}
+	}
+}
+
 func (m Model) fetchClusterTab() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads(), m.fetchTemplates())
+	return tea.Batch(m.spinner.Tick, m.fetchNodes(), m.fetchClusterSettings(), m.fetchThreadPools(), m.fetchHotThreads(), m.fetchTemplates(), m.fetchDeprecations())
 }
 
 func (m Model) fetchTasksTab() tea.Cmd {
@@ -269,6 +281,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading = false
 		m.cluster = msg.state
 		m.overview.SetCluster(msg.state)
+		m.nodes.SetShardHealth(msg.state.Indices)
 		m.err = nil
 	case nodesStateMsg:
 		m.loading = false
@@ -281,6 +294,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodes.SetHotThreads(msg.threads)
 	case templatesMsg:
 		m.nodes.SetTemplates(msg.templates)
+	case deprecationsMsg:
+		m.nodes.SetDeprecations(msg.deprecations)
 	case tasksMsg:
 		m.loading = false
 		m.tasks.SetTasks(msg.tasks)

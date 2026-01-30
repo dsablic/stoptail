@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -140,4 +141,140 @@ func FormatNumber(s string) string {
 	}
 
 	return result.String()
+}
+
+func AutoColumnWidths(headers []string, rows [][]string, maxTotal int) []int {
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = lipgloss.Width(h)
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			if i < len(widths) {
+				cellLen := lipgloss.Width(cell)
+				if cellLen > widths[i] {
+					widths[i] = cellLen
+				}
+			}
+		}
+	}
+
+	borderOverhead := len(headers) + 1 + len(headers)*2
+	available := maxTotal - borderOverhead
+	if available < len(headers)*3 {
+		available = len(headers) * 3
+	}
+
+	total := 0
+	for _, w := range widths {
+		total += w
+	}
+
+	if total > available {
+		excess := total - available
+		for excess > 0 {
+			maxIdx := -1
+			maxWidth := 0
+			for i, w := range widths {
+				if w > maxWidth {
+					maxWidth = w
+					maxIdx = i
+				}
+			}
+			if maxIdx < 0 || widths[maxIdx] <= 3 {
+				break
+			}
+			widths[maxIdx]--
+			excess--
+		}
+	}
+
+	return widths
+}
+
+func FitColumns(rows [][]string, widths []int) [][]string {
+	result := make([][]string, len(rows))
+	for i, row := range rows {
+		newRow := make([]string, len(row))
+		for j, cell := range row {
+			if j < len(widths) && widths[j] > 0 {
+				cellWidth := lipgloss.Width(cell)
+				if cellWidth > widths[j] {
+					newRow[j] = lipgloss.NewStyle().MaxWidth(widths[j]).Render(cell)
+				} else {
+					newRow[j] = cell
+				}
+			} else {
+				newRow[j] = cell
+			}
+		}
+		result[i] = newRow
+	}
+	return result
+}
+
+func ParseSize(s string) (int64, error) {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+		tb = gb * 1024
+	)
+
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return 0, fmt.Errorf("empty size string")
+	}
+
+	var multiplier int64 = 1
+	var numStr string
+
+	if strings.HasSuffix(s, "tb") {
+		multiplier = tb
+		numStr = strings.TrimSuffix(s, "tb")
+	} else if strings.HasSuffix(s, "gb") {
+		multiplier = gb
+		numStr = strings.TrimSuffix(s, "gb")
+	} else if strings.HasSuffix(s, "mb") {
+		multiplier = mb
+		numStr = strings.TrimSuffix(s, "mb")
+	} else if strings.HasSuffix(s, "kb") {
+		multiplier = kb
+		numStr = strings.TrimSuffix(s, "kb")
+	} else if strings.HasSuffix(s, "b") {
+		multiplier = 1
+		numStr = strings.TrimSuffix(s, "b")
+	} else {
+		numStr = s
+	}
+
+	numStr = strings.TrimSpace(numStr)
+	value, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size format: %s", s)
+	}
+
+	return int64(value * float64(multiplier)), nil
+}
+
+func FormatBytes(b int64) string {
+	const (
+		kb = 1024
+		mb = kb * 1024
+		gb = mb * 1024
+		tb = gb * 1024
+	)
+
+	switch {
+	case b >= tb:
+		return fmt.Sprintf("%.1ftb", float64(b)/float64(tb))
+	case b >= gb:
+		return fmt.Sprintf("%.1fgb", float64(b)/float64(gb))
+	case b >= mb:
+		return fmt.Sprintf("%.1fmb", float64(b)/float64(mb))
+	case b >= kb:
+		return fmt.Sprintf("%.1fkb", float64(b)/float64(kb))
+	default:
+		return fmt.Sprintf("%db", b)
+	}
 }

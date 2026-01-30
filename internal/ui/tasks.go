@@ -239,16 +239,20 @@ func (m TasksModel) View() string {
 		rowStates = append(rowStates, state)
 
 		rows = append(rows, []string{
-			Truncate(m.truncateAction(task.Action), 25),
-			Truncate(task.Node, 20),
-			Truncate(task.Description, 30),
+			m.truncateAction(task.Action),
+			task.Node,
+			task.Description,
 			task.RunningTime,
 			cancelText,
 		})
 	}
 
+	headers := []string{"action", "node", "description", "running", "cancel"}
+	widths := AutoColumnWidths(headers, rows, m.width)
+	rows = FitColumns(rows, widths)
+
 	t := table.New().
-		Headers("action", "node", "description", "running", "cancel").
+		Headers(headers...).
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
@@ -352,14 +356,18 @@ func (m TasksModel) renderPendingTasks() string {
 		}
 		rows = append(rows, []string{
 			task.Priority,
-			Truncate(task.Source, 60),
+			task.Source,
 			task.TimeInQueue,
 			executing,
 		})
 	}
 
+	headers := []string{"priority", "source", "queued", "exec"}
+	widths := AutoColumnWidths(headers, rows, m.width)
+	rows = FitColumns(rows, widths)
+
 	t := table.New().
-		Headers("priority", "source", "queued", "exec").
+		Headers(headers...).
 		Rows(rows...).
 		Border(lipgloss.RoundedBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(ColorYellow)).
