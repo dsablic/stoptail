@@ -517,6 +517,26 @@ func TestParseIndexSettingsWithArrays(t *testing.T) {
 	}
 }
 
+func TestDecodeESVersion(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"8110099", "8.x"},
+		{"7170099", "7.x"},
+		{"9039003", "9.x"},
+		{"invalid", "invalid"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		got := DecodeESVersion(tt.input)
+		if got != tt.expected {
+			t.Errorf("DecodeESVersion(%q) = %q, want %q", tt.input, got, tt.expected)
+		}
+	}
+}
+
 func TestParseMappingResponse(t *testing.T) {
 	raw := `{
 		"products": {
@@ -556,6 +576,94 @@ func TestParseMappingResponse(t *testing.T) {
 		if !fieldMap[e] {
 			t.Errorf("missing field %q", e)
 		}
+	}
+}
+
+func TestAnalyzeShardHealth(t *testing.T) {
+	tests := []struct {
+		name       string
+		idx        IndexInfo
+		wantStatus ShardHealthStatus
+		wantText   string
+	}{
+		{
+			name: "healthy index",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "3",
+				PriStoreSize: "45gb",
+				DocsCount:    "15000000",
+			},
+			wantStatus: ShardHealthOK,
+			wantText:   "ok",
+		},
+		{
+			name: "oversized shards",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "2",
+				PriStoreSize: "140gb",
+				DocsCount:    "50000000",
+			},
+			wantStatus: ShardHealthCritical,
+			wantText:   "oversized",
+		},
+		{
+			name: "undersized shards",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "10",
+				PriStoreSize: "1gb",
+				DocsCount:    "5000000",
+			},
+			wantStatus: ShardHealthCritical,
+			wantText:   "undersized",
+		},
+		{
+			name: "sparse shards",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "10",
+				PriStoreSize: "50gb",
+				DocsCount:    "500000",
+			},
+			wantStatus: ShardHealthWarning,
+			wantText:   "sparse",
+		},
+		{
+			name: "small index ok",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "1",
+				PriStoreSize: "100mb",
+				DocsCount:    "1000",
+			},
+			wantStatus: ShardHealthOK,
+			wantText:   "ok",
+		},
+		{
+			name: "multiple issues undersized and sparse",
+			idx: IndexInfo{
+				Name:         "test",
+				Pri:          "10",
+				PriStoreSize: "1gb",
+				DocsCount:    "500000",
+			},
+			wantStatus: ShardHealthCritical,
+			wantText:   "undersized, sparse",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			health := AnalyzeShardHealth(tt.idx)
+			if health.Status != tt.wantStatus {
+				t.Errorf("Status = %v, want %v", health.Status, tt.wantStatus)
+			}
+			if health.StatusText != tt.wantText {
+				t.Errorf("StatusText = %q, want %q", health.StatusText, tt.wantText)
+			}
+		})
 	}
 }
 

@@ -52,6 +52,9 @@ go build .
 ./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view hotthreads --width 120 --height 40 [cluster]
+./stoptail --render cluster --view templates --width 120 --height 40 [cluster]
+./stoptail --render cluster --view deprecations --width 120 --height 40 [cluster]
+./stoptail --render cluster --view shardhealth --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 
@@ -216,10 +219,13 @@ Common utility functions are in `internal/ui/utils.go` to avoid duplication:
 - `TrimANSI(s string) string` - Trim trailing spaces and ANSI reset codes for side-by-side panes
 - `HealthColor(health string) lipgloss.Color` - Map ES health status to colors
 - `OverlayModal(background, modal string, width, height int) string` - Overlay a centered modal on dimmed background
+- `AutoColumnWidths(headers []string, rows [][]string, maxTotal int) []int` - Calculate optimal column widths for tables (ANSI-aware)
+- `FitColumns(rows [][]string, widths []int) [][]string` - Truncate table cells to fit widths (ANSI-safe)
 
 **ES utilities** (`internal/es/cluster.go`):
 - `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first
 - `sortShardsByShardPrimary(shards []ShardInfo)` - Sort shards by shard number, primary first (for single-index queries)
+- `AnalyzeShardHealth(idx IndexInfo) ShardHealth` - Analyze index for shard sizing issues (undersized, oversized, sparse)
 
 **Storage utilities** (`internal/storage/history.go`):
 - `StoptailDir() (string, error)` - Get the stoptail config directory (`~/.stoptail`)
@@ -325,6 +331,18 @@ Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding
 
 Tables in Cluster tab use filter because users want to narrow down to specific nodes/settings. Workbench response uses search because users want to find text within the JSON while seeing surrounding context.
 
+**Table column sizing** - All tables should use automatic column sizing:
+
+```go
+headers := []string{"name", "value", "status"}
+widths := AutoColumnWidths(headers, rows, m.width)
+rows = FitColumns(rows, widths)
+
+t := table.New().Headers(headers...).Rows(rows...)
+```
+
+This ensures columns fit their content up to terminal width, and handles ANSI escape codes correctly (e.g., progress bars with colors).
+
 **Creating modals with huh** - When creating modals using `huh.NewForm()`, always use pointer receivers to avoid value copy issues:
 
 ```go
@@ -416,6 +434,31 @@ if mouseMsg, ok := msg.(tea.MouseMsg); ok {
 subModel.Update(delegateMsg)
 ```
 
+**Keep tab click handlers in sync** - When adding new views to tabs (e.g., Cluster tab), update BOTH the `renderTabs()` function AND the mouse click handler in `Update()`. The tabs list must be identical in both places:
+
+```go
+// In renderTabs() - defines what's rendered
+tabs := []struct {
+    key   string
+    label string
+    view  NodesView
+}{
+    {"1", "Memory", ViewMemory},
+    {"2", "Disk", ViewDisk},
+    // ... all views
+}
+
+// In Update() tea.MouseMsg handler - must match renderTabs()
+tabs := []struct {
+    label string
+    view  NodesView
+}{
+    {"[1:Memory]", ViewMemory},
+    {"[2:Disk]", ViewDisk},
+    // ... all views (same order, same count)
+}
+```
+
 ### Verify UI Changes
 
 Always verify UI changes using the render flag before committing:
@@ -430,6 +473,9 @@ Always verify UI changes using the render flag before committing:
 ./stoptail --render cluster --view settings --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view threadpools --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view hotthreads --width 120 --height 40 [cluster]
+./stoptail --render cluster --view templates --width 120 --height 40 [cluster]
+./stoptail --render cluster --view deprecations --width 120 --height 40 [cluster]
+./stoptail --render cluster --view shardhealth --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
 ```
 

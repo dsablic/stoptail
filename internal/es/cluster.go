@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ type IndexInfo struct {
 	PriStoreSize  string `json:"pri.store.size"`
 	Pri           string `json:"pri"`
 	Rep           string `json:"rep"`
+	Version       string `json:"-"`
 }
 
 type NodeInfo struct {
@@ -164,14 +166,163 @@ type PendingTask struct {
 }
 
 type IndexTemplate struct {
-	Name           string
-	IndexPatterns  []string
-	Priority       int
-	Version        int
-	ComposedOf     []string
-	NumberOfShards string
+	Name             string
+	IndexPatterns    []string
+	Priority         int
+	Version          int
+	ComposedOf       []string
+	NumberOfShards   string
 	NumberOfReplicas string
-	DataStream     bool
+	DataStream       bool
+}
+
+type ShardHealthStatus int
+
+const (
+	ShardHealthOK ShardHealthStatus = iota
+	ShardHealthWarning
+	ShardHealthCritical
+)
+
+type ShardHealth struct {
+	IndexName       string
+	Status          ShardHealthStatus
+	StatusText      string
+	ShardCount      int
+	TotalSize       int64
+	AvgShardSize    int64
+	DocsCount       int64
+	AvgDocsPerShard int64
+	Issues          []string
+}
+
+const (
+	shardSizeKB = 1024
+	shardSizeMB = shardSizeKB * 1024
+	shardSizeGB = shardSizeMB * 1024
+	shardSizeTB = shardSizeGB * 1024
+)
+
+func parseShardSize(s string) int64 {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return 0
+	}
+
+	var multiplier int64 = 1
+	var numStr string
+
+	if strings.HasSuffix(s, "tb") {
+		multiplier = shardSizeTB
+		numStr = strings.TrimSuffix(s, "tb")
+	} else if strings.HasSuffix(s, "gb") {
+		multiplier = shardSizeGB
+		numStr = strings.TrimSuffix(s, "gb")
+	} else if strings.HasSuffix(s, "mb") {
+		multiplier = shardSizeMB
+		numStr = strings.TrimSuffix(s, "mb")
+	} else if strings.HasSuffix(s, "kb") {
+		multiplier = shardSizeKB
+		numStr = strings.TrimSuffix(s, "kb")
+	} else if strings.HasSuffix(s, "b") {
+		multiplier = 1
+		numStr = strings.TrimSuffix(s, "b")
+	} else {
+		numStr = s
+	}
+
+	numStr = strings.TrimSpace(numStr)
+	value, err := strconv.ParseFloat(numStr, 64)
+	if err != nil {
+		return 0
+	}
+
+	return int64(value * float64(multiplier))
+}
+
+func formatShardSize(b int64) string {
+	switch {
+	case b >= shardSizeTB:
+		return fmt.Sprintf("%.1ftb", float64(b)/float64(shardSizeTB))
+	case b >= shardSizeGB:
+		return fmt.Sprintf("%.1fgb", float64(b)/float64(shardSizeGB))
+	case b >= shardSizeMB:
+		return fmt.Sprintf("%.1fmb", float64(b)/float64(shardSizeMB))
+	case b >= shardSizeKB:
+		return fmt.Sprintf("%.1fkb", float64(b)/float64(shardSizeKB))
+	default:
+		return fmt.Sprintf("%db", b)
+	}
+}
+
+func AnalyzeShardHealth(idx IndexInfo) ShardHealth {
+	shardCount, _ := strconv.Atoi(idx.Pri)
+	docsCount, _ := strconv.ParseInt(idx.DocsCount, 10, 64)
+	totalSize := parseShardSize(idx.PriStoreSize)
+
+	health := ShardHealth{
+		IndexName:  idx.Name,
+		Status:     ShardHealthOK,
+		StatusText: "ok",
+		ShardCount: shardCount,
+		TotalSize:  totalSize,
+		DocsCount:  docsCount,
+	}
+
+	if shardCount > 0 {
+		health.AvgShardSize = totalSize / int64(shardCount)
+		health.AvgDocsPerShard = docsCount / int64(shardCount)
+	}
+
+	if shardCount == 0 || totalSize == 0 {
+		return health
+	}
+
+	var issues []string
+	var statusTerms []string
+
+	if health.AvgShardSize > 65*shardSizeGB {
+		issues = append(issues, fmt.Sprintf("shards oversized (%s avg)", formatShardSize(health.AvgShardSize)))
+		statusTerms = append(statusTerms, "oversized")
+		health.Status = ShardHealthCritical
+	} else if health.AvgShardSize > 50*shardSizeGB {
+		issues = append(issues, fmt.Sprintf("shards large (%s avg)", formatShardSize(health.AvgShardSize)))
+		statusTerms = append(statusTerms, "oversized")
+		health.Status = ShardHealthWarning
+	}
+
+	if shardCount > 3 {
+		if health.AvgShardSize < 500*shardSizeMB {
+			issues = append(issues, fmt.Sprintf("shards undersized (%s avg)", formatShardSize(health.AvgShardSize)))
+			statusTerms = append(statusTerms, "undersized")
+			health.Status = ShardHealthCritical
+		} else if health.AvgShardSize < 1*shardSizeGB {
+			issues = append(issues, fmt.Sprintf("shards small (%s avg)", formatShardSize(health.AvgShardSize)))
+			statusTerms = append(statusTerms, "undersized")
+			if health.Status == ShardHealthOK {
+				health.Status = ShardHealthWarning
+			}
+		}
+
+		if health.AvgDocsPerShard < 100000 {
+			issues = append(issues, fmt.Sprintf("sparse shards (%d docs/shard)", health.AvgDocsPerShard))
+			statusTerms = append(statusTerms, "sparse")
+			if health.Status == ShardHealthOK {
+				health.Status = ShardHealthWarning
+			}
+		}
+	}
+
+	if len(issues) > 1 {
+		health.Status = ShardHealthCritical
+	}
+
+	if len(statusTerms) > 0 {
+		health.StatusText = strings.Join(statusTerms, ", ")
+	}
+
+	health.Issues = issues
+	return health
 }
 
 func sortShardsByIndexShardPrimary(shards []ShardInfo) {
@@ -459,6 +610,15 @@ func (c *Client) FetchClusterState(ctx context.Context) (*ClusterState, error) {
 	}
 	state.Health = health
 
+	versions, err := c.fetchIndexVersions(ctx)
+	if err == nil {
+		for i := range state.Indices {
+			if v, ok := versions[state.Indices[i].Name]; ok {
+				state.Indices[i].Version = v
+			}
+		}
+	}
+
 	return state, nil
 }
 
@@ -614,6 +774,54 @@ func (c *Client) fetchAliases(ctx context.Context) ([]AliasInfo, error) {
 	})
 
 	return aliases, nil
+}
+
+func (c *Client) fetchIndexVersions(ctx context.Context) (map[string]string, error) {
+	res, err := c.es.Indices.GetSettings(
+		c.es.Indices.GetSettings.WithContext(ctx),
+		c.es.Indices.GetSettings.WithFlatSettings(true),
+		c.es.Indices.GetSettings.WithName("index.version.created"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetching index versions: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading versions response: %w", err)
+	}
+
+	var response map[string]struct {
+		Settings map[string]string `json:"settings"`
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("parsing index versions: %w", err)
+	}
+
+	versions := make(map[string]string)
+	for indexName, indexData := range response {
+		if v, ok := indexData.Settings["index.version.created"]; ok {
+			versions[indexName] = DecodeESVersion(v)
+		}
+	}
+
+	return versions, nil
+}
+
+func DecodeESVersion(versionID string) string {
+	var v int
+	if _, err := fmt.Sscanf(versionID, "%d", &v); err != nil {
+		return versionID
+	}
+	major := v / 1000000
+	return fmt.Sprintf("%d.x", major)
 }
 
 func (s *ClusterState) GetAliasesForIndex(index string) []string {
@@ -1554,4 +1762,83 @@ func (c *Client) FetchIndexTemplates(ctx context.Context) ([]IndexTemplate, erro
 	})
 
 	return templates, nil
+}
+
+type Deprecation struct {
+	Level    string `json:"level"`
+	Message  string `json:"message"`
+	URL      string `json:"url"`
+	Details  string `json:"details"`
+	Category string `json:"-"`
+	Resource string `json:"-"`
+}
+
+type DeprecationInfo struct {
+	Deprecations []Deprecation
+}
+
+func (c *Client) FetchDeprecations(ctx context.Context) (*DeprecationInfo, error) {
+	res, err := c.es.Migration.Deprecations(c.es.Migration.Deprecations.WithContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("fetching deprecations: %w", err)
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading deprecations response: %w", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return nil, fmt.Errorf("parsing deprecations: %w", err)
+	}
+
+	info := &DeprecationInfo{}
+
+	categoryOrder := []string{"cluster_settings", "node_settings", "ml_settings", "ilm_policies", "data_streams", "index_settings", "templates"}
+
+	for _, catName := range categoryOrder {
+		rawData, ok := raw[catName]
+		if !ok {
+			continue
+		}
+
+		var deps []Deprecation
+		if err := json.Unmarshal(rawData, &deps); err == nil {
+			for i := range deps {
+				deps[i].Category = catName
+			}
+			info.Deprecations = append(info.Deprecations, deps...)
+		} else {
+			var mapDeps map[string][]Deprecation
+			if err := json.Unmarshal(rawData, &mapDeps); err == nil {
+				for resource, resourceDeps := range mapDeps {
+					for i := range resourceDeps {
+						resourceDeps[i].Category = catName
+						resourceDeps[i].Resource = resource
+					}
+					info.Deprecations = append(info.Deprecations, resourceDeps...)
+				}
+			}
+		}
+	}
+
+	sort.Slice(info.Deprecations, func(i, j int) bool {
+		levelOrder := map[string]int{"critical": 0, "warning": 1, "": 2}
+		if levelOrder[info.Deprecations[i].Level] != levelOrder[info.Deprecations[j].Level] {
+			return levelOrder[info.Deprecations[i].Level] < levelOrder[info.Deprecations[j].Level]
+		}
+		if info.Deprecations[i].Category != info.Deprecations[j].Category {
+			return info.Deprecations[i].Category < info.Deprecations[j].Category
+		}
+		return info.Deprecations[i].Resource < info.Deprecations[j].Resource
+	})
+
+	return info, nil
 }

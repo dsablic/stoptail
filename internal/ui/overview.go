@@ -14,6 +14,11 @@ import (
 	"github.com/labtiva/stoptail/internal/es"
 )
 
+const (
+	nodeColWidth  = 18
+	indexColWidth = 28
+)
+
 type ModalInitMsg struct{}
 
 type IndexCreatedMsg struct{ Err error }
@@ -309,8 +314,6 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		}
 	case tea.MouseMsg:
 		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-			nodeColWidth := 18
-			indexColWidth := 25
 			headerRows := 6
 
 			if msg.Y >= headerRows && msg.X > nodeColWidth+2 {
@@ -666,8 +669,6 @@ func (m OverviewModel) HasModal() bool {
 }
 
 func (m OverviewModel) visibleColumns() int {
-	nodeColWidth := 18
-	indexColWidth := 25
 	separatorWidth := 2
 	cols := (m.width - nodeColWidth - separatorWidth) / indexColWidth
 	if cols < 1 {
@@ -678,7 +679,7 @@ func (m OverviewModel) visibleColumns() int {
 
 func (m OverviewModel) maxVisibleNodes() int {
 	maxLinesPerNode := 4
-	rows := (m.height - 9) / maxLinesPerNode
+	rows := (m.height - 10) / maxLinesPerNode
 	if rows < 1 {
 		rows = 1
 	}
@@ -816,8 +817,6 @@ func (m OverviewModel) renderGrid() string {
 
 	nodes := m.cluster.Nodes
 
-	nodeColWidth := 18
-	indexColWidth := 25
 	visibleCols := m.visibleColumns()
 	actualVisibleCols := visibleCols
 	if actualVisibleCols > len(indices)-m.scrollX {
@@ -869,6 +868,45 @@ func (m OverviewModel) renderGrid() string {
 				Foreground(ColorGray)
 			docsText := FormatNumber(idx.DocsCount) + " docs"
 			b.WriteString(docsStyle.Render(Truncate(docsText, indexColWidth-2)))
+		}
+	}
+	b.WriteString("\n")
+
+	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+	for i, idx := range indices {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
+			versionStyle := lipgloss.NewStyle().
+				Width(indexColWidth).
+				Foreground(ColorGray)
+			versionText := ""
+			if idx.Version != "" {
+				versionText = "created: " + idx.Version
+			}
+			b.WriteString(versionStyle.Render(Truncate(versionText, indexColWidth-2)))
+		}
+	}
+	b.WriteString("\n")
+
+	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+	for i, idx := range indices {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
+			health := es.AnalyzeShardHealth(idx)
+			var shardColor lipgloss.Color
+			switch health.Status {
+			case es.ShardHealthOK:
+				shardColor = ColorGreen
+			case es.ShardHealthWarning:
+				shardColor = ColorYellow
+			case es.ShardHealthCritical:
+				shardColor = ColorRed
+			default:
+				shardColor = ColorGray
+			}
+			shardStyle := lipgloss.NewStyle().
+				Width(indexColWidth).
+				Foreground(shardColor)
+			shardText := "shards: " + health.StatusText
+			b.WriteString(shardStyle.Render(Truncate(shardText, indexColWidth-2)))
 		}
 	}
 	b.WriteString("\n")
