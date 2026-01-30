@@ -390,6 +390,21 @@ for i := 0; i < maxLines; i++ {
 }
 ```
 
+**ANSI escape codes break rune-based positioning** - Styled/colorized strings contain invisible ANSI escape codes. Never use `[]rune` slicing or `len()` to position content within styled strings - the rune count includes escape sequences but they have zero visual width:
+
+```go
+// WRONG: rune positions don't match visual positions
+lineRunes := []rune(styledLine)
+copy(lineRunes[visualOffset:], overlayRunes)  // broken positioning
+
+// CORRECT: use lipgloss padding/margin for positioning
+padStyle := lipgloss.NewStyle().PaddingLeft(visualOffset)
+result := padStyle.Render(overlay)
+
+// CORRECT: use lipgloss.Width() for visual width calculations
+visualWidth := lipgloss.Width(styledString)  // accounts for ANSI codes
+```
+
 ### Mouse Click Detection
 
 **Match rendered content exactly** - Click handlers must use identical strings and styles as View() for accurate position calculations. Styles add padding that affects width:

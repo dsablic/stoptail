@@ -45,33 +45,33 @@ var bracketPairs = map[string]string{
 }
 
 type WorkbenchModel struct {
-	client       *es.Client
-	methodIdx    int
-	path         textinput.Model
-	editor       Editor
-	response     viewport.Model
-	responseText string
-	statusCode   int
-	duration     string
-	focus        WorkbenchFocus
-	width        int
-	height       int
-	executing    bool
-	err          error
-	history      *storage.History
-	historyIdx   int
-	spinner      spinner.Model
-	search       SearchBar
-	completion   CompletionState
-	fieldCache   map[string][]CompletionItem
-	lastIndex    string
-	clipboard    Clipboard
-	bookmarkUI   BookmarkUI
-	bookmarks    *storage.Bookmarks
-	queryMode    QueryMode
-	dslContent   string
-	dslPath      string
-	esqlContent  string
+	client         *es.Client
+	methodDropdown Dropdown
+	path           textinput.Model
+	editor             Editor
+	response           viewport.Model
+	responseText       string
+	statusCode         int
+	duration           string
+	focus              WorkbenchFocus
+	width              int
+	height             int
+	executing          bool
+	err                error
+	history            *storage.History
+	historyIdx         int
+	spinner            spinner.Model
+	search             SearchBar
+	completion         CompletionState
+	fieldCache         map[string][]CompletionItem
+	lastIndex          string
+	clipboard          Clipboard
+	bookmarkUI         BookmarkUI
+	bookmarks          *storage.Bookmarks
+	queryMode          QueryMode
+	dslContent         string
+	dslPath            string
+	esqlContent        string
 }
 
 type executeResultMsg struct {
@@ -98,7 +98,8 @@ func NewWorkbench() WorkbenchModel {
 
 	history, _ := storage.LoadHistory()
 
-	methodIdx := 0
+	methodDropdown := NewDropdown(methods)
+	methodDropdown.SetPosition(9, 3)
 	var dslContent, dslPath, esqlContent string
 
 	if last := history.LastByMode(""); last != nil {
@@ -112,7 +113,7 @@ func NewWorkbench() WorkbenchModel {
 		}
 		for i, m := range methods {
 			if m == last.Method {
-				methodIdx = i
+				methodDropdown.SetSelectedIdx(i)
 				break
 			}
 		}
@@ -137,23 +138,23 @@ func NewWorkbench() WorkbenchModel {
 	bookmarks, _ := storage.LoadBookmarks()
 
 	return WorkbenchModel{
-		methodIdx:   methodIdx,
-		path:        path,
-		editor:      editor,
-		response:    vp,
-		focus:       FocusNone,
-		history:     history,
-		historyIdx:  -1,
-		spinner:     s,
-		search:      NewSearchBar(),
-		fieldCache:  make(map[string][]CompletionItem),
-		clipboard:   NewClipboard(),
-		bookmarkUI:  NewBookmarkUI(),
-		bookmarks:   bookmarks,
-		queryMode:   ModeREST,
-		dslContent:  dslContent,
-		dslPath:     dslPath,
-		esqlContent: esqlContent,
+		methodDropdown: methodDropdown,
+		path:           path,
+		editor:         editor,
+		response:       vp,
+		focus:          FocusNone,
+		history:        history,
+		historyIdx:     -1,
+		spinner:        s,
+		search:         NewSearchBar(),
+		fieldCache:     make(map[string][]CompletionItem),
+		clipboard:      NewClipboard(),
+		bookmarkUI:     NewBookmarkUI(),
+		bookmarks:      bookmarks,
+		queryMode:      ModeREST,
+		dslContent:     dslContent,
+		dslPath:        dslPath,
+		esqlContent:    esqlContent,
 	}
 }
 
@@ -163,7 +164,7 @@ func (m *WorkbenchModel) SetClient(client *es.Client) {
 }
 
 func (m WorkbenchModel) HasActiveInput() bool {
-	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active() || m.bookmarkUI.Active()
+	return m.focus == FocusPath || m.focus == FocusBody || m.search.Active() || m.bookmarkUI.Active() || m.methodDropdown.Open()
 }
 
 func (m WorkbenchModel) ClipboardMessage() string {
@@ -184,7 +185,7 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 }
 
 func (m *WorkbenchModel) Prefill(index string) {
-	m.methodIdx = 0 // GET
+	m.methodDropdown.SetSelectedIdx(0) // GET
 	m.path.SetValue("/" + index + "/_search")
 	m.editor.SetContent("{}")
 }
@@ -320,7 +321,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			switch action {
 			case BookmarkActionSave:
 				if bookmark != nil {
-					bookmark.Method = methods[m.methodIdx]
+					bookmark.Method = methods[m.methodDropdown.SelectedIdx()]
 					bookmark.Path = m.path.Value()
 					bookmark.Body = m.editor.Content()
 					m.bookmarks.Add(*bookmark)
@@ -330,7 +331,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				if bookmark != nil {
 					for i, method := range methods {
 						if method == bookmark.Method {
-							m.methodIdx = i
+							m.methodDropdown.SetSelectedIdx(i)
 							break
 						}
 					}
@@ -478,6 +479,10 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, nil
 			}
 		case "esc":
+			if m.methodDropdown.Open() {
+				m.methodDropdown.Close()
+				return m, nil
+			}
 			m.path.Blur()
 			m.editor.Blur()
 			m.focus = FocusNone
@@ -513,17 +518,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 		switch m.focus {
 		case FocusMethod:
-			switch msg.String() {
-			case "up":
-				m.methodIdx = (m.methodIdx - 1 + len(methods)) % len(methods)
-				return m, nil
-			case "down":
-				m.methodIdx = (m.methodIdx + 1) % len(methods)
-				return m, nil
-			case "enter":
+			action := m.methodDropdown.HandleKey(msg)
+			switch action {
+			case DropdownActionSelect:
 				m.cycleFocus()
-				return m, nil
+			case DropdownActionClose:
+				m.focus = FocusNone
 			}
+			return m, nil
 		case FocusPath:
 			m.path, cmd = m.path.Update(msg)
 			cmds = append(cmds, cmd)
@@ -563,6 +565,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		bodyPaneTop := topRowHeight + 2
 		bodyHeaderHeight := 1
 
+		if m.methodDropdown.Open() && msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			action := m.methodDropdown.HandleClick(msg.X, msg.Y)
+			if action == DropdownActionSelect {
+				m.cycleFocus()
+				return m, nil
+			}
+		}
+
 		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
 			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 				editorX := msg.X - 1
@@ -592,7 +602,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 				var methodEnd int
 				if m.queryMode == ModeREST {
-					methodView := btnStyle.Bold(true).Render(methods[m.methodIdx] + " ▼")
+					methodView := btnStyle.Bold(true).Render(methods[m.methodDropdown.SelectedIdx()] + " ▼")
 					methodEnd = pos + lipgloss.Width(methodView)
 					pos = methodEnd + 1
 				} else {
@@ -628,6 +638,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					m.path.Blur()
 					m.editor.Blur()
 					m.focus = FocusMethod
+					m.methodDropdown.Toggle()
 				} else if msg.X < pathEnd {
 					m.editor.Blur()
 					m.path.Focus()
@@ -744,7 +755,7 @@ func (m *WorkbenchModel) addToHistory() {
 		mode = "esql"
 	}
 	entry := storage.HistoryEntry{
-		Method: methods[m.methodIdx],
+		Method: methods[m.methodDropdown.SelectedIdx()],
 		Path:   m.path.Value(),
 		Body:   m.editor.Content(),
 		Mode:   mode,
@@ -808,7 +819,7 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 	entry := m.history.Entries[m.historyIdx]
 	for i, method := range methods {
 		if method == entry.Method {
-			m.methodIdx = i
+			m.methodDropdown.SetSelectedIdx(i)
 			break
 		}
 	}
@@ -837,7 +848,7 @@ func (m WorkbenchModel) execute() tea.Cmd {
 			escaped, _ := json.Marshal(query)
 			body = fmt.Sprintf(`{"query":%s}`, string(escaped))
 		} else {
-			method = methods[m.methodIdx]
+			method = methods[m.methodDropdown.SelectedIdx()]
 			path = m.path.Value()
 			body = m.editor.Content()
 		}
@@ -890,7 +901,7 @@ func (m WorkbenchModel) View() string {
 		if m.focus == FocusMethod {
 			methodStyle = methodStyle.Background(ColorBlue).Foreground(ColorOnAccent)
 		}
-		methodView = methodStyle.Render(methods[m.methodIdx] + " ▼")
+		methodView = methodStyle.Render(methods[m.methodDropdown.SelectedIdx()] + " ▼")
 	}
 
 	pathBorderColor := ColorGray
@@ -1056,6 +1067,11 @@ func (m WorkbenchModel) View() string {
 	lines := strings.Split(output, "\n")
 	for i, line := range lines {
 		lines[i] = strings.TrimRight(line, " ")
+	}
+
+	if m.methodDropdown.Open() && m.queryMode == ModeREST {
+		output = m.methodDropdown.Overlay(strings.Join(lines, "\n"))
+		lines = strings.Split(output, "\n")
 	}
 
 	if m.bookmarkUI.Active() {
