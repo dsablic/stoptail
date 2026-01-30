@@ -13,6 +13,7 @@ var helpGlobal = `## Global
 | q / Ctrl+C | Quit |
 | ? | Toggle help |
 | r | Refresh |
+| S | Shard calculator |
 `
 
 var helpOverview = `## Overview

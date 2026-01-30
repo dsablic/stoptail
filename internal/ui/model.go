@@ -30,14 +30,16 @@ type Model struct {
 	mappings     MappingsModel
 	nodes        NodesModel
 	tasks        TasksModel
+	shardCalc    ShardCalcModel
 	spinner      spinner.Model
 	activeTab    int
 	width        int
 	height       int
-	connected bool
-	loading   bool
-	err       error
-	showHelp  bool
+	connected    bool
+	loading      bool
+	err          error
+	showHelp     bool
+	showShardCalc bool
 }
 
 type connectedMsg struct{ state *es.ClusterState }
@@ -84,6 +86,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		mappings:  NewMappings(),
 		nodes:     NewNodes(),
 		tasks:     NewTasks(),
+		shardCalc: NewShardCalc(),
 		spinner:   s,
 		activeTab: TabOverview,
 		loading:   true,
@@ -91,6 +94,9 @@ func New(client *es.Client, cfg *config.Config) Model {
 }
 
 func (m Model) hasActiveInput() bool {
+	if m.showShardCalc {
+		return true
+	}
 	switch m.activeTab {
 	case TabOverview:
 		return m.overview.filterActive || m.overview.HasModal()
@@ -341,11 +347,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workbench, cmd = m.workbench.Update(msg)
 		return m, cmd
 	case tea.KeyMsg:
+		if m.showShardCalc {
+			if msg.String() == "esc" {
+				m.showShardCalc = false
+				return m, nil
+			}
+			m.shardCalc, cmd = m.shardCalc.Update(msg)
+			return m, cmd
+		}
 		// Global keys - skip when any input is active (typing in search, filter, editor, etc.)
 		if !m.hasActiveInput() {
 			switch msg.String() {
 			case "?":
 				m.showHelp = !m.showHelp
+				return m, nil
+			case "S":
+				m.showShardCalc = true
+				m.shardCalc.Reset()
+				m.shardCalc.SetSize(m.width, m.height)
 				return m, nil
 			case "q":
 				return m, tea.Quit
@@ -518,6 +537,10 @@ func (m Model) View() string {
 
 	if m.showHelp {
 		return renderHelp(m.width, m.height, m.activeTab)
+	}
+
+	if m.showShardCalc {
+		return m.shardCalc.View()
 	}
 
 	// Header

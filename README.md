@@ -47,6 +47,9 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Force merge and snapshot operations
   - Pending cluster tasks (create index, update mapping, etc.)
   - Cancel with confirmation
+- **Shard Calculator**: Plan optimal shard topology (press `S`)
+  - Input total size and docs to get recommended shard count
+  - Optional: node count for distribution planning
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
 - **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`
 - **Help Overlay**: Press `?` for keybindings
@@ -170,6 +173,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Browser, Mappings, Cluster, Tasks) |
 | `r` | Refresh data |
 | `?` | Toggle help overlay |
+| `S` | Shard calculator |
 | `q` / `Ctrl+C` | Quit |
 
 ### Overview Tab
