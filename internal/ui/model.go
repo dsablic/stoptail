@@ -444,7 +444,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		}
-	case IndexCreatedMsg, IndexDeletedMsg, AliasAddedMsg, AliasRemovedMsg:
+	case IndexCreatedMsg, IndexDeletedMsg, IndexOpenedMsg, IndexClosedMsg, AliasAddedMsg, AliasRemovedMsg:
 		m.overview, cmd = m.overview.Update(msg)
 		if hasNoError(msg) {
 			return m, tea.Batch(cmd, m.fetchCluster())
@@ -658,6 +658,10 @@ func hasNoError(msg tea.Msg) bool {
 	case IndexCreatedMsg:
 		return m.Err == nil
 	case IndexDeletedMsg:
+		return m.Err == nil
+	case IndexOpenedMsg:
+		return m.Err == nil
+	case IndexClosedMsg:
 		return m.Err == nil
 	case AliasAddedMsg:
 		return m.Err == nil

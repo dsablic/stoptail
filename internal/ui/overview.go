@@ -303,7 +303,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			}
 		case "o":
 			if idx := m.getSelectedIndexInfo(); idx != nil && idx.Status == "close" {
-				return m, m.openIndexCmd(idx.Name)
+				m.operationMsg = "Opening index..."
+				return m, tea.Batch(m.spinner.Tick, m.openIndexCmd(idx.Name))
 			}
 		case "x":
 			if idx := m.getSelectedIndexInfo(); idx != nil && idx.Status == "open" {
