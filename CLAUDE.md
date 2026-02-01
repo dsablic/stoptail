@@ -548,11 +548,28 @@ Releases are automated via GitHub Actions + goreleaser:
 
 ```bash
 # Tag a new version
-git tag v0.x.y
-git push origin v0.x.y
+git tag v1.x.y
+git push origin v1.x.y
 ```
 
 The workflow builds binaries for Linux, macOS, and Windows (amd64/arm64).
+
+### Versioning Guidelines
+
+Use semantic versioning (MAJOR.MINOR.PATCH):
+
+- **PATCH** (v1.0.x): Small changes, bug fixes, minor enhancements
+  - Adding a field to existing display (e.g., deleted docs count)
+  - Fixing rendering bugs
+  - Small UI tweaks
+- **MINOR** (v1.x.0): New features, significant functionality
+  - New tabs or views
+  - New keyboard shortcuts with significant functionality
+  - New reusable components (e.g., dropdown, search bar)
+- **MAJOR** (vX.0.0): Breaking changes
+  - Config file format changes
+  - Removed features
+  - Changed keybindings that break muscle memory
 
 ## Multi-cluster Config
 
