@@ -943,6 +943,21 @@ func (m OverviewModel) renderGrid() string {
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for i, idx := range indices {
 		if i >= m.scrollX && i < m.scrollX+visibleCols {
+			deletedStyle := lipgloss.NewStyle().
+				Width(indexColWidth).
+				Foreground(ColorGray)
+			deletedText := ""
+			if idx.DocsDeleted != "" && idx.DocsDeleted != "0" {
+				deletedText = FormatNumber(idx.DocsDeleted) + " deleted"
+			}
+			b.WriteString(deletedStyle.Render(Truncate(deletedText, indexColWidth-2)))
+		}
+	}
+	b.WriteString("\n")
+
+	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+	for i, idx := range indices {
+		if i >= m.scrollX && i < m.scrollX+visibleCols {
 			versionStyle := lipgloss.NewStyle().
 				Width(indexColWidth).
 				Foreground(ColorGray)

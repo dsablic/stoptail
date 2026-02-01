@@ -16,6 +16,7 @@ type IndexInfo struct {
 	Health        string `json:"health"`
 	Status        string `json:"status"`
 	DocsCount     string `json:"docs.count"`
+	DocsDeleted   string `json:"docs.deleted"`
 	StoreSize     string `json:"store.size"`
 	PriStoreSize  string `json:"pri.store.size"`
 	Pri           string `json:"pri"`
@@ -648,7 +649,7 @@ func (c *Client) fetchIndices(ctx context.Context) ([]IndexInfo, error) {
 		c.es.Cat.Indices.WithContext(ctx),
 		c.es.Cat.Indices.WithFormat("json"),
 		c.es.Cat.Indices.WithExpandWildcards("all"),
-		c.es.Cat.Indices.WithH("index", "health", "status", "docs.count", "store.size", "pri.store.size", "pri", "rep"),
+		c.es.Cat.Indices.WithH("index", "health", "status", "docs.count", "docs.deleted", "store.size", "pri.store.size", "pri", "rep"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching indices: %w", err)
