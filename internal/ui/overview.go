@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	nodeColWidth  = 18
-	indexColWidth = 28
+	nodeColWidth     = 18
+	minIndexColWidth = 20
 )
 
 type ModalInitMsg struct{}
@@ -329,11 +329,19 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			headerRows := 6
 
 			if msg.Y >= headerRows && msg.X > nodeColWidth+2 {
-				colOffset := (msg.X - nodeColWidth - 2) / indexColWidth
-				clickedIndex := m.scrollX + colOffset
 				indices := m.filteredIndices()
-				if clickedIndex >= 0 && clickedIndex < len(indices) {
-					m.selectedIndex = clickedIndex
+				colWidths := m.calculateColumnWidths(indices)
+				xPos := msg.X - nodeColWidth - 2
+				cumWidth := 0
+				for colIdx, w := range colWidths {
+					cumWidth += w
+					if xPos < cumWidth {
+						clickedIndex := m.scrollX + colIdx
+						if clickedIndex >= 0 && clickedIndex < len(indices) {
+							m.selectedIndex = clickedIndex
+						}
+						break
+					}
 				}
 			}
 		}
@@ -733,12 +741,84 @@ func (m OverviewModel) HasModal() bool {
 }
 
 func (m OverviewModel) visibleColumns() int {
-	separatorWidth := 2
-	cols := (m.width - nodeColWidth - separatorWidth) / indexColWidth
-	if cols < 1 {
-		cols = 1
+	indices := m.filteredIndices()
+	widths := m.calculateColumnWidths(indices)
+	return len(widths)
+}
+
+func (m OverviewModel) calculateColumnWidths(indices []es.IndexInfo) []int {
+	availableWidth := m.width - nodeColWidth - 2
+	var widths []int
+	usedWidth := 0
+
+	for i := m.scrollX; i < len(indices); i++ {
+		idx := indices[i]
+		colWidth := m.indexColumnWidth(idx)
+		if usedWidth+colWidth > availableWidth && len(widths) > 0 {
+			break
+		}
+		widths = append(widths, colWidth)
+		usedWidth += colWidth
 	}
-	return cols
+
+	if len(widths) == 0 && len(indices) > m.scrollX {
+		widths = append(widths, minIndexColWidth)
+	}
+
+	return widths
+}
+
+func (m OverviewModel) indexColumnWidth(idx es.IndexInfo) int {
+	maxLen := len(idx.Name)
+
+	priSize := idx.PriStoreSize
+	if priSize == "" {
+		priSize = idx.StoreSize
+	}
+	sizeText := priSize + "/" + idx.StoreSize
+	if len(sizeText) > maxLen {
+		maxLen = len(sizeText)
+	}
+
+	docsText := FormatNumber(idx.DocsCount) + " docs"
+	if len(docsText) > maxLen {
+		maxLen = len(docsText)
+	}
+
+	if idx.DocsDeleted != "" && idx.DocsDeleted != "0" {
+		deletedText := FormatNumber(idx.DocsDeleted) + " deleted"
+		if len(deletedText) > maxLen {
+			maxLen = len(deletedText)
+		}
+	}
+
+	if idx.Version != "" {
+		versionText := "created: " + idx.Version
+		if len(versionText) > maxLen {
+			maxLen = len(versionText)
+		}
+	}
+
+	health := es.AnalyzeShardHealth(idx)
+	shardText := "shards: " + health.StatusText
+	if len(shardText) > maxLen {
+		maxLen = len(shardText)
+	}
+
+	if m.cluster != nil {
+		aliases := m.cluster.GetAliasesForIndex(idx.Name)
+		for _, alias := range aliases {
+			if len(alias) > maxLen {
+				maxLen = len(alias)
+			}
+		}
+	}
+
+	colWidth := maxLen + 2
+	if colWidth < minIndexColWidth {
+		colWidth = minIndexColWidth
+	}
+	return colWidth
 }
 
 func (m OverviewModel) maxVisibleNodes() int {
@@ -880,143 +960,130 @@ func (m OverviewModel) renderGrid() string {
 	}
 
 	nodes := m.cluster.Nodes
+	colWidths := m.calculateColumnWidths(indices)
+	visibleCols := len(colWidths)
 
-	visibleCols := m.visibleColumns()
-	actualVisibleCols := visibleCols
-	if actualVisibleCols > len(indices)-m.scrollX {
-		actualVisibleCols = len(indices) - m.scrollX
+	contentWidth := nodeColWidth + 2
+	for _, w := range colWidths {
+		contentWidth += w
 	}
-	if actualVisibleCols < 0 {
-		actualVisibleCols = 0
-	}
-	contentWidth := nodeColWidth + 2 + actualVisibleCols*indexColWidth
 
 	var b strings.Builder
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			color := HealthColor(idx.Health)
-			if idx.Status == "close" {
-				color = ColorGray
-			}
-			nameStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(color).
-				Bold(true)
-			if i == m.selectedIndex {
-				nameStyle = nameStyle.Reverse(true)
-			}
-			b.WriteString(nameStyle.Render(Truncate(idx.Name, indexColWidth-2)))
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		color := HealthColor(idx.Health)
+		if idx.Status == "close" {
+			color = ColorGray
 		}
+		nameStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(color).
+			Bold(true)
+		if m.scrollX+colIdx == m.selectedIndex {
+			nameStyle = nameStyle.Reverse(true)
+		}
+		b.WriteString(nameStyle.Render(Truncate(idx.Name, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			sizeStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(ColorGray)
-			priSize := idx.PriStoreSize
-			if priSize == "" {
-				priSize = idx.StoreSize
-			}
-			sizeText := priSize + "/" + idx.StoreSize
-			b.WriteString(sizeStyle.Render(Truncate(sizeText, indexColWidth-2)))
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		sizeStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(ColorGray)
+		priSize := idx.PriStoreSize
+		if priSize == "" {
+			priSize = idx.StoreSize
 		}
+		sizeText := priSize + "/" + idx.StoreSize
+		b.WriteString(sizeStyle.Render(Truncate(sizeText, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			docsStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(ColorGray)
-			docsText := FormatNumber(idx.DocsCount) + " docs"
-			b.WriteString(docsStyle.Render(Truncate(docsText, indexColWidth-2)))
-		}
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		docsStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(ColorGray)
+		docsText := FormatNumber(idx.DocsCount) + " docs"
+		b.WriteString(docsStyle.Render(Truncate(docsText, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			deletedStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(ColorGray)
-			deletedText := ""
-			if idx.DocsDeleted != "" && idx.DocsDeleted != "0" {
-				deletedText = FormatNumber(idx.DocsDeleted) + " deleted"
-			}
-			b.WriteString(deletedStyle.Render(Truncate(deletedText, indexColWidth-2)))
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		deletedStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(ColorGray)
+		deletedText := ""
+		if idx.DocsDeleted != "" && idx.DocsDeleted != "0" {
+			deletedText = FormatNumber(idx.DocsDeleted) + " deleted"
 		}
+		b.WriteString(deletedStyle.Render(Truncate(deletedText, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			versionStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(ColorGray)
-			versionText := ""
-			if idx.Version != "" {
-				versionText = "created: " + idx.Version
-			}
-			b.WriteString(versionStyle.Render(Truncate(versionText, indexColWidth-2)))
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		versionStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(ColorGray)
+		versionText := ""
+		if idx.Version != "" {
+			versionText = "created: " + idx.Version
 		}
+		b.WriteString(versionStyle.Render(Truncate(versionText, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			health := es.AnalyzeShardHealth(idx)
-			var shardColor lipgloss.Color
-			switch health.Status {
-			case es.ShardHealthOK:
-				shardColor = ColorGreen
-			case es.ShardHealthWarning:
-				shardColor = ColorYellow
-			case es.ShardHealthCritical:
-				shardColor = ColorRed
-			default:
-				shardColor = ColorGray
-			}
-			shardStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(shardColor)
-			shardText := "shards: " + health.StatusText
-			b.WriteString(shardStyle.Render(Truncate(shardText, indexColWidth-2)))
+	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		colWidth := colWidths[colIdx]
+		health := es.AnalyzeShardHealth(idx)
+		var shardColor lipgloss.Color
+		switch health.Status {
+		case es.ShardHealthOK:
+			shardColor = ColorGreen
+		case es.ShardHealthWarning:
+			shardColor = ColorYellow
+		case es.ShardHealthCritical:
+			shardColor = ColorRed
+		default:
+			shardColor = ColorGray
 		}
+		shardStyle := lipgloss.NewStyle().
+			Width(colWidth).
+			Foreground(shardColor)
+		shardText := "shards: " + health.StatusText
+		b.WriteString(shardStyle.Render(Truncate(shardText, colWidth-2)))
 	}
 	b.WriteString("\n")
 
 	maxAliases := 0
-	for i, idx := range indices {
-		if i >= m.scrollX && i < m.scrollX+visibleCols {
-			aliases := m.cluster.GetAliasesForIndex(idx.Name)
-			if len(aliases) > maxAliases {
-				maxAliases = len(aliases)
-			}
+	for _, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+		aliases := m.cluster.GetAliasesForIndex(idx.Name)
+		if len(aliases) > maxAliases {
+			maxAliases = len(aliases)
 		}
 	}
-	aliasStyle := lipgloss.NewStyle().
-		Width(indexColWidth).
-		Foreground(ColorBlue)
-	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
 	for row := 0; row < maxAliases; row++ {
 		b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-		for i, idx := range indices {
-			if i >= m.scrollX && i < m.scrollX+visibleCols {
-				aliases := m.cluster.GetAliasesForIndex(idx.Name)
-				if row < len(aliases) {
-					b.WriteString(aliasStyle.Render(Truncate(aliases[row], indexColWidth-2)))
-				} else {
-					b.WriteString(emptyCol)
-				}
+		for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+			colWidth := colWidths[colIdx]
+			aliasStyle := lipgloss.NewStyle().
+				Width(colWidth).
+				Foreground(ColorBlue)
+			aliases := m.cluster.GetAliasesForIndex(idx.Name)
+			if row < len(aliases) {
+				b.WriteString(aliasStyle.Render(Truncate(aliases[row], colWidth-2)))
+			} else {
+				b.WriteString(lipgloss.NewStyle().Width(colWidth).Render(""))
 			}
 		}
 		b.WriteString("\n")
@@ -1045,16 +1112,15 @@ func (m OverviewModel) renderGrid() string {
 		var shardLines [][]string
 		maxLines := 2
 
-		for i, idx := range indices {
-			if i >= m.scrollX && i < m.scrollX+visibleCols {
-				shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
-				isSelectedCell := isSelectedNode && i == m.selectedIndex
-				isClosed := idx.Status == "close"
-				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell, isClosed)
-				shardLines = append(shardLines, lines)
-				if len(lines) > maxLines {
-					maxLines = len(lines)
-				}
+		for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+			colWidth := colWidths[colIdx]
+			shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
+			isSelectedCell := isSelectedNode && m.scrollX+colIdx == m.selectedIndex
+			isClosed := idx.Status == "close"
+			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed)
+			shardLines = append(shardLines, lines)
+			if len(lines) > maxLines {
+				maxLines = len(lines)
 			}
 		}
 
@@ -1090,7 +1156,7 @@ func (m OverviewModel) renderGrid() string {
 				if lineIdx < len(shardLines[colIdx]) {
 					b.WriteString(shardLines[colIdx][lineIdx])
 				} else {
-					b.WriteString(emptyCol)
+					b.WriteString(lipgloss.NewStyle().Width(colWidths[colIdx]).Render(""))
 				}
 			}
 			b.WriteString("\n")
@@ -1115,16 +1181,15 @@ func (m OverviewModel) renderGrid() string {
 		var shardLines [][]string
 		maxLines := 1
 
-		for i, idx := range indices {
-			if i >= m.scrollX && i < m.scrollX+visibleCols {
-				shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
-				isSelectedCell := isSelectedUnassigned && i == m.selectedIndex
-				isClosed := idx.Status == "close"
-				lines := m.renderShardBoxesWithHighlight(shards, indexColWidth, isSelectedCell, isClosed)
-				shardLines = append(shardLines, lines)
-				if len(lines) > maxLines {
-					maxLines = len(lines)
-				}
+		for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+			colWidth := colWidths[colIdx]
+			shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
+			isSelectedCell := isSelectedUnassigned && m.scrollX+colIdx == m.selectedIndex
+			isClosed := idx.Status == "close"
+			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed)
+			shardLines = append(shardLines, lines)
+			if len(lines) > maxLines {
+				maxLines = len(lines)
 			}
 		}
 
@@ -1149,7 +1214,7 @@ func (m OverviewModel) renderGrid() string {
 				if lineIdx < len(shardLines[colIdx]) {
 					b.WriteString(shardLines[colIdx][lineIdx])
 				} else {
-					b.WriteString(emptyCol)
+					b.WriteString(lipgloss.NewStyle().Width(colWidths[colIdx]).Render(""))
 				}
 			}
 			b.WriteString("\n")
