@@ -12,6 +12,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Purple: Relocating shards
   - Yellow: Initializing shards
   - Red: Unassigned shards
+  - Master node marked with bold name and `*` indicator
   - Select any cell to view shard info (with allocation explain for problem shards)
   - Index management: create, delete, open, close indices
 - **Workbench Tab**: Full request editor like Kibana Dev Tools
@@ -34,8 +35,8 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - See custom analyzers, tokenizers, and filters
   - Toggle to view index settings (shards, replicas, refresh interval, etc.)
 - **Cluster Tab**: Node statistics and cluster-wide information with 9 switchable views
-  - Memory: heap%, GC stats, fielddata, query cache, segments
-  - Disk: disk usage, shard counts, versions
+  - Memory: heap%, GC stats, fielddata, query cache, segments (master node marked with `*`)
+  - Disk: disk usage, shard counts, versions (master node marked with `*`)
   - Threads: thread pool stats (active, queue, rejected, completed)
   - Hot: hot threads diagnostic for CPU-intensive operations
   - Fielddata: per-node/index/field fielddata breakdown

@@ -506,6 +506,13 @@ func (m NodesModel) View() string {
 		b.WriteString(m.renderShardHealth())
 	}
 
+	if m.activeView == ViewMemory || m.activeView == ViewDisk {
+		grayStyle := lipgloss.NewStyle().Foreground(ColorGray)
+		masterBadge := lipgloss.NewStyle().Bold(true).Render("*")
+		b.WriteString("\n")
+		b.WriteString(masterBadge + grayStyle.Render(" Master node"))
+	}
+
 	b.WriteString("\n")
 
 	filterStyle := lipgloss.NewStyle().Padding(0, 1)
@@ -578,8 +585,13 @@ func (m NodesModel) renderMemoryTable() string {
 		heapPct := m.parsePercent(node.HeapPercent)
 		pctValues = append(pctValues, node.HeapPercent)
 
+		nodeName := node.Name
+		if node.Master == "*" {
+			nodeName = lipgloss.NewStyle().Bold(true).Render(nodeName + " *")
+		}
+
 		rows = append(rows, []string{
-			node.Name,
+			nodeName,
 			node.Version,
 			fmt.Sprintf("%s %s", node.HeapPercent, RenderBar(heapPct, 10)),
 			node.HeapCurrent,
@@ -639,8 +651,13 @@ func (m NodesModel) renderDiskTable() string {
 		diskPct := m.parsePercent(node.DiskPercent)
 		pctValues = append(pctValues, node.DiskPercent)
 
+		nodeName := node.Name
+		if node.Master == "*" {
+			nodeName = lipgloss.NewStyle().Bold(true).Render(nodeName + " *")
+		}
+
 		rows = append(rows, []string{
-			node.Name,
+			nodeName,
 			node.Version,
 			fmt.Sprintf("%s %s", node.DiskPercent, RenderBar(diskPct, 10)),
 			node.DiskAvail,

@@ -29,6 +29,7 @@ type NodeInfo struct {
 	IP      string `json:"ip"`
 	Role    string `json:"node.role"`
 	Version string `json:"version"`
+	Master  string `json:"master"`
 }
 
 type ShardInfo struct {
@@ -62,6 +63,7 @@ type AliasInfo struct {
 type NodeStats struct {
 	Name           string `json:"name"`
 	Version        string `json:"version"`
+	Master         string `json:"master"`
 	HeapPercent    string `json:"heap.percent"`
 	HeapCurrent    string `json:"heap.current"`
 	HeapMax        string `json:"heap.max"`
@@ -682,7 +684,7 @@ func (c *Client) fetchNodes(ctx context.Context) ([]NodeInfo, error) {
 	res, err := c.es.Cat.Nodes(
 		c.es.Cat.Nodes.WithContext(ctx),
 		c.es.Cat.Nodes.WithFormat("json"),
-		c.es.Cat.Nodes.WithH("name", "ip", "node.role", "version"),
+		c.es.Cat.Nodes.WithH("name", "ip", "node.role", "version", "master"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching nodes: %w", err)
@@ -879,7 +881,7 @@ func (c *Client) FetchNodeStats(ctx context.Context) ([]NodeStats, error) {
 		c.es.Cat.Nodes.WithContext(ctx),
 		c.es.Cat.Nodes.WithFormat("json"),
 		c.es.Cat.Nodes.WithH(
-			"name", "version", "heap.percent", "heap.current", "heap.max",
+			"name", "version", "master", "heap.percent", "heap.current", "heap.max",
 			"fielddata.memory_size", "query_cache.memory_size", "segments.count",
 			"disk.used_percent", "disk.avail", "disk.total", "disk.used",
 			"shard_stats.total_count",

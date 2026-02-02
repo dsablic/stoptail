@@ -30,8 +30,8 @@ func TestParseIndicesResponse(t *testing.T) {
 
 func TestParseNodesResponse(t *testing.T) {
 	raw := `[
-		{"name":"node-1","ip":"10.0.0.1","node.role":"dim"},
-		{"name":"node-2","ip":"10.0.0.2","node.role":"m"}
+		{"name":"node-1","ip":"10.0.0.1","node.role":"dim","master":"*"},
+		{"name":"node-2","ip":"10.0.0.2","node.role":"m","master":"-"}
 	]`
 
 	var nodes []NodeInfo
@@ -45,6 +45,12 @@ func TestParseNodesResponse(t *testing.T) {
 
 	if nodes[0].Name != "node-1" {
 		t.Errorf("nodes[0].Name = %q, want %q", nodes[0].Name, "node-1")
+	}
+	if nodes[0].Master != "*" {
+		t.Errorf("nodes[0].Master = %q, want %q", nodes[0].Master, "*")
+	}
+	if nodes[1].Master != "-" {
+		t.Errorf("nodes[1].Master = %q, want %q", nodes[1].Master, "-")
 	}
 }
 
@@ -79,6 +85,7 @@ func TestParseNodeStatsResponse(t *testing.T) {
 		{
 			"name": "node-1",
 			"version": "8.12.0",
+			"master": "*",
 			"heap.percent": "45",
 			"heap.current": "2.3gb",
 			"heap.max": "5gb",
@@ -94,6 +101,7 @@ func TestParseNodeStatsResponse(t *testing.T) {
 		{
 			"name": "node-2",
 			"version": "8.12.0",
+			"master": "-",
 			"heap.percent": "55",
 			"heap.current": "2.8gb",
 			"heap.max": "5gb",
@@ -122,6 +130,12 @@ func TestParseNodeStatsResponse(t *testing.T) {
 	}
 	if nodes[0].Version != "8.12.0" {
 		t.Errorf("nodes[0].Version = %q, want %q", nodes[0].Version, "8.12.0")
+	}
+	if nodes[0].Master != "*" {
+		t.Errorf("nodes[0].Master = %q, want %q", nodes[0].Master, "*")
+	}
+	if nodes[1].Master != "-" {
+		t.Errorf("nodes[1].Master = %q, want %q", nodes[1].Master, "-")
 	}
 	if nodes[0].HeapPercent != "45" {
 		t.Errorf("nodes[0].HeapPercent = %q, want %q", nodes[0].HeapPercent, "45")

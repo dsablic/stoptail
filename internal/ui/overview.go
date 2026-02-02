@@ -1134,7 +1134,13 @@ func (m OverviewModel) renderGrid() string {
 				if isSelectedNode {
 					style = selectedNodeStyle
 				}
-				b.WriteString(style.Render(Truncate(node.Name, nodeColWidth-2)))
+				nodeName := node.Name
+				if node.Master == "*" {
+					nodeName = lipgloss.NewStyle().Bold(true).Render(Truncate(nodeName, nodeColWidth-4) + " *")
+					b.WriteString(style.Render(nodeName))
+				} else {
+					b.WriteString(style.Render(Truncate(nodeName, nodeColWidth-2)))
+				}
 				b.WriteString("│ ")
 			} else if lineIdx == 1 {
 				versionStyle := lipgloss.NewStyle().Width(nodeColWidth).Foreground(ColorGray)
@@ -1261,8 +1267,12 @@ func (m OverviewModel) renderShardLegend() string {
 		Padding(0, 1).
 		Render("U")
 
+	masterBadge := lipgloss.NewStyle().Bold(true).Render("*")
+
 	return countText +
 		grayStyle.Render("  ") +
+		masterBadge + grayStyle.Render(" Master") +
+		grayStyle.Render(" | ") +
 		greenBadge + grayStyle.Render(" Primary") +
 		grayStyle.Render(" | ") +
 		blueBadge + grayStyle.Render(" Replica") +
