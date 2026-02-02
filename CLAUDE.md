@@ -221,6 +221,18 @@ Common utility functions are in `internal/ui/utils.go` to avoid duplication:
 - `OverlayModal(background, modal string, width, height int) string` - Overlay a centered modal on dimmed background
 - `AutoColumnWidths(headers []string, rows [][]string, maxTotal int) []int` - Calculate optimal column widths for tables (ANSI-aware)
 - `FitColumns(rows [][]string, widths []int) [][]string` - Truncate table cells to fit widths (ANSI-safe)
+- `SanitizeForTerminal(s string) string` - Remove problematic Unicode characters that break terminal rendering (C0/C1 control chars, zero-width spaces, bidirectional marks, BOM)
+
+**JSON display** (`internal/ui/workbench.go`):
+- `highlightJSON(input string) string` - Apply syntax highlighting to JSON using chroma (monokai theme)
+
+When displaying JSON from external sources (ES documents, API responses), always sanitize before highlighting:
+```go
+sanitized := SanitizeForTerminal(jsonString)
+highlighted := highlightJSON(sanitized)
+```
+
+This prevents invisible Unicode characters (zero-width spaces U+200B-200F, bidirectional marks U+202A-202E, etc.) from corrupting terminal output. These characters have zero visual width but can cause cursor positioning issues and layout corruption in TUI applications.
 
 **ES utilities** (`internal/es/cluster.go`):
 - `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first

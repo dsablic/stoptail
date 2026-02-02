@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/labtiva/stoptail/internal/es"
@@ -39,9 +39,11 @@ type BrowserModel struct {
 	searchAfter []any
 	total       int64
 
-	detail     viewport.Model
-	activePane BrowserPane
-	clipboard  Clipboard
+	detailContent []string
+	detailScroll  int
+	detailHeight  int
+	activePane    BrowserPane
+	clipboard     Clipboard
 
 	width  int
 	height int
@@ -54,10 +56,8 @@ type browserSearchMsg struct {
 }
 
 func NewBrowser() BrowserModel {
-	vp := viewport.New(40, 10)
 	return BrowserModel{
 		activePane: BrowserPaneIndices,
-		detail:     vp,
 		clipboard:  NewClipboard(),
 		hasMore:    true,
 	}
@@ -77,11 +77,37 @@ func (m *BrowserModel) SetIndices(indices []es.IndexInfo) {
 func (m *BrowserModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
+	m.detailHeight = height - 7
+}
 
-	detailWidth := (width - 4) / 3
-	detailHeight := height - 7
-	m.detail.Width = detailWidth
-	m.detail.Height = detailHeight
+func (m *BrowserModel) SelectIndexByName(name string) bool {
+	for i, idx := range m.indices {
+		if idx.Name == name {
+			m.selectedIndex = i
+			m.activePane = BrowserPaneDocs
+			return true
+		}
+	}
+	return false
+}
+
+func (m *BrowserModel) LoadDocumentsSync(ctx context.Context) error {
+	index := m.selectedIndexName()
+	if index == "" || m.client == nil {
+		return nil
+	}
+	result, err := m.client.SearchDocuments(ctx, index, nil, browserPageSize)
+	if err != nil {
+		return err
+	}
+	m.documents = result.Hits
+	m.total = result.Total
+	m.hasMore = len(m.documents) < int(m.total)
+	if len(result.Hits) > 0 {
+		m.searchAfter = result.Hits[len(result.Hits)-1].Sort
+	}
+	m.updateDetailPane()
+	return nil
 }
 
 func (m BrowserModel) filteredIndices() []es.IndexInfo {
@@ -207,9 +233,10 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 				}
 			case BrowserPaneDetail:
 				if msg.Button == tea.MouseButtonWheelUp {
-					m.detail.ScrollUp(scrollAmount)
+					m.detailScroll = max(0, m.detailScroll-scrollAmount)
 				} else {
-					m.detail.ScrollDown(scrollAmount)
+					maxScroll := max(0, len(m.detailContent)-m.detailHeight)
+					m.detailScroll = min(maxScroll, m.detailScroll+scrollAmount)
 				}
 			}
 		}
@@ -259,7 +286,7 @@ func (m *BrowserModel) handleUp() {
 			m.updateDetailPane()
 		}
 	case BrowserPaneDetail:
-		m.detail.ScrollUp(1)
+		m.detailScroll = max(0, m.detailScroll-1)
 	}
 }
 
@@ -288,7 +315,8 @@ func (m *BrowserModel) handleDown() tea.Cmd {
 			}
 		}
 	case BrowserPaneDetail:
-		m.detail.ScrollDown(1)
+		maxScroll := max(0, len(m.detailContent)-m.detailHeight)
+		m.detailScroll = min(maxScroll, m.detailScroll+1)
 	}
 	return nil
 }
@@ -325,7 +353,7 @@ func (m *BrowserModel) handlePageUp() tea.Cmd {
 		}
 		m.updateDetailPane()
 	case BrowserPaneDetail:
-		m.detail.ScrollUp(m.detail.Height)
+		m.detailScroll = max(0, m.detailScroll-m.detailHeight)
 	}
 	return nil
 }
@@ -359,7 +387,8 @@ func (m *BrowserModel) handlePageDown() tea.Cmd {
 			return m.startFetchDocuments(true)
 		}
 	case BrowserPaneDetail:
-		m.detail.ScrollDown(m.detail.Height)
+		maxScroll := max(0, len(m.detailContent)-m.detailHeight)
+		m.detailScroll = min(maxScroll, m.detailScroll+m.detailHeight)
 	}
 	return nil
 }
@@ -373,18 +402,24 @@ func (m BrowserModel) shouldLoadMore() bool {
 
 func (m *BrowserModel) updateDetailPane() {
 	if m.selectedDoc < 0 || m.selectedDoc >= len(m.documents) {
-		m.detail.SetContent("")
+		m.detailContent = nil
+		m.detailScroll = 0
 		return
 	}
 
 	doc := m.documents[m.selectedDoc]
-	var pretty bytes.Buffer
-	if err := json.Indent(&pretty, []byte(doc.Source), "", "  "); err == nil {
-		m.detail.SetContent(highlightJSON(pretty.String()))
-	} else {
-		m.detail.SetContent(doc.Source)
+	var obj any
+	if err := json.Unmarshal([]byte(doc.Source), &obj); err == nil {
+		if pretty, err := json.MarshalIndent(obj, "", "  "); err == nil {
+			sanitized := SanitizeForTerminal(string(pretty))
+			highlighted := highlightJSON(sanitized)
+			m.detailContent = strings.Split(highlighted, "\n")
+			m.detailScroll = 0
+			return
+		}
 	}
-	m.detail.GotoTop()
+	m.detailContent = []string{SanitizeForTerminal(doc.Source)}
+	m.detailScroll = 0
 }
 
 func (m BrowserModel) selectedDocSource() string {
@@ -448,6 +483,10 @@ func (m BrowserModel) maxDocScroll() int {
 }
 
 func (m BrowserModel) View() string {
+	if m.height == 0 || m.width == 0 {
+		return ""
+	}
+
 	leftWidth := m.width / 4
 	middleWidth := m.width / 3
 	rightWidth := m.width - leftWidth - middleWidth - 4
@@ -460,13 +499,10 @@ func (m BrowserModel) View() string {
 	middleLines := strings.Split(middlePane, "\n")
 	rightLines := strings.Split(rightPane, "\n")
 
-	maxLines := max(len(leftLines), max(len(middleLines), len(rightLines)))
-
+	targetLines := m.height - 2
 	var lines []string
-	for i := 0; i < maxLines; i++ {
-		ll := ""
-		ml := ""
-		rl := ""
+	for i := 0; i < targetLines; i++ {
+		ll, ml, rl := "", "", ""
 		if i < len(leftLines) {
 			ll = TrimANSI(leftLines[i])
 		}
@@ -507,14 +543,14 @@ func (m BrowserModel) renderIndexList(width int) string {
 		name := Truncate(idx.Name, innerWidth-2)
 
 		style := lipgloss.NewStyle()
+		prefix := "  "
 		if i == m.selectedIndex {
 			style = style.Background(ActiveBg).Foreground(ColorWhite)
-			name = "> " + name
-		} else {
-			name = "  " + name
+			prefix = "> "
 		}
 
-		content.WriteString(style.Render(fmt.Sprintf("%-*s", innerWidth, name)))
+		line := fmt.Sprintf("%s%-*s", prefix, innerWidth-2, name)
+		content.WriteString(style.Render(line))
 		content.WriteString("\n")
 	}
 
@@ -556,7 +592,7 @@ func (m BrowserModel) renderDocList(width int) string {
 		for i := m.docScroll; i < len(m.documents) && i < m.docScroll+maxVisible; i++ {
 			doc := m.documents[i]
 			id := Truncate(doc.ID, idWidth)
-			preview := Truncate(doc.Source, previewWidth)
+			preview := Truncate(sanitizeLine(doc.Source), previewWidth)
 
 			style := lipgloss.NewStyle()
 			prefix := "  "
@@ -593,7 +629,23 @@ func (m BrowserModel) renderDetailPane(width int) string {
 	}
 	content.WriteString(lipgloss.NewStyle().Bold(true).Render(header))
 	content.WriteString("\n")
-	content.WriteString(m.detail.View())
+
+	innerWidth := width - 4
+	boxInnerHeight := m.height - 4
+	visibleLines := max(0, boxInnerHeight-3)
+	linesWritten := 0
+	for i := m.detailScroll; i < len(m.detailContent) && linesWritten < visibleLines; i++ {
+		line := m.detailContent[i]
+		wrapped := wrapLine(line, innerWidth)
+		for _, wl := range wrapped {
+			if linesWritten >= visibleLines {
+				break
+			}
+			content.WriteString(wl)
+			content.WriteString("\n")
+			linesWritten++
+		}
+	}
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -602,3 +654,59 @@ func (m BrowserModel) renderDetailPane(width int) string {
 		Height(m.height - 4).
 		Render(content.String())
 }
+
+func wrapLine(line string, maxWidth int) []string {
+	if maxWidth <= 0 {
+		return []string{line}
+	}
+	visualWidth := lipgloss.Width(line)
+	if visualWidth <= maxWidth {
+		return []string{line}
+	}
+	var result []string
+	var current strings.Builder
+	currentWidth := 0
+	runes := []rune(line)
+	i := 0
+	for i < len(runes) {
+		if runes[i] == '\x1b' && i+1 < len(runes) && runes[i+1] == '[' {
+			start := i
+			i += 2
+			for i < len(runes) && !((runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= 'a' && runes[i] <= 'z')) {
+				i++
+			}
+			if i < len(runes) {
+				i++
+			}
+			current.WriteString(string(runes[start:i]))
+			continue
+		}
+		if currentWidth >= maxWidth {
+			result = append(result, current.String())
+			current.Reset()
+			currentWidth = 0
+		}
+		current.WriteRune(runes[i])
+		currentWidth++
+		i++
+	}
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+	return result
+}
+
+func sanitizeLine(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r >= 32 && r < 127 {
+			b.WriteRune(r)
+		} else {
+			quoted := strconv.QuoteRuneToASCII(r)
+			b.WriteString(quoted[1 : len(quoted)-1])
+		}
+	}
+	return b.String()
+}
+

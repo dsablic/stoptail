@@ -278,3 +278,31 @@ func FormatBytes(b int64) string {
 		return fmt.Sprintf("%db", b)
 	}
 }
+
+func SanitizeForTerminal(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\n' || r == '\t':
+			b.WriteRune(r)
+		case r < 32:
+			continue
+		case r == 0x7F:
+			continue
+		case r >= 0x80 && r <= 0x9F:
+			continue
+		case r >= 0x200B && r <= 0x200F:
+			continue
+		case r >= 0x202A && r <= 0x202E:
+			continue
+		case r >= 0x2060 && r <= 0x206F:
+			continue
+		case r == 0xFEFF:
+			continue
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}

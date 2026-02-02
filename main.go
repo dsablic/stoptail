@@ -106,7 +106,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	p := tea.NewProgram(ui.New(client, cfg), tea.WithMouseCellMotion())
+	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		return err
 	}
@@ -440,6 +440,13 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		browser.SetClient(client)
 		browser.SetSize(width, height)
 		browser.SetIndices(state.Indices)
+		if view != "" {
+			if browser.SelectIndexByName(view) {
+				if err := browser.LoadDocumentsSync(ctx); err != nil {
+					return fmt.Errorf("loading documents: %w", err)
+				}
+			}
+		}
 		fmt.Println(browser.View())
 
 	case "tasks":

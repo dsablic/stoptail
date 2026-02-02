@@ -279,9 +279,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.duration = msg.result.Duration.String()
 			var pretty bytes.Buffer
 			if err := json.Indent(&pretty, []byte(msg.result.Body), "", "  "); err == nil {
-				m.responseText = highlightJSON(pretty.String())
+				m.responseText = highlightJSON(SanitizeForTerminal(pretty.String()))
 			} else {
-				m.responseText = highlightJSON(msg.result.Body)
+				m.responseText = highlightJSON(SanitizeForTerminal(msg.result.Body))
 			}
 			if msg.result.StatusCode < 400 {
 				m.addToHistory()
