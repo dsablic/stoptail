@@ -994,21 +994,33 @@ func (m OverviewModel) renderGrid() string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+	maxAliases := 0
 	for i, idx := range indices {
 		if i >= m.scrollX && i < m.scrollX+visibleCols {
 			aliases := m.cluster.GetAliasesForIndex(idx.Name)
-			aliasStyle := lipgloss.NewStyle().
-				Width(indexColWidth).
-				Foreground(ColorBlue)
-			aliasText := ""
-			if len(aliases) > 0 {
-				aliasText = "[" + strings.Join(aliases, ",") + "]"
+			if len(aliases) > maxAliases {
+				maxAliases = len(aliases)
 			}
-			b.WriteString(aliasStyle.Render(Truncate(aliasText, indexColWidth-2)))
 		}
 	}
-	b.WriteString("\n")
+	aliasStyle := lipgloss.NewStyle().
+		Width(indexColWidth).
+		Foreground(ColorBlue)
+	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
+	for row := 0; row < maxAliases; row++ {
+		b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+		for i, idx := range indices {
+			if i >= m.scrollX && i < m.scrollX+visibleCols {
+				aliases := m.cluster.GetAliasesForIndex(idx.Name)
+				if row < len(aliases) {
+					b.WriteString(aliasStyle.Render(Truncate(aliases[row], indexColWidth-2)))
+				} else {
+					b.WriteString(emptyCol)
+				}
+			}
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString(strings.Repeat("─", contentWidth) + "\n")
 
 	// Node rows
@@ -1023,7 +1035,6 @@ func (m OverviewModel) renderGrid() string {
 
 	nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
 	selectedNodeStyle := lipgloss.NewStyle().Width(nodeColWidth).Background(ColorBlue).Foreground(ColorOnAccent)
-	emptyCol := lipgloss.NewStyle().Width(indexColWidth).Render("")
 
 	maxLinesPerNode := 4
 
