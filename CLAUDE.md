@@ -71,7 +71,7 @@ go test -v ./...
 go vet ./...
 staticcheck ./...
 
-# Test query editor (syntax highlighting, cursor, selection, mouse handling)
+# Test query editor (selection, shift+arrow, select all, delete)
 go run cmd/editor-test/main.go -test
 
 # Interactive query editor test (for manual verification)
@@ -87,23 +87,22 @@ go run cmd/editor-test/main.go -test
 ```
 
 This tests:
-- Syntax highlighting in unfocused/focused states
-- Cursor rendering with syntax highlighting preserved
 - Selection highlighting (Shift+arrow)
+- SelectAll and DeleteSelection
 - GetSelectedText functionality
 
-Note: Mouse text selection uses terminal-native selection (Alt+drag on Linux/Windows, Option+drag on macOS).
+The editor uses Bubble Tea's native textarea for cursor rendering. Mouse text selection uses terminal-native selection (Alt+drag on Linux/Windows, Option+drag on macOS).
 
-For interactive testing of cursor positioning and visual appearance:
+For interactive testing:
 
 ```bash
 go run cmd/editor-test/main.go
 ```
 
 **Update the tests** in `cmd/editor-test/main.go` when:
-- Changing cursor rendering or positioning
-- Modifying syntax highlighting
-- Adding new Shift+arrow selection features
+- Modifying selection behavior (Shift+arrow, SelectAll)
+- Adding new selection features
+- Changing how DeleteSelection works
 
 ## Code Style
 

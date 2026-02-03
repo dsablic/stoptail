@@ -5,30 +5,6 @@ import (
 	"testing"
 )
 
-func TestRenderLineNumbers(t *testing.T) {
-	tests := []struct {
-		name      string
-		content   string
-		width     int
-		wantLines int
-	}{
-		{"empty", "", 3, 1},
-		{"single line", "{}", 3, 1},
-		{"multi line", "{\n  \"a\": 1\n}", 3, 3},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := NewEditor()
-			e.SetContent(tt.content)
-			gutter := e.renderGutter(tt.width, 10)
-			lines := len(splitLines(gutter))
-			if lines != tt.wantLines {
-				t.Errorf("got %d lines, want %d", lines, tt.wantLines)
-			}
-		})
-	}
-}
-
 func TestValidationDebounce(t *testing.T) {
 	e := NewEditor()
 	e.SetContent(`{"query": {}}`)
@@ -36,31 +12,6 @@ func TestValidationDebounce(t *testing.T) {
 	cmd := e.triggerValidation()
 	if cmd == nil {
 		t.Error("expected validation command")
-	}
-}
-
-func TestScreenToPosition(t *testing.T) {
-	e := NewEditor()
-	e.SetContent("{\n  \"key\": 1\n}")
-	e.SetSize(40, 10)
-
-	tests := []struct {
-		name     string
-		x, y     int
-		wantLine int
-		wantCol  int
-	}{
-		{"first char", 6, 0, 0, 0},
-		{"second line", 6, 1, 1, 0},
-		{"with offset", 8, 1, 1, 2},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			line, col := e.screenToPosition(tt.x, tt.y)
-			if line != tt.wantLine || col != tt.wantCol {
-				t.Errorf("got (%d,%d), want (%d,%d)", line, col, tt.wantLine, tt.wantCol)
-			}
-		})
 	}
 }
 
@@ -83,42 +34,15 @@ func TestEditorView(t *testing.T) {
 	e.SetContent(`{"query": {}}`)
 	e.SetSize(60, 10)
 	view := e.View()
-	if !strings.Contains(view, "1") {
-		t.Error("expected line numbers in view")
-	}
 	if !strings.Contains(view, "query") {
 		t.Error("expected content in view")
 	}
 }
 
-func TestRenderPlainWithCursor(t *testing.T) {
-	e := NewEditor()
-	content := "hello"
-
-	result := e.renderPlainWithCursor(content, 0, 2)
-	if !strings.Contains(result, "\x1b[7m") {
-		t.Error("expected reverse video ANSI code for cursor")
-	}
-	if !strings.Contains(result, "l") {
-		t.Error("expected cursor character 'l' in output")
-	}
-}
-
-func TestEditorViewStateTransitions(t *testing.T) {
+func TestEditorViewWithSelection(t *testing.T) {
 	e := NewEditor()
 	e.SetContent(`{"query": {}}`)
 	e.SetSize(60, 10)
-
-	unfocusedView := e.View()
-	if !strings.Contains(unfocusedView, "\x1b[") {
-		t.Error("unfocused view should have ANSI codes for line numbers")
-	}
-
-	e.Focus()
-	focusedView := e.View()
-	if !strings.Contains(focusedView, "\x1b[7m") {
-		t.Error("focused view should show cursor (reverse video)")
-	}
 
 	e.selection = Selection{
 		StartLine: 0, StartCol: 0,
@@ -129,22 +53,6 @@ func TestEditorViewStateTransitions(t *testing.T) {
 	if !strings.Contains(selectionView, "\x1b[7m") {
 		t.Error("selection view should show selection (reverse video)")
 	}
-}
-
-func splitLines(s string) []string {
-	if s == "" {
-		return []string{""}
-	}
-	var lines []string
-	start := 0
-	for i, c := range s {
-		if c == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-	lines = append(lines, s[start:])
-	return lines
 }
 
 func TestIsKeyCompletionPosition(t *testing.T) {
@@ -173,17 +81,46 @@ func TestIsKeyCompletionPosition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e := NewEditor()
 			e.SetContent(tt.content)
-			lines := strings.Split(tt.content, "\n")
-			lastLine := len(lines) - 1
-			lastCol := len(lines[lastLine])
 			e.textarea.SetCursor(len(tt.content))
-			e.cursorLine = lastLine
-			e.cursorCol = lastCol
-			e.cursorSet = true
 			got := e.IsKeyCompletionPosition()
 			if got != tt.want {
 				t.Errorf("IsKeyCompletionPosition() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSelectAllAndDelete(t *testing.T) {
+	e := NewEditor()
+	e.SetContent("hello world")
+	e.SelectAll()
+
+	if !e.selection.Active {
+		t.Error("selection should be active after SelectAll")
+	}
+	if e.selection.StartLine != 0 || e.selection.StartCol != 0 {
+		t.Error("selection should start at 0,0")
+	}
+	if e.selection.EndLine != 0 || e.selection.EndCol != 11 {
+		t.Errorf("selection should end at 0,11, got %d,%d", e.selection.EndLine, e.selection.EndCol)
+	}
+
+	e.DeleteSelection()
+	if e.Content() != "" {
+		t.Errorf("content should be empty after delete, got %q", e.Content())
+	}
+	if e.selection.Active {
+		t.Error("selection should be inactive after delete")
+	}
+}
+
+func TestDeleteSelectionMultiLine(t *testing.T) {
+	e := NewEditor()
+	e.SetContent("line1\nline2\nline3")
+	e.SetSelection(0, 2, 1, 3)
+
+	e.DeleteSelection()
+	if e.Content() != "lie2\nline3" {
+		t.Errorf("unexpected content after delete: %q", e.Content())
 	}
 }

@@ -407,7 +407,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				text := m.editor.GetSelectedText()
 				if text != "" {
 					m.clipboard.Copy(text)
-					m.editor.selection.Active = false
 				}
 				return m, nil
 			}
@@ -563,7 +562,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		paneInnerWidth := (m.width - 5) / 2
 		topRowHeight := 3
 		bodyPaneTop := topRowHeight + 2
-		bodyHeaderHeight := 1
 
 		if m.methodDropdown.Open() && msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
 			action := m.methodDropdown.HandleClick(msg.X, msg.Y)
@@ -575,12 +573,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 
 		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
 			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
-				editorX := msg.X - 1
-				editorY := msg.Y - bodyPaneTop - 1 - bodyHeaderHeight
 				m.path.Blur()
 				m.editor.Focus()
 				m.focus = FocusBody
-				m.editor.HandleClick(editorX, editorY)
 				return m, nil
 			}
 		}

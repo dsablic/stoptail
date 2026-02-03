@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -40,15 +39,11 @@ type Editor struct {
 	textarea        textarea.Model
 	width           int
 	height          int
-	gutterWidth     int
 	client          *es.Client
 	index           string
 	validationState ValidationState
 	validationError string
 	selection       Selection
-	cursorLine      int
-	cursorCol       int
-	cursorSet       bool
 	undoStack       []editorState
 	redoStack       []editorState
 }
@@ -62,9 +57,9 @@ func NewEditor() Editor {
 	ta := textarea.New()
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 50000
+	ta.Prompt = ""
 	return Editor{
-		textarea:    ta,
-		gutterWidth: 4,
+		textarea: ta,
 	}
 }
 
@@ -115,26 +110,6 @@ func (e Editor) executeValidation(ctx context.Context) tea.Cmd {
 		return validateMsg{result: result, err: err}
 	}
 }
-
-func (e Editor) renderGutter(width, height int) string {
-	content := e.textarea.Value()
-	lineCount := 1 + strings.Count(content, "\n")
-	if content == "" {
-		lineCount = 1
-	}
-
-	gutterStyle := lipgloss.NewStyle().
-		Foreground(ColorGray).
-		Width(width).
-		Align(lipgloss.Right)
-
-	var lines []string
-	for i := 1; i <= lineCount && i <= height; i++ {
-		lines = append(lines, gutterStyle.Render(fmt.Sprintf("%d", i)))
-	}
-	return strings.Join(lines, "\n")
-}
-
 
 func (e Editor) IsKeyCompletionPosition() bool {
 	content := e.textarea.Value()
@@ -200,14 +175,8 @@ func (e Editor) getCursorOffset() int {
 	content := e.textarea.Value()
 	lines := strings.Split(content, "\n")
 
-	var row, col int
-	if e.cursorSet {
-		row = e.cursorLine
-		col = e.cursorCol
-	} else {
-		row = e.Line()
-		col = e.LineInfo().CharOffset
-	}
+	row := e.Line()
+	col := e.LineInfo().CharOffset
 
 	offset := 0
 	for i := 0; i < row && i < len(lines); i++ {
@@ -223,62 +192,8 @@ func (e Editor) getCursorOffset() int {
 func (e *Editor) SetSize(width, height int) {
 	e.width = width
 	e.height = height
-	e.textarea.SetWidth(width - e.gutterWidth - 2)
+	e.textarea.SetWidth(width)
 	e.textarea.SetHeight(height)
-}
-
-func (e Editor) screenToPosition(x, y int) (line, col int) {
-	content := e.textarea.Value()
-	lines := strings.Split(content, "\n")
-	gutterWidth := 3
-	if len(lines) >= 100 {
-		gutterWidth = 4
-	}
-	separatorWidth := 3
-	adjustedX := x - gutterWidth - separatorWidth
-	if adjustedX < 0 {
-		adjustedX = 0
-	}
-	if y < 0 {
-		y = 0
-	}
-	return y, adjustedX
-}
-
-func (e *Editor) HandleClick(x, y int) {
-	line, col := e.screenToPosition(x, y)
-	e.setCursorPosition(line, col)
-	e.selection.Active = false
-}
-
-func (e *Editor) setCursorPosition(line, col int) {
-	lines := strings.Split(e.textarea.Value(), "\n")
-	if line < 0 {
-		line = 0
-	}
-	if line >= len(lines) {
-		line = len(lines) - 1
-	}
-	if line < 0 {
-		return
-	}
-	lineLen := len(lines[line])
-	if col < 0 {
-		col = 0
-	}
-	if col > lineLen {
-		col = lineLen
-	}
-	e.cursorLine = line
-	e.cursorCol = col
-	e.cursorSet = true
-
-	offset := 0
-	for i := 0; i < line && i < len(lines); i++ {
-		offset += len(lines[i]) + 1
-	}
-	offset += col
-	e.textarea.SetCursor(offset)
 }
 
 func (e Editor) renderWithSelection(content string) string {
@@ -339,86 +254,11 @@ func (e Editor) renderWithSelection(content string) string {
 	return strings.Join(result, "\n")
 }
 
-func (e Editor) renderPlainWithCursor(content string, cursorLine, cursorCol int) string {
-	lines := strings.Split(content, "\n")
-	if cursorLine < 0 || cursorLine >= len(lines) {
-		return content
-	}
-
-	line := lines[cursorLine]
-	runes := []rune(line)
-	if cursorCol > len(runes) {
-		cursorCol = len(runes)
-	}
-
-	cursorStyle := lipgloss.NewStyle().Reverse(true)
-	var newLine string
-	if cursorCol >= len(runes) {
-		newLine = line + cursorStyle.Render(" ")
-	} else {
-		newLine = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
-	}
-	lines[cursorLine] = newLine
-	return strings.Join(lines, "\n")
-}
-
 func (e Editor) View() string {
-	content := e.textarea.Value()
-	lines := strings.Split(content, "\n")
-	lineCount := len(lines)
-
-	gutterWidth := 3
-	if lineCount >= 100 {
-		gutterWidth = 4
-	}
-
-	var cursorLine, cursorCol int
-	if e.cursorSet {
-		cursorLine = e.cursorLine
-		cursorCol = e.cursorCol
-	} else {
-		cursorLine = e.textarea.Line()
-		cursorCol = e.textarea.LineInfo().CharOffset
-	}
-
-	var displayContent string
 	if e.selection.Active {
-		displayContent = e.renderWithSelection(content)
-	} else if e.textarea.Focused() {
-		displayContent = e.renderPlainWithCursor(content, cursorLine, cursorCol)
-	} else {
-		displayContent = content
+		return e.renderWithSelection(e.textarea.Value())
 	}
-
-	displayLines := strings.Split(displayContent, "\n")
-
-	gutterStyle := lipgloss.NewStyle().
-		Foreground(ColorGray).
-		Width(gutterWidth).
-		Align(lipgloss.Right)
-
-	separatorStyle := lipgloss.NewStyle().Foreground(ColorGray)
-
-	var resultLines []string
-	visibleLines := e.height
-	if visibleLines == 0 {
-		visibleLines = lineCount
-	}
-	if visibleLines > lineCount {
-		visibleLines = lineCount
-	}
-
-	for i := 0; i < visibleLines; i++ {
-		lineNum := gutterStyle.Render(fmt.Sprintf("%d", i+1))
-		separator := separatorStyle.Render(" \u2502 ")
-		lineContent := ""
-		if i < len(displayLines) {
-			lineContent = displayLines[i]
-		}
-		resultLines = append(resultLines, lineNum+separator+lineContent)
-	}
-
-	return strings.Join(resultLines, "\n")
+	return e.textarea.View()
 }
 
 func (e Editor) GetSelectedText() string {
@@ -485,16 +325,34 @@ func (e Editor) Focused() bool {
 
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		e.cursorSet = false
-		switch keyMsg.String() {
+		key := keyMsg.String()
+		switch key {
 		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
 			return e.handleShiftArrow(keyMsg)
 		case "left", "right", "up", "down", "home", "end":
 			e.selection.Active = false
-		default:
-			key := keyMsg.String()
-			if len(key) == 1 || key == "backspace" || key == "delete" || key == "enter" {
+		case "backspace", "delete":
+			if e.selection.Active {
 				e.SaveState()
+				e.DeleteSelection()
+				return nil
+			}
+			e.SaveState()
+		case "enter":
+			if e.selection.Active {
+				e.SaveState()
+				e.DeleteSelection()
+			} else {
+				e.SaveState()
+			}
+		default:
+			if len(key) == 1 {
+				if e.selection.Active {
+					e.SaveState()
+					e.DeleteSelection()
+				} else {
+					e.SaveState()
+				}
 			}
 		}
 	}
@@ -644,7 +502,13 @@ func (e *Editor) DeleteSelection() {
 	}
 
 	e.textarea.SetValue(result.String())
-	e.setCursorPosition(startLine, startCol)
+	offset := 0
+	newLines := strings.Split(result.String(), "\n")
+	for i := 0; i < startLine && i < len(newLines); i++ {
+		offset += len(newLines[i]) + 1
+	}
+	offset += startCol
+	e.textarea.SetCursor(offset)
 	e.selection.Active = false
 }
 
