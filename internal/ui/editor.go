@@ -176,16 +176,19 @@ func (e Editor) getCursorOffset() int {
 	lines := strings.Split(content, "\n")
 
 	row := e.Line()
-	col := e.LineInfo().CharOffset
+	col := e.logicalCol()
 
 	offset := 0
 	for i := 0; i < row && i < len(lines); i++ {
 		offset += len(lines[i]) + 1
 	}
-	if row < len(lines) && col > len(lines[row]) {
-		col = len(lines[row])
+	if row < len(lines) {
+		runes := []rune(lines[row])
+		if col > len(runes) {
+			col = len(runes)
+		}
+		offset += len(string(runes[:col]))
 	}
-	offset += col
 	return offset
 }
 
@@ -254,11 +257,38 @@ func (e Editor) renderWithSelection(content string) string {
 	return strings.Join(result, "\n")
 }
 
-func (e Editor) View() string {
-	if e.selection.Active {
-		return e.renderWithSelection(e.textarea.Value())
+func (e Editor) renderWithCursor(content string) string {
+	lines := strings.Split(content, "\n")
+	cursorLine := e.textarea.Line()
+	cursorCol := e.logicalCol()
+
+	if cursorLine < 0 || cursorLine >= len(lines) {
+		return content
 	}
-	return e.textarea.View()
+
+	runes := []rune(lines[cursorLine])
+	if cursorCol > len(runes) {
+		cursorCol = len(runes)
+	}
+
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+	if cursorCol >= len(runes) {
+		lines[cursorLine] = string(runes) + cursorStyle.Render(" ")
+	} else {
+		lines[cursorLine] = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (e Editor) View() string {
+	content := e.textarea.Value()
+	if e.selection.Active {
+		return e.renderWithSelection(content)
+	}
+	if e.textarea.Focused() {
+		return e.renderWithCursor(content)
+	}
+	return content
 }
 
 func (e Editor) GetSelectedText() string {
@@ -364,7 +394,7 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 
 func (e *Editor) handleShiftArrow(msg tea.KeyMsg) tea.Cmd {
 	curLine := e.textarea.Line()
-	curCol := e.textarea.LineInfo().CharOffset
+	curCol := e.logicalCol()
 
 	if !e.selection.Active {
 		e.selection.AnchorLine = curLine
@@ -389,7 +419,7 @@ func (e *Editor) handleShiftArrow(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	newLine := e.textarea.Line()
-	newCol := e.textarea.LineInfo().CharOffset
+	newCol := e.logicalCol()
 
 	e.updateSelectionFromAnchor(newLine, newCol)
 
@@ -419,6 +449,11 @@ func (e Editor) Line() int {
 
 func (e Editor) LineInfo() textarea.LineInfo {
 	return e.textarea.LineInfo()
+}
+
+func (e Editor) logicalCol() int {
+	li := e.textarea.LineInfo()
+	return li.StartColumn + li.ColumnOffset
 }
 
 func (e *Editor) InsertString(s string) {
