@@ -398,7 +398,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, nil
 			}
 		case "alt+f":
-			if m.queryMode == ModeREST {
+			if m.focus != FocusBody && m.queryMode == ModeREST {
 				m.prettyPrintBody()
 				return m, nil
 			}

@@ -359,7 +359,8 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 		switch key {
 		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
 			return e.handleShiftArrow(keyMsg)
-		case "left", "right", "up", "down", "home", "end":
+		case "left", "right", "up", "down", "home", "end",
+			"alt+left", "alt+right", "alt+b", "alt+f":
 			e.selection.Active = false
 		case "backspace", "delete":
 			if e.selection.Active {
