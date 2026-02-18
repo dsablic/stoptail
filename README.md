@@ -1,5 +1,10 @@
 # stoptail
 
+[![Go Version](https://img.shields.io/github/go-mod/go-version/dsablic/stoptail)](https://go.dev/)
+[![Latest Release](https://img.shields.io/github/v/release/dsablic/stoptail)](https://github.com/dsablic/stoptail/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/labtiva/stoptail)](https://goreportcard.com/report/github.com/labtiva/stoptail)
+
 A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go and the [Charm](https://charm.sh) stack.
 
 ![stoptail demo](demo.gif)
