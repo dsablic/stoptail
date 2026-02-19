@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"net/url"
 	"os"
@@ -185,8 +186,14 @@ func (c *ClustersConfig) ResolveURL(name string) (string, error) {
 	}
 
 	if entry.URLCommand != "" {
-		out, err := exec.Command("sh", "-c", entry.URLCommand).Output()
+		var stderr bytes.Buffer
+		cmd := exec.Command("sh", "-c", entry.URLCommand)
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
 		if err != nil {
+			if stderr.Len() > 0 {
+				return "", fmt.Errorf("running url_command for %q: %w\n%s", name, err, strings.TrimSpace(stderr.String()))
+			}
 			return "", fmt.Errorf("running url_command for %q: %w", name, err)
 		}
 		return strings.TrimSpace(string(out)), nil

@@ -37,7 +37,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Browse field mappings for any index
   - Toggle between tree and flat view
   - View field types and properties (analyzer, index, doc_values, etc.)
-  - See custom analyzers, tokenizers, and filters
+  - See custom analyzers, tokenizers, filters, and normalizers
   - Toggle to view index settings (shards, replicas, refresh interval, etc.)
 - **Cluster Tab**: Node statistics and cluster-wide information with 9 switchable views
   - Memory: heap%, GC stats, fielddata, query cache, segments (master node marked with `*`)

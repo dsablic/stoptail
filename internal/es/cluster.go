@@ -503,9 +503,10 @@ func (c *Client) FetchIndexAnalyzers(ctx context.Context, indexName string) ([]A
 		Settings struct {
 			Index struct {
 				Analysis struct {
-					Analyzer  map[string]json.RawMessage `json:"analyzer"`
-					Tokenizer map[string]json.RawMessage `json:"tokenizer"`
-					Filter    map[string]json.RawMessage `json:"filter"`
+					Analyzer   map[string]json.RawMessage `json:"analyzer"`
+					Tokenizer  map[string]json.RawMessage `json:"tokenizer"`
+					Filter     map[string]json.RawMessage `json:"filter"`
+					Normalizer map[string]json.RawMessage `json:"normalizer"`
 				} `json:"analysis"`
 			} `json:"index"`
 		} `json:"settings"`
@@ -526,10 +527,13 @@ func (c *Client) FetchIndexAnalyzers(ctx context.Context, indexName string) ([]A
 	for name, raw := range indexData.Settings.Index.Analysis.Filter {
 		analyzers = append(analyzers, parseAnalyzerInfo(name, "filter", raw))
 	}
+	for name, raw := range indexData.Settings.Index.Analysis.Normalizer {
+		analyzers = append(analyzers, parseAnalyzerInfo(name, "normalizer", raw))
+	}
 
 	sort.Slice(analyzers, func(i, j int) bool {
 		if analyzers[i].Kind != analyzers[j].Kind {
-			kindOrder := map[string]int{"analyzer": 0, "tokenizer": 1, "filter": 2}
+			kindOrder := map[string]int{"analyzer": 0, "tokenizer": 1, "filter": 2, "normalizer": 3}
 			return kindOrder[analyzers[i].Kind] < kindOrder[analyzers[j].Kind]
 		}
 		return analyzers[i].Name < analyzers[j].Name

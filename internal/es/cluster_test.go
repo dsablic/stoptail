@@ -593,6 +593,21 @@ func TestParseMappingResponse(t *testing.T) {
 	}
 }
 
+func TestParseAnalyzerInfoWithNormalizer(t *testing.T) {
+	raw := json.RawMessage(`{"type":"custom","filter":["lowercase","asciifolding"]}`)
+	info := parseAnalyzerInfo("my_normalizer", "normalizer", raw)
+
+	if info.Name != "my_normalizer" {
+		t.Errorf("Name = %q, want %q", info.Name, "my_normalizer")
+	}
+	if info.Kind != "normalizer" {
+		t.Errorf("Kind = %q, want %q", info.Kind, "normalizer")
+	}
+	if info.Settings["filter"] != "lowercase, asciifolding" {
+		t.Errorf("Settings[filter] = %q, want %q", info.Settings["filter"], "lowercase, asciifolding")
+	}
+}
+
 func TestAnalyzeShardHealth(t *testing.T) {
 	tests := []struct {
 		name       string

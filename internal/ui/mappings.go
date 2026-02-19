@@ -727,7 +727,7 @@ func (m MappingsModel) renderAnalyzers(width int) []string {
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
 	lines = append(lines, headerStyle.Render("Custom Analyzers"))
 
-	kindOrder := map[string]int{"analyzer": 0, "tokenizer": 1, "filter": 2}
+	kindOrder := map[string]int{"analyzer": 0, "tokenizer": 1, "filter": 2, "normalizer": 3}
 	sorted := make([]es.AnalyzerInfo, len(m.analyzers))
 	copy(sorted, m.analyzers)
 	sort.Slice(sorted, func(i, j int) bool {
