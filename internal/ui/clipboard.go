@@ -1,10 +1,9 @@
 package ui
 
 import (
-	"os/exec"
 	"regexp"
-	"runtime"
-	"strings"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -17,54 +16,20 @@ func NewClipboard() Clipboard {
 	return Clipboard{}
 }
 
-func (c *Clipboard) Copy(text string) bool {
+func (c *Clipboard) Copy(text string) tea.Cmd {
 	text = ansiPattern.ReplaceAllString(text, "")
 	if text == "" {
 		c.message = "Nothing to copy"
-		return false
+		return nil
 	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbcopy")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	case "windows":
-		cmd = exec.Command("clip")
-	default:
-		c.message = "Copy failed"
-		return false
-	}
-
-	cmd.Stdin = strings.NewReader(text)
-	if err := cmd.Run(); err != nil {
-		c.message = "Copy failed"
-		return false
-	}
-
 	c.message = "Copied!"
-	return true
+	return tea.SetClipboard(text)
 }
 
-func (c *Clipboard) Paste() (string, bool) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("pbpaste")
-	case "linux":
-		cmd = exec.Command("xclip", "-selection", "clipboard", "-o")
-	case "windows":
-		cmd = exec.Command("powershell", "-command", "Get-Clipboard")
-	default:
-		return "", false
+func (c *Clipboard) Paste() tea.Cmd {
+	return func() tea.Msg {
+		return tea.ReadClipboard()
 	}
-
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false
-	}
-	return string(out), true
 }
 
 func (c *Clipboard) Message() string {

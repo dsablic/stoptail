@@ -207,7 +207,7 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 			}
 		case "ctrl+y":
 			if m.activePane == BrowserPaneDetail && len(m.documents) > 0 {
-				m.clipboard.Copy(m.selectedDocSource())
+				return m, m.clipboard.Copy(m.selectedDocSource())
 			}
 		}
 

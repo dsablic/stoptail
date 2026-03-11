@@ -322,6 +322,19 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.ClipboardMsg:
+		if m.focus == FocusBody {
+			text := msg.Content
+			if text != "" {
+				m.editor.SaveState()
+				if m.editor.selection.Active {
+					m.editor.DeleteSelection()
+				}
+				m.editor.InsertString(text)
+			}
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		m.clipboard.ClearMessage()
 		if m.bookmarkUI.Active() {
@@ -398,8 +411,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			case FocusResponse:
 				text = m.responseText
 			}
-			m.clipboard.Copy(text)
-			return m, nil
+			return m, m.clipboard.Copy(text)
 		case "ctrl+e":
 			if m.focus != FocusBody {
 				m.toggleMode()
@@ -414,7 +426,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			if m.focus == FocusBody && m.editor.selection.Active {
 				text := m.editor.GetSelectedText()
 				if text != "" {
-					m.clipboard.Copy(text)
+					return m, m.clipboard.Copy(text)
 				}
 				return m, nil
 			}
@@ -425,14 +437,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "ctrl+v":
 			if m.focus == FocusBody {
-				if text, ok := m.clipboard.Paste(); ok && text != "" {
-					m.editor.SaveState()
-					if m.editor.selection.Active {
-						m.editor.DeleteSelection()
-					}
-					m.editor.InsertString(text)
-				}
-				return m, nil
+				return m, m.clipboard.Paste()
 			}
 		case "ctrl+z":
 			if m.focus == FocusBody {

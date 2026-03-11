@@ -136,8 +136,7 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				return m, nil
 			}
 		case "ctrl+y":
-			m.clipboard.Copy(m.copyableContent())
-			return m, nil
+			return m, m.clipboard.Copy(m.copyableContent())
 		case "/":
 			if m.activePane == PaneIndices {
 				m.filterActive = true
