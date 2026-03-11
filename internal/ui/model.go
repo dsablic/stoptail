@@ -504,17 +504,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.connected {
 		delegateMsg := msg
 		if mouseMsg, ok := msg.(tea.MouseMsg); ok {
-			m := mouseMsg.Mouse()
-			m.Y -= 2
+			mouse := mouseMsg.Mouse()
+			mouse.Y -= 2
 			switch mouseMsg.(type) {
 			case tea.MouseReleaseMsg:
-				delegateMsg = tea.MouseReleaseMsg(m)
+				delegateMsg = tea.MouseReleaseMsg(mouse)
 			case tea.MouseClickMsg:
-				delegateMsg = tea.MouseClickMsg(m)
+				delegateMsg = tea.MouseClickMsg(mouse)
 			case tea.MouseWheelMsg:
-				delegateMsg = tea.MouseWheelMsg(m)
+				delegateMsg = tea.MouseWheelMsg(mouse)
 			case tea.MouseMotionMsg:
-				delegateMsg = tea.MouseMotionMsg(m)
+				delegateMsg = tea.MouseMotionMsg(mouse)
 			}
 		}
 		switch m.activeTab {
