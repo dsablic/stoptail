@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	"charm.land/lipgloss/v2"
 )
 
 var helpGlobal = `## Global
