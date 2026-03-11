@@ -544,6 +544,11 @@ func (m Model) makeView(content string) tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	if m.cfg != nil {
+		v.WindowTitle = "stoptail - " + m.cfg.MaskedURL()
+	} else {
+		v.WindowTitle = "stoptail"
+	}
 	return v
 }
 
