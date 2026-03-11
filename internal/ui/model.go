@@ -339,6 +339,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case taskCancelRequestMsg:
 		return m, m.cancelTask(msg.taskID)
+	case tea.FocusMsg:
+		if m.connected && !m.loading {
+			m.loading = true
+			switch m.activeTab {
+			case TabOverview, TabMappings:
+				return m, tea.Batch(m.spinner.Tick, m.connect())
+			case TabCluster:
+				return m, m.fetchClusterTab()
+			case TabTasks:
+				return m, m.fetchTasksTab()
+			default:
+				m.loading = false
+			}
+		}
 	case errMsg:
 		m.err = msg.err
 		m.loading = false
@@ -544,6 +558,7 @@ func (m Model) makeView(content string) tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
+	v.ReportFocus = true
 	if m.cfg != nil {
 		v.WindowTitle = "stoptail - " + m.cfg.MaskedURL()
 	} else {
