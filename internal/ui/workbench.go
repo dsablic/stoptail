@@ -187,9 +187,9 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 	bodyHeight := height - 6
 
 	m.path.SetWidth(paneInnerWidth - 8)
-	m.editor.SetSize(paneInnerWidth, bodyHeight-2)
+	m.editor.SetSize(paneInnerWidth, bodyHeight-3)
 	m.response.SetWidth(paneInnerWidth)
-	m.response.SetHeight(bodyHeight - 2)
+	m.response.SetHeight(bodyHeight - 3)
 }
 
 func (m *WorkbenchModel) Prefill(index string) {

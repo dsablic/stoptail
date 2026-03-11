@@ -450,7 +450,7 @@ func (m MappingsModel) renderIndexList(width int) string {
 	filtered := m.filteredIndices()
 	if len(filtered) == 0 {
 		b.WriteString(lipgloss.NewStyle().Foreground(ColorGray).Render("No matches"))
-		return paneStyle.Render(b.String())
+		return paneStyle.Render(strings.TrimRight(b.String(), "\n"))
 	}
 
 	maxVisible := m.maxVisibleIndices()
@@ -480,7 +480,7 @@ func (m MappingsModel) renderIndexList(width int) string {
 		b.WriteString("\n")
 	}
 
-	return paneStyle.Render(b.String())
+	return paneStyle.Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (m MappingsModel) renderMappingsPane(width int) string {
@@ -552,7 +552,7 @@ func (m MappingsModel) renderMappingsPane(width int) string {
 		b.WriteString("\n")
 	}
 
-	return paneStyle.Render(b.String())
+	return paneStyle.Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (m MappingsModel) renderSettingsPane(width int) string {
@@ -639,15 +639,16 @@ func (m MappingsModel) renderSettingsPane(width int) string {
 		for i := startIdx; i < endIdx; i++ {
 			k := keys[i]
 			v := m.settings.AllSettings[k]
-			keyTrunc := Truncate(k, width/2)
-			valTrunc := Truncate(v, width/2-2)
+			innerWidth := width - 2
+			keyTrunc := Truncate(k, innerWidth/2)
+			valTrunc := Truncate(v, innerWidth/2-2)
 			b.WriteString(labelStyle.Render(keyTrunc + ": "))
 			b.WriteString(valueStyle.Render(valTrunc))
 			b.WriteString("\n")
 		}
 	}
 
-	return paneStyle.Render(b.String())
+	return paneStyle.Render(strings.TrimRight(b.String(), "\n"))
 }
 
 func (m MappingsModel) renderFieldsFlat(width int) []string {
@@ -673,8 +674,11 @@ func (m MappingsModel) renderFieldsFlat(width int) []string {
 
 		line := fmt.Sprintf("%-*s %s", nameWidth, name, typeStyle.Render(fmt.Sprintf("%-*s", typeWidth, fieldType)))
 		if attrs != "" {
-			attrStyle := lipgloss.NewStyle().Foreground(ColorGray)
-			line += " " + attrStyle.Render(attrs)
+			remaining := width - lipgloss.Width(line) - 1
+			if remaining > 0 {
+				attrStyle := lipgloss.NewStyle().Foreground(ColorGray)
+				line += " " + attrStyle.Render(Truncate(attrs, remaining))
+			}
 		}
 		lines = append(lines, line)
 	}
@@ -703,8 +707,11 @@ func (m MappingsModel) renderFieldsTree(fields []es.MappingField, depth int, wid
 
 		line := fmt.Sprintf("%s%s: %s", indent, name, typeStyle.Render(fieldType))
 		if attrs != "" {
-			attrStyle := lipgloss.NewStyle().Foreground(ColorGray)
-			line += " " + attrStyle.Render(attrs)
+			remaining := width - lipgloss.Width(line) - 1
+			if remaining > 0 {
+				attrStyle := lipgloss.NewStyle().Foreground(ColorGray)
+				line += " " + attrStyle.Render(Truncate(attrs, remaining))
+			}
 		}
 		lines = append(lines, line)
 
@@ -749,8 +756,11 @@ func (m MappingsModel) renderAnalyzers(width int) []string {
 		}
 		if len(settingParts) > 0 {
 			sort.Strings(settingParts)
-			settingsStyle := lipgloss.NewStyle().Foreground(ColorGray)
-			line += " " + settingsStyle.Render(strings.Join(settingParts, ", "))
+			remaining := width - lipgloss.Width(line) - 1
+			if remaining > 0 {
+				settingsStyle := lipgloss.NewStyle().Foreground(ColorGray)
+				line += " " + settingsStyle.Render(Truncate(strings.Join(settingParts, ", "), remaining))
+			}
 		}
 
 		lines = append(lines, line)

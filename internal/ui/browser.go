@@ -456,7 +456,7 @@ func (m *BrowserModel) startFetchDocuments(appendDocs bool) tea.Cmd {
 }
 
 func (m BrowserModel) maxVisibleIndices() int {
-	return m.height - 6
+	return m.height - 7
 }
 
 func (m BrowserModel) maxIndexScroll() int {
@@ -469,7 +469,7 @@ func (m BrowserModel) maxIndexScroll() int {
 }
 
 func (m BrowserModel) maxVisibleDocs() int {
-	return m.height - 6
+	return m.height - 7
 }
 
 func (m BrowserModel) maxDocScroll() int {
@@ -557,7 +557,7 @@ func (m BrowserModel) renderIndexList(width int) string {
 		BorderForeground(borderColor).
 		Width(width - 2).
 		Height(m.height - 4).
-		Render(content.String())
+		Render(strings.TrimRight(content.String(), "\n"))
 }
 
 func (m BrowserModel) renderDocList(width int) string {
@@ -584,7 +584,7 @@ func (m BrowserModel) renderDocList(width int) string {
 		content.WriteString("\n")
 	} else {
 		idWidth := innerWidth / 3
-		previewWidth := innerWidth - idWidth - 2
+		previewWidth := innerWidth - idWidth - 3
 
 		maxVisible := m.maxVisibleDocs()
 		for i := m.docScroll; i < len(m.documents) && i < m.docScroll+maxVisible; i++ {
@@ -611,7 +611,7 @@ func (m BrowserModel) renderDocList(width int) string {
 		BorderForeground(borderColor).
 		Width(width - 2).
 		Height(m.height - 4).
-		Render(content.String())
+		Render(strings.TrimRight(content.String(), "\n"))
 }
 
 func (m BrowserModel) renderDetailPane(width int) string {
@@ -650,7 +650,7 @@ func (m BrowserModel) renderDetailPane(width int) string {
 		BorderForeground(borderColor).
 		Width(width - 2).
 		Height(m.height - 4).
-		Render(content.String())
+		Render(strings.TrimRight(content.String(), "\n"))
 }
 
 func wrapLine(line string, maxWidth int) []string {

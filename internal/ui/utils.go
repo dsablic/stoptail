@@ -21,9 +21,10 @@ func Truncate(s string, maxLen int) string {
 }
 
 func TrimANSI(s string) string {
-	for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") {
+	for strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\x1b[0m") || strings.HasSuffix(s, "\x1b[m") {
 		s = strings.TrimSuffix(s, " ")
 		s = strings.TrimSuffix(s, "\x1b[0m")
+		s = strings.TrimSuffix(s, "\x1b[m")
 	}
 	return s + "\x1b[0m"
 }
