@@ -7,7 +7,7 @@ stoptail is an Elasticsearch TUI (Terminal User Interface) built with Go. It pro
 ## Tech Stack
 
 - **Language:** Go 1.22+
-- **TUI Framework:** Bubble Tea (bubbletea) with Lipgloss for styling
+- **TUI Framework:** Bubble Tea v2 (charm.land/bubbletea/v2) with Lipgloss v2 for styling
 - **ES Client:** elastic/go-elasticsearch/v8
 - **Config:** YAML via gopkg.in/yaml.v3
 
@@ -249,6 +249,14 @@ When adding new functionality, check if a utility already exists before creating
 - Use tea.Cmd for async operations (ES fetches)
 - Delegate to sub-models for tab-specific logic
 - Handle tea.WindowSizeMsg to propagate dimensions
+- Top-level `View()` returns `tea.View` (not string) with declarative terminal features:
+  - `v.AltScreen = true` (replaces `tea.WithAltScreen()`)
+  - `v.MouseMode = tea.MouseModeCellMotion` (replaces `tea.WithMouseCellMotion()`)
+  - `v.ReportFocus = true` for `tea.FocusMsg` / `tea.BlurMsg`
+  - `v.WindowTitle` for dynamic terminal window title
+- Sub-models keep returning `string` from View() - only models passed to `tea.NewProgram()` return `tea.View`
+- Clipboard uses native OSC52: `tea.SetClipboard()` returns `tea.Cmd`, paste is async via `tea.ReadClipboard()` / `tea.ClipboardMsg`
+- Viewport has built-in mouse wheel support (`MouseWheelEnabled = true`) and search highlighting (`SetHighlights()`, `HighlightNext()`, `HighlightPrevious()`)
 
 **Create reusable components** - Always build reusable UI components that can be composed to create custom views. When a feature appears in multiple places (e.g., search, filtering, navigation), create a shared component:
 
@@ -280,7 +288,7 @@ Components should:
 
 See `internal/ui/search.go` for the SearchBar component used by both workbench and mappings views.
 
-See `internal/ui/clipboard.go` for the Clipboard component used for cross-platform copy functionality (Ctrl+Y).
+See `internal/ui/clipboard.go` for the Clipboard component using native OSC52 terminal clipboard (works over SSH). Copy returns a `tea.Cmd`, paste is async via `tea.ClipboardMsg`.
 
 **Global keyboard handling** - When any input is active (search, filter, editor, modal), global keybindings (q, r, tab, ?, m, etc.) must be disabled so users can type. Use the consolidated `hasActiveInput()` helper:
 
@@ -338,7 +346,7 @@ Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding
 **Filter vs Search** - Use the right pattern for the content type:
 
 - **Tables (structured data)**: Use filter (`/`) - instantly hides non-matching rows
-- **Text content (logs, code)**: Use search (`Ctrl+F`) - highlights matches, navigate with n/N
+- **Text content (logs, code)**: Use search (`Ctrl+F`) - viewport built-in highlighting shows all matches (gold) with current match distinct (bright gold), navigate with n/N. Uses `viewport.SetHighlights()` for byte-offset matching and `HighlightNext()`/`HighlightPrevious()` for auto-scroll navigation.
 
 Tables in Cluster tab use filter because users want to narrow down to specific nodes/settings. Workbench response uses search because users want to find text within the JSON while seeing surrounding context.
 

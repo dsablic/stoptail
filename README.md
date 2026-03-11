@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/labtiva/stoptail)](https://goreportcard.com/report/github.com/labtiva/stoptail)
 
-A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go and the [Charm](https://charm.sh) stack.
+A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go and the [Charm](https://charm.land) stack (Bubble Tea v2, Lip Gloss v2).
 
 ![stoptail demo](demo.gif)
 
@@ -22,7 +22,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Index management: create, delete, open, close indices
 - **Workbench Tab**: Full request editor like Kibana Dev Tools
   - Support for GET, POST, PUT, DELETE, HEAD methods
-  - JSON syntax highlighting in responses
+  - JSON syntax highlighting in responses with search match highlighting
   - Real-time JSON validation with error line marker
   - Query autocomplete for ES DSL keywords and index field names
   - Bracket auto-pairing for `{}`, `[]`, and `""`
@@ -59,6 +59,9 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Optional: node count for distribution planning
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
 - **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`
+- **Native Clipboard**: Copy/paste via OSC52 terminal protocol (works over SSH)
+- **Auto-refresh**: Data refreshes automatically when terminal regains focus
+- **Window Title**: Shows connected cluster URL in terminal title bar
 - **Help Overlay**: Press `?` for keybindings
 
 ## Installation
