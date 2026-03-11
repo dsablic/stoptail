@@ -99,6 +99,8 @@ func NewWorkbench() WorkbenchModel {
 	editor := NewEditor()
 
 	vp := viewport.New(viewport.WithWidth(40), viewport.WithHeight(10))
+	vp.HighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#854d0e"))
+	vp.SelectedHighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#ca8a04")).Bold(true)
 
 	history, _ := storage.LoadHistory()
 
@@ -349,12 +351,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
 			case SearchActionClose:
+				m.response.ClearHighlights()
 				m.focus = FocusResponse
-			case SearchActionNext, SearchActionPrev:
-				if match := m.search.CurrentMatch(); match >= 0 {
-					m.response.GotoTop()
-					m.response.SetYOffset(match)
-				}
+			case SearchActionNext:
+				m.response.HighlightNext()
+			case SearchActionPrev:
+				m.response.HighlightPrevious()
 			case SearchActionNone:
 				m.updateSearchMatches()
 			}
@@ -442,18 +444,14 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "n", "ctrl+n":
 			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
-				if match := m.search.NextMatch(); match >= 0 {
-					m.response.GotoTop()
-					m.response.SetYOffset(match)
-				}
+				m.search.IncrementIdx()
+				m.response.HighlightNext()
 				return m, nil
 			}
 		case "N", "ctrl+p":
 			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
-				if match := m.search.PrevMatch(); match >= 0 {
-					m.response.GotoTop()
-					m.response.SetYOffset(match)
-				}
+				m.search.DecrementIdx()
+				m.response.HighlightPrevious()
 				return m, nil
 			}
 		case "tab":
@@ -666,11 +664,13 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				if m.search.Active() && msg.Y >= m.height-4 {
 					relX := msg.X - paneInnerWidth - 3 - 1
 					action := m.search.HandleClick(relX)
-					if action == SearchActionNext || action == SearchActionPrev {
-						if match := m.search.CurrentMatch(); match >= 0 {
-							m.response.GotoTop()
-							m.response.SetYOffset(match)
-						}
+					switch action {
+					case SearchActionNext:
+						m.response.HighlightNext()
+					case SearchActionPrev:
+						m.response.HighlightPrevious()
+					case SearchActionClose:
+						m.response.ClearHighlights()
 					}
 				}
 			}
@@ -827,11 +827,29 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 }
 
 func (m *WorkbenchModel) updateSearchMatches() {
-	lines := strings.Split(m.responseText, "\n")
-	m.search.FindMatches(lines)
-	if match := m.search.CurrentMatch(); match >= 0 {
-		m.response.GotoTop()
-		m.response.SetYOffset(match)
+	query := strings.ToLower(m.search.Query())
+	if query == "" {
+		m.response.ClearHighlights()
+		m.search.SetMatchCount(0)
+		return
+	}
+	content := strings.ToLower(m.responseText)
+	var highlights [][]int
+	start := 0
+	for {
+		idx := strings.Index(content[start:], query)
+		if idx < 0 {
+			break
+		}
+		matchStart := start + idx
+		matchEnd := matchStart + len(query)
+		highlights = append(highlights, []int{matchStart, matchEnd})
+		start = matchEnd
+	}
+	m.response.SetHighlights(highlights)
+	m.search.SetMatchCount(len(highlights))
+	if len(highlights) > 0 {
+		m.response.HighlightNext()
 	}
 }
 

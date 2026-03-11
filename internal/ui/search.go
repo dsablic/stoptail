@@ -21,6 +21,7 @@ const (
 type SearchBar struct {
 	input      textinput.Model
 	matches    []int
+	matchCount int
 	currentIdx int
 	active     bool
 }
@@ -42,6 +43,7 @@ func (s *SearchBar) Activate() {
 	s.input.Focus()
 	s.input.SetValue("")
 	s.matches = nil
+	s.matchCount = 0
 	s.currentIdx = 0
 }
 
@@ -63,7 +65,30 @@ func (s *SearchBar) Matches() []int {
 }
 
 func (s *SearchBar) MatchCount() int {
+	if s.matchCount > 0 {
+		return s.matchCount
+	}
 	return len(s.matches)
+}
+
+func (s *SearchBar) SetMatchCount(n int) {
+	s.matchCount = n
+	s.currentIdx = 0
+}
+
+func (s *SearchBar) IncrementIdx() {
+	if s.matchCount > 0 {
+		s.currentIdx = (s.currentIdx + 1) % s.matchCount
+	}
+}
+
+func (s *SearchBar) DecrementIdx() {
+	if s.matchCount > 0 {
+		s.currentIdx--
+		if s.currentIdx < 0 {
+			s.currentIdx = s.matchCount - 1
+		}
+	}
 }
 
 func (s *SearchBar) CurrentIdx() int {
@@ -118,15 +143,17 @@ func (s *SearchBar) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, SearchAction) {
 		s.Deactivate()
 		return nil, SearchActionClose
 	case "enter", "ctrl+n":
-		if len(s.matches) > 0 {
-			s.currentIdx = (s.currentIdx + 1) % len(s.matches)
+		count := s.MatchCount()
+		if count > 0 {
+			s.currentIdx = (s.currentIdx + 1) % count
 		}
 		return nil, SearchActionNext
 	case "shift+enter", "ctrl+p":
-		if len(s.matches) > 0 {
+		count := s.MatchCount()
+		if count > 0 {
 			s.currentIdx--
 			if s.currentIdx < 0 {
-				s.currentIdx = len(s.matches) - 1
+				s.currentIdx = count - 1
 			}
 		}
 		return nil, SearchActionPrev
@@ -138,10 +165,11 @@ func (s *SearchBar) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, SearchAction) {
 }
 
 func (s *SearchBar) HandleClick(relX int) SearchAction {
+	count := s.MatchCount()
 	searchInputWidth := lipgloss.Width(s.input.View())
 	statusWidth := 0
-	if len(s.matches) > 0 {
-		statusWidth = len(fmt.Sprintf(" %d/%d ", s.currentIdx+1, len(s.matches)))
+	if count > 0 {
+		statusWidth = len(fmt.Sprintf(" %d/%d ", s.currentIdx+1, count))
 	} else if s.input.Value() != "" {
 		statusWidth = len(" No matches ")
 	}
@@ -149,15 +177,15 @@ func (s *SearchBar) HandleClick(relX int) SearchAction {
 	inputEnd := 1 + searchInputWidth
 	statusEnd := inputEnd + statusWidth
 
-	if len(s.matches) > 0 {
+	if count > 0 {
 		prevEnd := statusEnd + 5
 		nextEnd := prevEnd + 5
 
 		if relX >= statusEnd && relX < prevEnd {
-			s.PrevMatch()
+			s.DecrementIdx()
 			return SearchActionPrev
 		} else if relX >= prevEnd && relX < nextEnd {
-			s.NextMatch()
+			s.IncrementIdx()
 			return SearchActionNext
 		} else if relX >= nextEnd {
 			s.Deactivate()
@@ -178,16 +206,17 @@ func (s *SearchBar) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (s *SearchBar) View(width int) string {
+	count := s.MatchCount()
 	status := ""
-	if len(s.matches) > 0 {
+	if count > 0 {
 		status = lipgloss.NewStyle().Foreground(ColorGray).Render(
-			fmt.Sprintf(" %d/%d ", s.currentIdx+1, len(s.matches)))
+			fmt.Sprintf(" %d/%d ", s.currentIdx+1, count))
 	} else if s.input.Value() != "" {
 		status = lipgloss.NewStyle().Foreground(ColorRed).Render(" No matches ")
 	}
 
 	navBtns := ""
-	if len(s.matches) > 0 {
+	if count > 0 {
 		navBtns = " [◀] [▶]"
 	}
 
