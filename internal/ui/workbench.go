@@ -99,6 +99,8 @@ func NewWorkbench() WorkbenchModel {
 	editor := NewEditor()
 
 	vp := viewport.New(viewport.WithWidth(40), viewport.WithHeight(10))
+	vp.MouseWheelEnabled = true
+	vp.MouseWheelDelta = 3
 	vp.HighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#854d0e"))
 	vp.SelectedHighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#ca8a04")).Bold(true)
 
@@ -681,22 +683,16 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		topRowHeight := 3
 		scrollAmount := 3
 
-		if msg.Y > topRowHeight {
-			if msg.X < paneInnerWidth+2 {
-				if msg.Button == tea.MouseWheelUp {
-					m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
-				} else {
-					m.editor.SetCursor(m.editor.Line() + scrollAmount)
-				}
+		if msg.Y > topRowHeight && msg.X < paneInnerWidth+2 {
+			if msg.Button == tea.MouseWheelUp {
+				m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
 			} else {
-				if msg.Button == tea.MouseWheelUp {
-					m.response.SetYOffset(max(0, m.response.YOffset()-scrollAmount))
-				} else {
-					m.response.SetYOffset(m.response.YOffset() + scrollAmount)
-				}
+				m.editor.SetCursor(m.editor.Line() + scrollAmount)
 			}
+			return m, nil
 		}
-		return m, nil
+		m.response, cmd = m.response.Update(msg)
+		return m, cmd
 	}
 
 	return m, tea.Batch(cmds...)
