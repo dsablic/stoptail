@@ -30,7 +30,7 @@ func NewBookmarkUI() BookmarkUI {
 	ti := textinput.New()
 	ti.Placeholder = "Bookmark name..."
 	ti.CharLimit = 50
-	ti.Width = 30
+	ti.SetWidth(30)
 
 	bookmarks, _ := storage.LoadBookmarks()
 
@@ -69,7 +69,7 @@ func (b *BookmarkUI) Close() {
 	b.nameInput.Blur()
 }
 
-func (b *BookmarkUI) HandleKey(msg tea.KeyMsg) (action BookmarkAction, bookmark *storage.Bookmark) {
+func (b *BookmarkUI) HandleKey(msg tea.KeyPressMsg) (action BookmarkAction, bookmark *storage.Bookmark) {
 	switch msg.String() {
 	case "esc":
 		b.Close()

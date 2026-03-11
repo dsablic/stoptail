@@ -354,7 +354,7 @@ func (e Editor) Focused() bool {
 }
 
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		key := keyMsg.String()
 		switch key {
 		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
@@ -393,7 +393,7 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (e *Editor) handleShiftArrow(msg tea.KeyMsg) tea.Cmd {
+func (e *Editor) handleShiftArrow(msg tea.KeyPressMsg) tea.Cmd {
 	curLine := e.textarea.Line()
 	curCol := e.logicalCol()
 
@@ -406,17 +406,17 @@ func (e *Editor) handleShiftArrow(msg tea.KeyMsg) tea.Cmd {
 	var cmd tea.Cmd
 	switch msg.String() {
 	case "shift+left":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyLeft})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	case "shift+right":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyRight})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	case "shift+up":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyUp})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	case "shift+down":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyDown})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	case "shift+home":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyHome})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	case "shift+end":
-		e.textarea, cmd = e.textarea.Update(tea.KeyMsg{Type: tea.KeyEnd})
+		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	}
 
 	newLine := e.textarea.Line()
@@ -462,7 +462,7 @@ func (e *Editor) InsertString(s string) {
 }
 
 func (e *Editor) SetCursor(pos int) {
-	e.textarea.SetCursor(pos)
+	e.textarea.SetCursorColumn(pos)
 }
 
 func (e Editor) CursorOffset() int {
@@ -544,7 +544,7 @@ func (e *Editor) DeleteSelection() {
 		offset += len(newLines[i]) + 1
 	}
 	offset += startCol
-	e.textarea.SetCursor(offset)
+	e.textarea.SetCursorColumn(offset)
 	e.selection.Active = false
 }
 
@@ -576,7 +576,7 @@ func (e *Editor) Undo() bool {
 	state := e.undoStack[len(e.undoStack)-1]
 	e.undoStack = e.undoStack[:len(e.undoStack)-1]
 	e.textarea.SetValue(state.content)
-	e.textarea.SetCursor(state.cursorPos)
+	e.textarea.SetCursorColumn(state.cursorPos)
 	return true
 }
 
@@ -593,6 +593,6 @@ func (e *Editor) Redo() bool {
 	state := e.redoStack[len(e.redoStack)-1]
 	e.redoStack = e.redoStack[:len(e.redoStack)-1]
 	e.textarea.SetValue(state.content)
-	e.textarea.SetCursor(state.cursorPos)
+	e.textarea.SetCursorColumn(state.cursorPos)
 	return true
 }

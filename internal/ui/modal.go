@@ -227,7 +227,7 @@ func (m *Modal) Init() tea.Cmd {
 }
 
 func (m *Modal) Update(msg tea.Msg) tea.Cmd {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		if keyMsg.String() == "esc" {
 			m.cancelled = true
 			return nil

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strconv"
 	"strings"
 
@@ -27,7 +28,7 @@ func TrimANSI(s string) string {
 	return s + "\x1b[0m"
 }
 
-func HealthColor(health string) lipgloss.Color {
+func HealthColor(health string) color.Color {
 	switch health {
 	case "green":
 		return ColorGreen
@@ -56,16 +57,16 @@ func RenderBar(percent float64, width int) string {
 
 	for i := 0; i < filled; i++ {
 		posPercent := float64(i+1) / float64(width) * 100
-		var color lipgloss.Color
+		var barColor color.Color
 		switch {
 		case posPercent >= 85:
-			color = ColorRed
+			barColor = ColorRed
 		case posPercent >= 70:
-			color = ColorYellow
+			barColor = ColorYellow
 		default:
-			color = ColorGreen
+			barColor = ColorGreen
 		}
-		style := lipgloss.NewStyle().Foreground(color)
+		style := lipgloss.NewStyle().Foreground(barColor)
 		b.WriteString(style.Render("█"))
 	}
 

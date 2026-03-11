@@ -1,22 +1,26 @@
 package ui
 
-import "charm.land/lipgloss/v2"
+import (
+	"image/color"
+	"os"
+
+	"charm.land/lipgloss/v2"
+)
 
 var (
-	// Colors - adapt based on terminal background
-	ColorGreen  lipgloss.Color
-	ColorYellow lipgloss.Color
-	ColorRed    lipgloss.Color
-	ColorBlue   lipgloss.Color
-	ColorPurple lipgloss.Color
-	ColorGray   lipgloss.Color
-	ColorWhite  lipgloss.Color
+	ColorGreen  color.Color
+	ColorYellow color.Color
+	ColorRed    color.Color
+	ColorBlue   color.Color
+	ColorPurple color.Color
+	ColorGray   color.Color
+	ColorWhite  color.Color
 
-	HeaderBg      lipgloss.Color
-	ActiveBg      lipgloss.Color
-	SpinnerClr    lipgloss.Color
-	TextBg        lipgloss.Color
-	ColorOnAccent lipgloss.Color
+	HeaderBg      color.Color
+	ActiveBg      color.Color
+	SpinnerClr    color.Color
+	TextBg        color.Color
+	ColorOnAccent color.Color
 
 	// Base styles
 	HeaderStyle      lipgloss.Style
@@ -32,7 +36,7 @@ func init() {
 }
 
 func SetTheme(theme string) {
-	isDark := lipgloss.HasDarkBackground()
+	isDark := lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 
 	switch theme {
 	case "dark":

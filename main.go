@@ -106,7 +106,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	p := tea.NewProgram(ui.New(client, cfg), tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(ui.New(client, cfg))
 	if _, err := p.Run(); err != nil {
 		return err
 	}
@@ -208,12 +208,15 @@ func newClusterPickerModal(names []string) *clusterPickerModal {
 		options[i] = huh.NewOption(name, name)
 	}
 
-	theme := huh.ThemeBase()
-	theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(ui.ColorBlue).SetString("> ")
-	theme.Focused.SelectedOption = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
-	theme.Focused.UnselectedOption = lipgloss.NewStyle()
-	theme.Focused.Title = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
-	theme.Blurred = theme.Focused
+	customTheme := huh.ThemeFunc(func(isDark bool) *huh.Styles {
+		theme := huh.ThemeBase(isDark)
+		theme.Focused.SelectSelector = lipgloss.NewStyle().Foreground(ui.ColorBlue).SetString("> ")
+		theme.Focused.SelectedOption = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
+		theme.Focused.UnselectedOption = lipgloss.NewStyle()
+		theme.Focused.Title = lipgloss.NewStyle().Foreground(ui.ColorBlue).Bold(true)
+		theme.Blurred = theme.Focused
+		return theme
+	})
 
 	m.form = huh.NewForm(
 		huh.NewGroup(
@@ -222,7 +225,7 @@ func newClusterPickerModal(names []string) *clusterPickerModal {
 				Options(options...).
 				Value(&m.selected),
 		),
-	).WithShowHelp(false).WithTheme(theme)
+	).WithShowHelp(false).WithTheme(customTheme)
 
 	return m
 }
@@ -236,7 +239,7 @@ func (m *clusterPickerModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc", "ctrl+c":
 			m.cancelled = true
@@ -256,9 +259,9 @@ func (m *clusterPickerModal) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *clusterPickerModal) View() string {
+func (m *clusterPickerModal) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return ""
+		return tea.NewView("")
 	}
 
 	boxStyle := lipgloss.NewStyle().
@@ -268,7 +271,7 @@ func (m *clusterPickerModal) View() string {
 		Width(50)
 
 	box := boxStyle.Render(m.form.View())
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
 }
 
 type urlResolverModel struct {
@@ -321,7 +324,7 @@ func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
@@ -329,12 +332,12 @@ func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m urlResolverModel) View() string {
+func (m urlResolverModel) View() tea.View {
 	if m.done {
-		return ""
+		return tea.NewView("")
 	}
 	if m.width == 0 || m.height == 0 {
-		return ""
+		return tea.NewView("")
 	}
 
 	msgStyle := lipgloss.NewStyle().Foreground(ui.ColorGray)
@@ -347,7 +350,7 @@ func (m urlResolverModel) View() string {
 		Width(50)
 
 	box := boxStyle.Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
 }
 
 func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (string, string, error) {

@@ -58,7 +58,7 @@ func (m *ShardCalcModel) Reset() {
 
 func (m ShardCalcModel) Update(msg tea.Msg) (ShardCalcModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "tab", "down":
 			m.focusIndex = (m.focusIndex + 1) % 3

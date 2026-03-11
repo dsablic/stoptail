@@ -59,7 +59,7 @@ func (m *TasksModel) ClearConfirming() {
 
 func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.showingModal {
 			if msg.String() == "esc" || msg.String() == "enter" || msg.String() == "q" {
 				m.showingModal = false
@@ -147,15 +147,13 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 				return m, nil
 			}
 		}
-	case tea.MouseMsg:
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			scrollAmount := 3
-			maxScroll := m.maxScroll()
-			if msg.Button == tea.MouseButtonWheelUp {
-				m.scrollY = max(0, m.scrollY-scrollAmount)
-			} else {
-				m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
-			}
+	case tea.MouseWheelMsg:
+		scrollAmount := 3
+		maxScroll := m.maxScroll()
+		if msg.Button == tea.MouseWheelUp {
+			m.scrollY = max(0, m.scrollY-scrollAmount)
+		} else {
+			m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
 		}
 	}
 	return m, nil

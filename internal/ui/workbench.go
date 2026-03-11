@@ -87,14 +87,18 @@ func NewWorkbench() WorkbenchModel {
 	path := textinput.New()
 	path.Placeholder = "/_search"
 	path.CharLimit = 200
-	path.Width = 40
-	path.Cursor.Style = lipgloss.NewStyle().Background(ColorBlue).Foreground(ColorOnAccent)
-	path.TextStyle = lipgloss.NewStyle().Foreground(ColorWhite)
-	path.PlaceholderStyle = lipgloss.NewStyle().Foreground(ColorGray)
+	path.SetWidth(40)
+	styles := path.Styles()
+	styles.Cursor.Color = ColorBlue
+	styles.Focused.Text = lipgloss.NewStyle().Foreground(ColorWhite)
+	styles.Focused.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
+	styles.Blurred.Text = lipgloss.NewStyle().Foreground(ColorWhite)
+	styles.Blurred.Placeholder = lipgloss.NewStyle().Foreground(ColorGray)
+	path.SetStyles(styles)
 
 	editor := NewEditor()
 
-	vp := viewport.New(40, 10)
+	vp := viewport.New(viewport.WithWidth(40), viewport.WithHeight(10))
 
 	history, _ := storage.LoadHistory()
 
@@ -178,10 +182,10 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 	paneInnerWidth := (width - 5) / 2
 	bodyHeight := height - 6
 
-	m.path.Width = paneInnerWidth - 8
+	m.path.SetWidth(paneInnerWidth - 8)
 	m.editor.SetSize(paneInnerWidth, bodyHeight-2)
-	m.response.Width = paneInnerWidth
-	m.response.Height = bodyHeight - 2
+	m.response.SetWidth(paneInnerWidth)
+	m.response.SetHeight(bodyHeight - 2)
 }
 
 func (m *WorkbenchModel) Prefill(index string) {
@@ -314,7 +318,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.clipboard.ClearMessage()
 		if m.bookmarkUI.Active() {
 			action, bookmark := m.bookmarkUI.HandleKey(msg)
@@ -507,7 +511,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		if m.focus == FocusBody && m.queryMode == ModeREST {
 			if pair, ok := bracketPairs[msg.String()]; ok {
 				m.editor.InsertString(msg.String() + pair)
-				m.editor.Update(tea.KeyMsg{Type: tea.KeyLeft})
+				m.editor.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 				if msg.String() == "\"" && m.shouldAutoComplete() {
 					m.triggerCompletion()
 				}
@@ -558,12 +562,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			m.response, cmd = m.response.Update(msg)
 			cmds = append(cmds, cmd)
 		}
-	case tea.MouseMsg:
+	case tea.MouseReleaseMsg:
 		paneInnerWidth := (m.width - 5) / 2
 		topRowHeight := 3
 		bodyPaneTop := topRowHeight + 2
 
-		if m.methodDropdown.Open() && msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+		if m.methodDropdown.Open() && msg.Button == tea.MouseLeft {
 			action := m.methodDropdown.HandleClick(msg.X, msg.Y)
 			if action == DropdownActionSelect {
 				m.cycleFocus()
@@ -572,7 +576,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 
 		if msg.X < paneInnerWidth+1 && msg.Y >= bodyPaneTop {
-			if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+			if msg.Button == tea.MouseLeft {
 				m.path.Blur()
 				m.editor.Focus()
 				m.focus = FocusBody
@@ -580,7 +584,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 
-		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+		if msg.Button == tea.MouseLeft {
 			if msg.Y < topRowHeight+1 {
 				btnStyle := lipgloss.NewStyle().Padding(0, 1)
 
@@ -672,27 +676,27 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case tea.MouseWheelMsg:
+		paneInnerWidth := (m.width - 5) / 2
+		topRowHeight := 3
+		scrollAmount := 3
 
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			scrollAmount := 3
-
-			if msg.Y > topRowHeight {
-				if msg.X < paneInnerWidth+2 {
-					if msg.Button == tea.MouseButtonWheelUp {
-						m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
-					} else {
-						m.editor.SetCursor(m.editor.Line() + scrollAmount)
-					}
+		if msg.Y > topRowHeight {
+			if msg.X < paneInnerWidth+2 {
+				if msg.Button == tea.MouseWheelUp {
+					m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
 				} else {
-					if msg.Button == tea.MouseButtonWheelUp {
-						m.response.SetYOffset(max(0, m.response.YOffset-scrollAmount))
-					} else {
-						m.response.SetYOffset(m.response.YOffset + scrollAmount)
-					}
+					m.editor.SetCursor(m.editor.Line() + scrollAmount)
+				}
+			} else {
+				if msg.Button == tea.MouseWheelUp {
+					m.response.SetYOffset(max(0, m.response.YOffset()-scrollAmount))
+				} else {
+					m.response.SetYOffset(m.response.YOffset() + scrollAmount)
 				}
 			}
-			return m, nil
 		}
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -1201,7 +1205,7 @@ func (m *WorkbenchModel) acceptCompletion() {
 			}
 		}
 		if col < len(line) && line[col] == '"' {
-			m.editor.Update(tea.KeyMsg{Type: tea.KeyDelete})
+			m.editor.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
 		}
 	}
 

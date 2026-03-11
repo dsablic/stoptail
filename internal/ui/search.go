@@ -29,7 +29,7 @@ func NewSearchBar() SearchBar {
 	input := textinput.New()
 	input.Placeholder = "Search..."
 	input.CharLimit = 100
-	input.Width = 30
+	input.SetWidth(30)
 	return SearchBar{input: input}
 }
 
@@ -112,7 +112,7 @@ func (s *SearchBar) PrevMatch() int {
 	return s.matches[s.currentIdx]
 }
 
-func (s *SearchBar) HandleKey(msg tea.KeyMsg) (tea.Cmd, SearchAction) {
+func (s *SearchBar) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, SearchAction) {
 	switch msg.String() {
 	case "esc":
 		s.Deactivate()

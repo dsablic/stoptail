@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -111,7 +113,7 @@ var helpTasks = `## Tasks
 
 func renderHelp(width, height, activeTab int) string {
 	styleName := "dark"
-	if !lipgloss.HasDarkBackground() {
+	if !lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
 		styleName = "light"
 	}
 

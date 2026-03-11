@@ -81,7 +81,7 @@ func TestIsKeyCompletionPosition(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e := NewEditor()
 			e.SetContent(tt.content)
-			e.textarea.SetCursor(len(tt.content))
+			e.textarea.SetCursorColumn(len(tt.content))
 			got := e.IsKeyCompletionPosition()
 			if got != tt.want {
 				t.Errorf("IsKeyCompletionPosition() = %v, want %v", got, tt.want)

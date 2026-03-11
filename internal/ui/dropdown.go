@@ -76,7 +76,7 @@ func (d Dropdown) Selected() string {
 	return ""
 }
 
-func (d *Dropdown) HandleKey(msg tea.KeyMsg) DropdownAction {
+func (d *Dropdown) HandleKey(msg tea.KeyPressMsg) DropdownAction {
 	if !d.open {
 		if msg.String() == "enter" || msg.String() == " " {
 			d.open = true

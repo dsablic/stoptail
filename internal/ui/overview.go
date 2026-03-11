@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"sort"
 	"strconv"
 	"strings"
@@ -115,7 +116,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.filterActive {
 			switch msg.String() {
 			case "esc", "enter":
@@ -324,8 +325,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			}
 			return m.handleCellEnter()
 		}
-	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+	case tea.MouseReleaseMsg:
+		if msg.Button == tea.MouseLeft {
 			headerRows := 6
 
 			if msg.Y >= headerRows && msg.X > nodeColWidth+2 {
@@ -1046,7 +1047,7 @@ func (m OverviewModel) renderGrid() string {
 	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
 		colWidth := colWidths[colIdx]
 		health := es.AnalyzeShardHealth(idx)
-		var shardColor lipgloss.Color
+		var shardColor color.Color
 		switch health.Status {
 		case es.ShardHealthOK:
 			shardColor = ColorGreen
@@ -1299,7 +1300,7 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 	currentWidth := 0
 
 	for _, sh := range shards {
-		var bgColor, fgColor lipgloss.Color
+		var bgColor, fgColor color.Color
 		if closed {
 			bgColor = ColorGray
 			fgColor = lipgloss.Color("#666666")

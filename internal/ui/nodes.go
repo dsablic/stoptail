@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"sort"
 	"strconv"
 	"strings"
@@ -267,7 +268,7 @@ func (m NodesModel) getMaxScroll() int {
 
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.filterActive {
 			switch msg.String() {
 			case "esc", "enter":
@@ -415,8 +416,8 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				m.scrollY = m.getMaxScroll()
 			}
 		}
-	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+	case tea.MouseReleaseMsg:
+		if msg.Button == tea.MouseLeft {
 			if msg.Y == 0 {
 				tabs := []struct {
 					label string
@@ -444,14 +445,12 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 				}
 			}
 		}
-
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			scrollAmount := 3
-			if msg.Button == tea.MouseButtonWheelUp {
-				m.scrollY = max(0, m.scrollY-scrollAmount)
-			} else {
-				m.scrollY = min(m.getMaxScroll(), m.scrollY+scrollAmount)
-			}
+	case tea.MouseWheelMsg:
+		scrollAmount := 3
+		if msg.Button == tea.MouseWheelUp {
+			m.scrollY = max(0, m.scrollY-scrollAmount)
+		} else {
+			m.scrollY = min(m.getMaxScroll(), m.scrollY+scrollAmount)
 		}
 	}
 	return m, nil
@@ -1201,7 +1200,7 @@ func extractThreadType(threadName string) string {
 	return "other"
 }
 
-func threadTypeColor(threadType string) lipgloss.Color {
+func threadTypeColor(threadType string) color.Color {
 	switch threadType {
 	case "search", "get":
 		return ColorBlue

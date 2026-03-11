@@ -162,7 +162,7 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 		m.updateDetailPane()
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.clipboard.ClearMessage()
 
 		if m.filterActive {
@@ -211,33 +211,31 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 			}
 		}
 
-	case tea.MouseMsg:
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			scrollAmount := 3
-			switch m.activePane {
-			case BrowserPaneIndices:
-				maxScroll := m.maxIndexScroll()
-				if msg.Button == tea.MouseButtonWheelUp {
-					m.indexScroll = max(0, m.indexScroll-scrollAmount)
-				} else {
-					m.indexScroll = min(maxScroll, m.indexScroll+scrollAmount)
+	case tea.MouseWheelMsg:
+		scrollAmount := 3
+		switch m.activePane {
+		case BrowserPaneIndices:
+			maxScroll := m.maxIndexScroll()
+			if msg.Button == tea.MouseWheelUp {
+				m.indexScroll = max(0, m.indexScroll-scrollAmount)
+			} else {
+				m.indexScroll = min(maxScroll, m.indexScroll+scrollAmount)
+			}
+		case BrowserPaneDocs:
+			if msg.Button == tea.MouseWheelUp {
+				m.docScroll = max(0, m.docScroll-scrollAmount)
+			} else {
+				cmd := m.scrollDocsDown(scrollAmount)
+				if cmd != nil {
+					return m, cmd
 				}
-			case BrowserPaneDocs:
-				if msg.Button == tea.MouseButtonWheelUp {
-					m.docScroll = max(0, m.docScroll-scrollAmount)
-				} else {
-					cmd := m.scrollDocsDown(scrollAmount)
-					if cmd != nil {
-						return m, cmd
-					}
-				}
-			case BrowserPaneDetail:
-				if msg.Button == tea.MouseButtonWheelUp {
-					m.detailScroll = max(0, m.detailScroll-scrollAmount)
-				} else {
-					maxScroll := max(0, len(m.detailContent)-m.detailHeight)
-					m.detailScroll = min(maxScroll, m.detailScroll+scrollAmount)
-				}
+			}
+		case BrowserPaneDetail:
+			if msg.Button == tea.MouseWheelUp {
+				m.detailScroll = max(0, m.detailScroll-scrollAmount)
+			} else {
+				maxScroll := max(0, len(m.detailContent)-m.detailHeight)
+				m.detailScroll = min(maxScroll, m.detailScroll+scrollAmount)
 			}
 		}
 	}
@@ -245,7 +243,7 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m BrowserModel) handleFilterInput(msg tea.KeyMsg) (BrowserModel, tea.Cmd) {
+func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "esc":
 		m.filterActive = false

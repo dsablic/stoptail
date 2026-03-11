@@ -231,7 +231,7 @@ func TestAutoCompleteTriggersOnQuote(t *testing.T) {
 	w.editor.SetContent("{}")
 	w.editor.SetCursor(1)
 
-	quoteMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'"'}}
+	quoteMsg := tea.KeyPressMsg{Code: '"', Text: "\""}
 	newModel, _ := w.Update(quoteMsg)
 
 	if !newModel.completion.Active {
@@ -250,7 +250,7 @@ func TestCtrlRExecutionState(t *testing.T) {
 		t.Fatal("executing should be false initially")
 	}
 
-	ctrlR := tea.KeyMsg{Type: tea.KeyCtrlR}
+	ctrlR := tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
 	w1, cmd1 := w.Update(ctrlR)
 
 	if w1.client != nil && !w1.executing {
@@ -273,7 +273,7 @@ func TestSearchNavigationWhenActive(t *testing.T) {
 	w.response.SetContent(w.responseText)
 	w.focus = FocusResponse
 
-	ctrlF := tea.KeyMsg{Type: tea.KeyCtrlF}
+	ctrlF := tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}
 	w, _ = w.Update(ctrlF)
 
 	if !w.search.Active() {
@@ -287,7 +287,7 @@ func TestSearchNavigationWhenActive(t *testing.T) {
 		t.Errorf("expected 2 matches, got %d", w.search.MatchCount())
 	}
 
-	enterKey := tea.KeyMsg{Type: tea.KeyEnter}
+	enterKey := tea.KeyPressMsg{Code: tea.KeyEnter}
 	w, _ = w.Update(enterKey)
 
 	if w.search.CurrentIdx() != 1 {
@@ -297,21 +297,21 @@ func TestSearchNavigationWhenActive(t *testing.T) {
 		t.Error("search should remain active after Enter (just navigates)")
 	}
 
-	ctrlP := tea.KeyMsg{Type: tea.KeyCtrlP}
+	ctrlP := tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
 	w, _ = w.Update(ctrlP)
 
 	if w.search.CurrentIdx() != 0 {
 		t.Errorf("expected searchIdx 0 after Ctrl+P, got %d", w.search.CurrentIdx())
 	}
 
-	escKey := tea.KeyMsg{Type: tea.KeyEsc}
+	escKey := tea.KeyPressMsg{Code: tea.KeyEscape}
 	w, _ = w.Update(escKey)
 
 	if w.search.Active() {
 		t.Error("search should be inactive after Esc")
 	}
 
-	nKey := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}}
+	nKey := tea.KeyPressMsg{Code: 'n', Text: "n"}
 	w, _ = w.Update(nKey)
 	if w.search.CurrentIdx() != 1 {
 		t.Errorf("'n' should navigate when search is closed (but matches exist), searchIdx=%d", w.search.CurrentIdx())

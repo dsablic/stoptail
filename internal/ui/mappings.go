@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"sort"
 	"strings"
 
@@ -107,7 +108,7 @@ func (m *MappingsModel) SetLoading(indexName string) {
 
 func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		m.clipboard.ClearMessage()
 		if m.search.Active() {
 			cmd, action := m.search.HandleKey(msg)
@@ -246,30 +247,28 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				}
 			}
 		}
-	case tea.MouseMsg:
-		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-			scrollAmount := 3
-			if m.activePane == PaneIndices {
-				maxScroll := m.maxIndicesScroll()
-				if msg.Button == tea.MouseButtonWheelUp {
-					m.scrollY = max(0, m.scrollY-scrollAmount)
-				} else {
-					m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
-				}
+	case tea.MouseWheelMsg:
+		scrollAmount := 3
+		if m.activePane == PaneIndices {
+			maxScroll := m.maxIndicesScroll()
+			if msg.Button == tea.MouseWheelUp {
+				m.scrollY = max(0, m.scrollY-scrollAmount)
 			} else {
-				maxScroll := m.maxMappingScroll()
-				if msg.Button == tea.MouseButtonWheelUp {
-					m.mappingScroll = max(0, m.mappingScroll-scrollAmount)
-				} else {
-					m.mappingScroll = min(maxScroll, m.mappingScroll+scrollAmount)
-				}
+				m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
+			}
+		} else {
+			maxScroll := m.maxMappingScroll()
+			if msg.Button == tea.MouseWheelUp {
+				m.mappingScroll = max(0, m.mappingScroll-scrollAmount)
+			} else {
+				m.mappingScroll = min(maxScroll, m.mappingScroll+scrollAmount)
 			}
 		}
 	}
 	return m, nil
 }
 
-func (m MappingsModel) handleFilterInput(msg tea.KeyMsg) (MappingsModel, tea.Cmd) {
+func (m MappingsModel) handleFilterInput(msg tea.KeyPressMsg) (MappingsModel, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "esc":
 		m.filterActive = false
@@ -834,7 +833,7 @@ func (m MappingsModel) formatFieldAttrs(f es.MappingField) string {
 	return strings.Join(attrs, " ")
 }
 
-func (m MappingsModel) typeColor(fieldType string) lipgloss.Color {
+func (m MappingsModel) typeColor(fieldType string) color.Color {
 	switch fieldType {
 	case "keyword", "text":
 		return ColorGreen

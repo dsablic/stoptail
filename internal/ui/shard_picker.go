@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -79,7 +80,7 @@ func (p *ShardPicker) View() string {
 	var currentRow []string
 
 	for i, sh := range p.shards {
-		var bgColor lipgloss.Color
+		var bgColor color.Color
 		switch sh.State {
 		case "STARTED":
 			if sh.Primary {

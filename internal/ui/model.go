@@ -346,7 +346,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case executeResultMsg:
 		m.workbench, cmd = m.workbench.Update(msg)
 		return m, cmd
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.showShardCalc {
 			if msg.String() == "esc" {
 				m.showShardCalc = false
@@ -459,8 +459,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mappings.SetSize(msg.Width, msg.Height-4)
 		m.nodes.SetSize(msg.Width, msg.Height-4)
 		m.tasks.SetSize(msg.Width, msg.Height-4)
-	case tea.MouseMsg:
-		if msg.Action == tea.MouseActionRelease && msg.Button == tea.MouseButtonLeft {
+	case tea.MouseReleaseMsg:
+		if msg.Button == tea.MouseLeft {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
 				clusterWidth := lipgloss.Width(InactiveTabStyle.Render("Cluster"))
@@ -504,8 +504,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.connected {
 		delegateMsg := msg
 		if mouseMsg, ok := msg.(tea.MouseMsg); ok {
-			mouseMsg.Y -= 2
-			delegateMsg = mouseMsg
+			m := mouseMsg.Mouse()
+			m.Y -= 2
+			switch mouseMsg.(type) {
+			case tea.MouseReleaseMsg:
+				delegateMsg = tea.MouseReleaseMsg(m)
+			case tea.MouseClickMsg:
+				delegateMsg = tea.MouseClickMsg(m)
+			case tea.MouseWheelMsg:
+				delegateMsg = tea.MouseWheelMsg(m)
+			case tea.MouseMotionMsg:
+				delegateMsg = tea.MouseMotionMsg(m)
+			}
 		}
 		switch m.activeTab {
 		case TabOverview:
@@ -530,17 +540,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) View() string {
+func (m Model) makeView(content string) tea.View {
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
-		return ""
+		return m.makeView("")
 	}
 
 	if m.showHelp {
-		return renderHelp(m.width, m.height, m.activeTab)
+		return m.makeView(renderHelp(m.width, m.height, m.activeTab))
 	}
 
 	if m.showShardCalc {
-		return m.shardCalc.View()
+		return m.makeView(m.shardCalc.View())
 	}
 
 	// Header
@@ -650,7 +667,7 @@ func (m Model) View() string {
 
 	statusBar := StatusBarStyle.Width(m.width).Render(statusText)
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, tabs, content, statusBar)
+	return m.makeView(lipgloss.JoinVertical(lipgloss.Left, header, tabs, content, statusBar))
 }
 
 func hasNoError(msg tea.Msg) bool {
