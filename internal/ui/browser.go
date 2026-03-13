@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/labtiva/stoptail/internal/es"
 )
 
@@ -290,16 +291,21 @@ func (m *BrowserModel) updateDetailPane() {
 
 func (m *BrowserModel) rewrapDetailPane() {
 	innerWidth := m.detailInnerWidth()
-	var wrapped []string
-	for _, line := range m.detailSourceLines {
-		wrapped = append(wrapped, wrapLine(line, innerWidth)...)
-	}
-	m.detailLines = wrapped
+	joined := strings.Join(m.detailSourceLines, "\n")
+	wrapped := ansi.Hardwrap(joined, innerWidth, false)
+	m.detailLines = strings.Split(wrapped, "\n")
+}
+
+func (m BrowserModel) paneWidths() (left, middle, right int) {
+	left = m.width / 4
+	middle = m.width / 3
+	right = m.width - left - middle - 4
+	return
 }
 
 func (m BrowserModel) detailInnerWidth() int {
-	rightWidth := m.width - m.width/4 - m.width/3 - 4
-	return rightWidth - 4
+	_, _, right := m.paneWidths()
+	return right - 4
 }
 
 func (m BrowserModel) selectedDocSource() string {
@@ -338,8 +344,7 @@ func (m *BrowserModel) startFetchDocuments(appendDocs bool) tea.Cmd {
 }
 
 func (m BrowserModel) paneAtX(x int) BrowserPane {
-	leftWidth := m.width / 4
-	middleWidth := m.width / 3
+	leftWidth, middleWidth, _ := m.paneWidths()
 	if x < leftWidth+1 {
 		return BrowserPaneIndices
 	}
@@ -362,9 +367,7 @@ func (m BrowserModel) View() string {
 		return ""
 	}
 
-	leftWidth := m.width / 4
-	middleWidth := m.width / 3
-	rightWidth := m.width - leftWidth - middleWidth - 4
+	leftWidth, middleWidth, rightWidth := m.paneWidths()
 
 	leftPane := m.renderIndexList(leftWidth)
 	middlePane := m.renderDocList(middleWidth)
@@ -518,47 +521,6 @@ func (m BrowserModel) renderDetailPane(width int) string {
 		Width(width - 2).
 		Height(m.height - 4).
 		Render(strings.TrimRight(content.String(), "\n"))
-}
-
-func wrapLine(line string, maxWidth int) []string {
-	if maxWidth <= 0 {
-		return []string{line}
-	}
-	visualWidth := lipgloss.Width(line)
-	if visualWidth <= maxWidth {
-		return []string{line}
-	}
-	var result []string
-	var current strings.Builder
-	currentWidth := 0
-	runes := []rune(line)
-	i := 0
-	for i < len(runes) {
-		if runes[i] == '\x1b' && i+1 < len(runes) && runes[i+1] == '[' {
-			start := i
-			i += 2
-			for i < len(runes) && !((runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= 'a' && runes[i] <= 'z')) {
-				i++
-			}
-			if i < len(runes) {
-				i++
-			}
-			current.WriteString(string(runes[start:i]))
-			continue
-		}
-		if currentWidth >= maxWidth {
-			result = append(result, current.String())
-			current.Reset()
-			currentWidth = 0
-		}
-		current.WriteRune(runes[i])
-		currentWidth++
-		i++
-	}
-	if current.Len() > 0 {
-		result = append(result, current.String())
-	}
-	return result
 }
 
 func sanitizeLine(s string) string {
