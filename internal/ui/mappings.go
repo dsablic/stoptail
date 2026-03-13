@@ -26,21 +26,20 @@ const (
 )
 
 type MappingsModel struct {
-	indices       []es.IndexInfo
-	selectedIndex int
-	scrollY       int
-	width         int
-	height        int
-	activePane    MappingsPane
+	indices    []es.IndexInfo
+	indexNav   ListNav
+	contentNav ListNav
+	width      int
+	height     int
+	activePane MappingsPane
 	filterActive  bool
 	filterText    string
 	treeView      bool
 	search        SearchBar
 	viewMode      MappingsViewMode
 
-	mappings      *es.IndexMappings
-	analyzers     []es.AnalyzerInfo
-	mappingScroll int
+	mappings  *es.IndexMappings
+	analyzers []es.AnalyzerInfo
 	loadingIndex  string
 	clipboard     Clipboard
 
@@ -58,8 +57,9 @@ type fetchSettingsMsg struct {
 
 func NewMappings() MappingsModel {
 	return MappingsModel{
+		indexNav:   NewCursorNav(),
+		contentNav: NewScrollNav(),
 		activePane: PaneIndices,
-		treeView:   false,
 		search:     NewSearchBar(),
 		clipboard:  NewClipboard(),
 	}
@@ -67,8 +67,8 @@ func NewMappings() MappingsModel {
 
 func (m *MappingsModel) SetIndices(indices []es.IndexInfo) {
 	m.indices = indices
-	if m.selectedIndex >= len(indices) {
-		m.selectedIndex = max(0, len(indices)-1)
+	if m.indexNav.Selected >= len(indices) {
+		m.indexNav.Selected = max(0, len(indices)-1)
 	}
 }
 
@@ -81,19 +81,19 @@ func (m *MappingsModel) SetMappings(mappings *es.IndexMappings, analyzers []es.A
 	m.mappings = mappings
 	m.analyzers = analyzers
 	m.loadingIndex = ""
-	m.mappingScroll = 0
+	m.contentNav.Reset()
 }
 
 func (m *MappingsModel) SetSettings(settings *es.IndexSettings) {
 	m.settings = settings
 	m.settingsLoading = false
-	m.mappingScroll = 0
+	m.contentNav.Reset()
 }
 
 func (m MappingsModel) SelectedIndexName() string {
 	filtered := m.filteredIndices()
-	if m.selectedIndex >= 0 && m.selectedIndex < len(filtered) {
-		return filtered[m.selectedIndex].Name
+	if m.indexNav.Selected >= 0 && m.indexNav.Selected < len(filtered) {
+		return filtered[m.indexNav.Selected].Name
 	}
 	return ""
 }
@@ -117,7 +117,7 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				// search deactivated
 			case SearchActionNext, SearchActionPrev:
 				if match := m.search.CurrentMatch(); match >= 0 {
-					m.mappingScroll = match
+					m.contentNav.Scroll = match
 				}
 			case SearchActionNone:
 				(&m).updateMappingSearch()
@@ -173,113 +173,18 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 				}
 				return m, m.fetchMappingsCmd()
 			}
-		case "up", "k":
+		default:
 			if m.activePane == PaneIndices {
-				if m.selectedIndex > 0 {
-					m.selectedIndex--
-					if m.selectedIndex < m.scrollY {
-						m.scrollY = m.selectedIndex
-					}
-				}
+				m.indexNav.HandleKey(msg.String(), len(m.filteredIndices()), m.maxVisibleIndices())
 			} else {
-				if m.mappingScroll > 0 {
-					m.mappingScroll--
-				}
-			}
-		case "down", "j":
-			if m.activePane == PaneIndices {
-				filtered := m.filteredIndices()
-				if m.selectedIndex < len(filtered)-1 {
-					m.selectedIndex++
-					maxVisible := m.maxVisibleIndices()
-					if m.selectedIndex >= m.scrollY+maxVisible {
-						m.scrollY = m.selectedIndex - maxVisible + 1
-					}
-				}
-			} else {
-				maxScroll := m.maxMappingScroll()
-				if m.mappingScroll < maxScroll {
-					m.mappingScroll++
-				}
-			}
-		case "pgup":
-			if m.activePane == PaneIndices {
-				pageSize := m.maxVisibleIndices()
-				m.selectedIndex -= pageSize
-				if m.selectedIndex < 0 {
-					m.selectedIndex = 0
-				}
-				if m.selectedIndex < m.scrollY {
-					m.scrollY = m.selectedIndex
-				}
-			} else {
-				pageSize := m.height - 6
-				if pageSize < 1 {
-					pageSize = 10
-				}
-				m.mappingScroll -= pageSize
-				if m.mappingScroll < 0 {
-					m.mappingScroll = 0
-				}
-			}
-		case "pgdown":
-			if m.activePane == PaneIndices {
-				filtered := m.filteredIndices()
-				pageSize := m.maxVisibleIndices()
-				m.selectedIndex += pageSize
-				if m.selectedIndex >= len(filtered) {
-					m.selectedIndex = len(filtered) - 1
-				}
-				maxVisible := m.maxVisibleIndices()
-				if m.selectedIndex >= m.scrollY+maxVisible {
-					m.scrollY = m.selectedIndex - maxVisible + 1
-				}
-			} else {
-				pageSize := m.height - 6
-				if pageSize < 1 {
-					pageSize = 10
-				}
-				maxScroll := m.maxMappingScroll()
-				m.mappingScroll += pageSize
-				if m.mappingScroll > maxScroll {
-					m.mappingScroll = maxScroll
-				}
-			}
-		case "home":
-			if m.activePane == PaneIndices {
-				m.selectedIndex = 0
-				m.scrollY = 0
-			} else {
-				m.mappingScroll = 0
-			}
-		case "end":
-			if m.activePane == PaneIndices {
-				filtered := m.filteredIndices()
-				m.selectedIndex = max(0, len(filtered)-1)
-				maxVisible := m.maxVisibleIndices()
-				if m.selectedIndex >= maxVisible {
-					m.scrollY = m.selectedIndex - maxVisible + 1
-				}
-			} else {
-				m.mappingScroll = m.maxMappingScroll()
+				m.contentNav.HandleKey(msg.String(), m.countMappingLines(), m.mappingVisibleHeight())
 			}
 		}
 	case tea.MouseWheelMsg:
-		scrollAmount := 3
 		if m.activePane == PaneIndices {
-			maxScroll := m.maxIndicesScroll()
-			if msg.Button == tea.MouseWheelUp {
-				m.scrollY = max(0, m.scrollY-scrollAmount)
-			} else {
-				m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
-			}
+			m.indexNav.HandleWheel(msg.Button != tea.MouseWheelUp, len(m.filteredIndices()), m.maxVisibleIndices())
 		} else {
-			maxScroll := m.maxMappingScroll()
-			if msg.Button == tea.MouseWheelUp {
-				m.mappingScroll = max(0, m.mappingScroll-scrollAmount)
-			} else {
-				m.mappingScroll = min(maxScroll, m.mappingScroll+scrollAmount)
-			}
+			m.contentNav.HandleWheel(msg.Button != tea.MouseWheelUp, m.countMappingLines(), m.mappingVisibleHeight())
 		}
 	}
 	return m, nil
@@ -289,20 +194,17 @@ func (m MappingsModel) handleFilterInput(msg tea.KeyPressMsg) (MappingsModel, te
 	switch msg.String() {
 	case "enter", "esc":
 		m.filterActive = false
-		m.selectedIndex = 0
-		m.scrollY = 0
+		m.indexNav.Reset()
 	case "backspace":
 		if len(m.filterText) > 0 {
 			r := []rune(m.filterText)
 			m.filterText = string(r[:len(r)-1])
-			m.selectedIndex = 0
-			m.scrollY = 0
+			m.indexNav.Reset()
 		}
 	default:
 		if len(msg.String()) == 1 {
 			m.filterText += msg.String()
-			m.selectedIndex = 0
-			m.scrollY = 0
+			m.indexNav.Reset()
 		}
 	}
 	return m, nil
@@ -350,29 +252,12 @@ func (m MappingsModel) maxVisibleIndices() int {
 	return rows
 }
 
-func (m MappingsModel) maxIndicesScroll() int {
-	filtered := m.filteredIndices()
-	maxScroll := len(filtered) - m.maxVisibleIndices()
-	if maxScroll < 0 {
-		return 0
+func (m MappingsModel) mappingVisibleHeight() int {
+	h := m.height - 6
+	if h < 1 {
+		return 10
 	}
-	return maxScroll
-}
-
-func (m MappingsModel) maxMappingScroll() int {
-	if m.mappings == nil {
-		return 0
-	}
-	totalLines := m.countMappingLines()
-	maxVisible := m.height - 6
-	if maxVisible < 1 {
-		maxVisible = 10
-	}
-	maxScroll := totalLines - maxVisible
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
+	return h
 }
 
 func (m MappingsModel) countMappingLines() int {
@@ -476,11 +361,11 @@ func (m MappingsModel) renderIndexList(width int) string {
 	if m.filterActive || m.filterText != "" {
 		maxVisible--
 	}
-	endIdx := min(m.scrollY+maxVisible, len(filtered))
+	endIdx := min(m.indexNav.Scroll+maxVisible, len(filtered))
 
-	for i := m.scrollY; i < endIdx; i++ {
+	for i := m.indexNav.Scroll; i < endIdx; i++ {
 		idx := filtered[i]
-		isSelected := i == m.selectedIndex
+		isSelected := i == m.indexNav.Selected
 
 		name := Truncate(idx.Name, width-4)
 
@@ -555,8 +440,8 @@ func (m MappingsModel) renderMappingsPane(width int) string {
 	if maxVisible < 1 {
 		maxVisible = 10
 	}
-	endIdx := min(m.mappingScroll+maxVisible, len(fieldLines))
-	startIdx := m.mappingScroll
+	endIdx := min(m.contentNav.Scroll+maxVisible, len(fieldLines))
+	startIdx := m.contentNav.Scroll
 	if startIdx >= len(fieldLines) {
 		startIdx = max(0, len(fieldLines)-1)
 	}
@@ -649,8 +534,8 @@ func (m MappingsModel) renderSettingsPane(width int) string {
 		sort.Strings(keys)
 
 		maxVisible := max(m.height-15, 5)
-		endIdx := min(m.mappingScroll+maxVisible, len(keys))
-		startIdx := m.mappingScroll
+		endIdx := min(m.contentNav.Scroll+maxVisible, len(keys))
+		startIdx := m.contentNav.Scroll
 		if startIdx >= len(keys) {
 			startIdx = max(0, len(keys)-1)
 		}
@@ -848,7 +733,7 @@ func (m *MappingsModel) updateMappingSearch() {
 	}
 	m.search.FindMatches(lines)
 	if match := m.search.CurrentMatch(); match >= 0 {
-		m.mappingScroll = match
+		m.contentNav.Scroll = match
 	}
 }
 
