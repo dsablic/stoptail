@@ -47,9 +47,8 @@ type OverviewModel struct {
 	shardStateFilter   string
 	showSystem         bool
 	scrollX            int
-	scrollY            int
 	selectedIndex      int
-	selectedNode       int
+	nodeNav            ListNav
 	width              int
 	height             int
 	modal              *Modal
@@ -74,6 +73,7 @@ func NewOverview() OverviewModel {
 	return OverviewModel{
 		filter:       ti,
 		aliasFilters: make(map[string]bool),
+		nodeNav:      NewCursorNav(),
 		spinner:      s,
 	}
 }
@@ -177,7 +177,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.aliasFilters = make(map[string]bool)
 			m.shardStateFilter = ""
 			m.selectedIndex = 0
-			m.selectedNode = 0
+			m.nodeNav.Reset()
 		case "U":
 			if m.shardStateFilter == "UNASSIGNED" {
 				m.shardStateFilter = ""
@@ -185,9 +185,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "UNASSIGNED"
 			}
 			m.selectedIndex = 0
-			m.selectedNode = 0
 			m.scrollX = 0
-			m.scrollY = 0
+			m.nodeNav.Reset()
 		case "R":
 			if m.shardStateFilter == "RELOCATING" {
 				m.shardStateFilter = ""
@@ -195,9 +194,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "RELOCATING"
 			}
 			m.selectedIndex = 0
-			m.selectedNode = 0
 			m.scrollX = 0
-			m.scrollY = 0
+			m.nodeNav.Reset()
 		case "I":
 			if m.shardStateFilter == "INITIALIZING" {
 				m.shardStateFilter = ""
@@ -205,65 +203,15 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 				m.shardStateFilter = "INITIALIZING"
 			}
 			m.selectedIndex = 0
-			m.selectedNode = 0
 			m.scrollX = 0
-			m.scrollY = 0
+			m.nodeNav.Reset()
 		case ".":
 			m.showSystem = !m.showSystem
 			m.selectedIndex = 0
-			m.selectedNode = 0
 			m.scrollX = 0
-			m.scrollY = 0
-		case "up", "k":
-			nodes := m.getNodeList()
-			if m.selectedNode > 0 {
-				m.selectedNode--
-				if m.selectedNode < m.scrollY {
-					m.scrollY = m.selectedNode
-				}
-			}
-			if m.selectedNode >= len(nodes) {
-				m.selectedNode = len(nodes) - 1
-			}
-		case "down", "j":
-			nodes := m.getNodeList()
-			if m.selectedNode < len(nodes)-1 {
-				m.selectedNode++
-				maxVisible := m.maxVisibleNodes()
-				if m.selectedNode >= m.scrollY+maxVisible {
-					m.scrollY = m.selectedNode - maxVisible + 1
-				}
-			}
-		case "pgup":
-			pageSize := m.maxVisibleNodes()
-			m.selectedNode -= pageSize
-			if m.selectedNode < 0 {
-				m.selectedNode = 0
-			}
-			if m.selectedNode < m.scrollY {
-				m.scrollY = m.selectedNode
-			}
-		case "pgdown":
-			nodes := m.getNodeList()
-			pageSize := m.maxVisibleNodes()
-			m.selectedNode += pageSize
-			if m.selectedNode >= len(nodes) {
-				m.selectedNode = len(nodes) - 1
-			}
-			maxVisible := m.maxVisibleNodes()
-			if m.selectedNode >= m.scrollY+maxVisible {
-				m.scrollY = m.selectedNode - maxVisible + 1
-			}
-		case "home":
-			m.selectedNode = 0
-			m.scrollY = 0
-		case "end":
-			nodes := m.getNodeList()
-			m.selectedNode = max(0, len(nodes)-1)
-			maxVisible := m.maxVisibleNodes()
-			if m.selectedNode >= maxVisible {
-				m.scrollY = m.selectedNode - maxVisible + 1
-			}
+			m.nodeNav.Reset()
+		case "up", "k", "down", "j", "pgup", "pgdown", "home", "end":
+			m.nodeNav.HandleKey(msg.String(), len(m.getNodeList()), m.maxVisibleNodes())
 		case "left", "h":
 			if m.selectedIndex > 0 {
 				m.selectedIndex--
@@ -288,9 +236,8 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 					alias := aliases[idx]
 					m.aliasFilters[alias] = !m.aliasFilters[alias]
 					m.selectedIndex = 0
-					m.selectedNode = 0
 					m.scrollX = 0
-					m.scrollY = 0
+					m.nodeNav.Reset()
 				}
 			}
 		case "c":
@@ -681,10 +628,10 @@ func (m OverviewModel) handleCellEnter() (OverviewModel, tea.Cmd) {
 	indexName := indices[m.selectedIndex].Name
 
 	nodes := m.getNodeList()
-	if m.selectedNode < 0 || m.selectedNode >= len(nodes) {
+	if m.nodeNav.Selected < 0 || m.nodeNav.Selected >= len(nodes) {
 		return m, nil
 	}
-	nodeName := nodes[m.selectedNode].Name
+	nodeName := nodes[m.nodeNav.Selected].Name
 
 	var shards []es.ShardInfo
 	if nodeName == "Unassigned" {
@@ -725,8 +672,8 @@ func (m OverviewModel) showShardInfo(sh *es.ShardInfo) (OverviewModel, tea.Cmd) 
 
 func (m OverviewModel) SelectedNode() string {
 	nodes := m.getNodeList()
-	if m.selectedNode >= 0 && m.selectedNode < len(nodes) {
-		return nodes[m.selectedNode].Name
+	if m.nodeNav.Selected >= 0 && m.nodeNav.Selected < len(nodes) {
+		return nodes[m.nodeNav.Selected].Name
 	}
 	return ""
 }
@@ -1103,8 +1050,8 @@ func (m OverviewModel) renderGrid() string {
 
 	// Node rows
 	visibleNodes := nodes
-	if m.scrollY < len(nodes) {
-		visibleNodes = nodes[m.scrollY:]
+	if m.nodeNav.Scroll < len(nodes) {
+		visibleNodes = nodes[m.nodeNav.Scroll:]
 	}
 	maxRows := m.maxVisibleNodes()
 	if maxRows > len(visibleNodes) {
@@ -1117,8 +1064,8 @@ func (m OverviewModel) renderGrid() string {
 	maxLinesPerNode := 4
 
 	for rowIdx, node := range visibleNodes[:maxRows] {
-		actualNodeIdx := m.scrollY + rowIdx
-		isSelectedNode := actualNodeIdx == m.selectedNode
+		actualNodeIdx := m.nodeNav.Scroll + rowIdx
+		isSelectedNode := actualNodeIdx == m.nodeNav.Selected
 
 		var shardLines [][]string
 		maxLines := 2
@@ -1193,7 +1140,7 @@ func (m OverviewModel) renderGrid() string {
 		b.WriteString(strings.Repeat("─", contentWidth) + "\n")
 
 		unassignedNodeIdx := len(nodes)
-		isSelectedUnassigned := m.selectedNode == unassignedNodeIdx
+		isSelectedUnassigned := m.nodeNav.Selected == unassignedNodeIdx
 
 		var shardLines [][]string
 		maxLines := 1
