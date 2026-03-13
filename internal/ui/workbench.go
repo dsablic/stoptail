@@ -51,7 +51,7 @@ type WorkbenchModel struct {
 	editor             Editor
 	responseText       string
 	responseRawText    string
-	responseScroll     int
+	responseNav        ListNav
 	responseLines      []string
 	statusCode         int
 	duration           string
@@ -292,7 +292,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 		m.wrapResponseLines()
-		m.responseScroll = 0
+		m.responseNav.Reset()
 		return m, nil
 
 	case mappingResultMsg:
@@ -445,38 +445,9 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.editor.Redo()
 				return m, nil
 			}
-		case "pgup":
+		case "pgup", "pgdown", "home", "end", "up", "down":
 			if m.focus == FocusResponse {
-				m.responseScroll -= m.responsePageSize()
-				m.clampResponseScroll()
-				return m, nil
-			}
-		case "pgdown":
-			if m.focus == FocusResponse {
-				m.responseScroll += m.responsePageSize()
-				m.clampResponseScroll()
-				return m, nil
-			}
-		case "home":
-			if m.focus == FocusResponse {
-				m.responseScroll = 0
-				return m, nil
-			}
-		case "end":
-			if m.focus == FocusResponse {
-				m.responseScroll = m.maxResponseScroll()
-				return m, nil
-			}
-		case "up":
-			if m.focus == FocusResponse {
-				m.responseScroll--
-				m.clampResponseScroll()
-				return m, nil
-			}
-		case "down":
-			if m.focus == FocusResponse {
-				m.responseScroll++
-				m.clampResponseScroll()
+				m.responseNav.HandleKey(msg.String(), len(m.responseLines), m.responseVisibleHeight())
 				return m, nil
 			}
 		case "n", "ctrl+n":
@@ -725,12 +696,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if msg.Button == tea.MouseWheelUp {
-			m.responseScroll -= 3
-		} else {
-			m.responseScroll += 3
-		}
-		m.clampResponseScroll()
+		m.responseNav.HandleWheel(msg.Button != tea.MouseWheelUp, len(m.responseLines), m.responseVisibleHeight())
 		return m, nil
 	}
 
@@ -869,8 +835,11 @@ func (m *WorkbenchModel) updateSearchMatches() {
 
 func (m *WorkbenchModel) scrollToSearchMatch() {
 	if match := m.search.CurrentMatch(); match >= 0 {
-		m.responseScroll = match
-		m.clampResponseScroll()
+		m.responseNav.Scroll = match
+		ms := navMaxScroll(len(m.responseLines), m.responseVisibleHeight())
+		if m.responseNav.Scroll > ms {
+			m.responseNav.Scroll = ms
+		}
 	}
 }
 
@@ -885,32 +854,11 @@ func (m WorkbenchModel) responseVisibleHeight() int {
 	return h
 }
 
-func (m WorkbenchModel) responsePageSize() int {
-	return m.responseVisibleHeight()
-}
-
-func (m WorkbenchModel) maxResponseScroll() int {
-	maxScroll := len(m.responseLines) - m.responseVisibleHeight()
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
-}
-
-func (m *WorkbenchModel) clampResponseScroll() {
-	if m.responseScroll < 0 {
-		m.responseScroll = 0
-	}
-	if mx := m.maxResponseScroll(); m.responseScroll > mx {
-		m.responseScroll = mx
-	}
-}
-
 func (m WorkbenchModel) renderResponseContent(paneInnerWidth int) string {
 	var b strings.Builder
 	visibleHeight := m.responseVisibleHeight()
-	endIdx := min(m.responseScroll+visibleHeight, len(m.responseLines))
-	startIdx := m.responseScroll
+	endIdx := min(m.responseNav.Scroll+visibleHeight, len(m.responseLines))
+	startIdx := m.responseNav.Scroll
 	if startIdx >= len(m.responseLines) {
 		startIdx = max(0, len(m.responseLines)-1)
 	}

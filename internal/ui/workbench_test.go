@@ -285,13 +285,13 @@ func TestResponsePgDownFullFlow(t *testing.T) {
 	m.workbench.wrapResponseLines()
 	m.workbench.focus = FocusResponse
 
-	before := m.workbench.responseScroll
+	before := m.workbench.responseNav.Scroll
 
 	pgDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
 	updated, _ := m.Update(pgDown)
 	m = updated.(Model)
 
-	after := m.workbench.responseScroll
+	after := m.workbench.responseNav.Scroll
 	t.Logf("FULL FLOW: before=%d after=%d hasActiveInput=%v focus=%d",
 		before, after, m.hasActiveInput(), m.workbench.focus)
 	if after <= before {
@@ -332,12 +332,12 @@ func TestResponsePgDownScrolls(t *testing.T) {
 	w.wrapResponseLines()
 	w.focus = FocusResponse
 
-	before := w.responseScroll
+	before := w.responseNav.Scroll
 
 	pgDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
 	w, _ = w.Update(pgDown)
 
-	after := w.responseScroll
+	after := w.responseNav.Scroll
 	t.Logf("before=%d after=%d height=%d focus=%d", before, after, w.height, w.focus)
 	if after <= before {
 		t.Errorf("pgdown should scroll: before=%d after=%d", before, after)
@@ -360,7 +360,7 @@ func TestResponseHomeEnd(t *testing.T) {
 
 	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
 	w, _ = w.Update(endKey)
-	atEnd := w.responseScroll
+	atEnd := w.responseNav.Scroll
 	t.Logf("after End: scroll=%d", atEnd)
 	if atEnd == 0 {
 		t.Errorf("end key should scroll to bottom, scroll=%d", atEnd)
@@ -368,7 +368,7 @@ func TestResponseHomeEnd(t *testing.T) {
 
 	homeKey := tea.KeyPressMsg{Code: tea.KeyHome}
 	w, _ = w.Update(homeKey)
-	atHome := w.responseScroll
+	atHome := w.responseNav.Scroll
 	t.Logf("after Home: scroll=%d", atHome)
 	if atHome != 0 {
 		t.Errorf("home key should scroll to top, scroll=%d", atHome)
