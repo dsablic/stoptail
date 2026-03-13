@@ -290,6 +290,27 @@ See `internal/ui/search.go` for the SearchBar component used by both workbench a
 
 See `internal/ui/clipboard.go` for the Clipboard component using native OSC52 terminal clipboard (works over SSH). Copy returns a `tea.Cmd`, paste is async via `tea.ClipboardMsg`.
 
+See `internal/ui/listnav.go` for the ListNav component used across all views for scroll/cursor navigation:
+
+```go
+nav := NewCursorNav()  // For lists with row selection (indices, settings, templates)
+nav := NewScrollNav()  // For scrollable content (response text, detail panes)
+
+// In Update():
+if nav.HandleKey(msg.String(), totalItems, visibleHeight) {
+    break // key was handled
+}
+
+// Mouse wheel:
+nav.HandleWheel(msg.Button != tea.MouseWheelUp, totalItems, visibleHeight)
+
+// Read state: nav.Selected (cursor position), nav.Scroll (scroll offset)
+// Reset: nav.Reset()
+// Switch modes: nav.SetCursorMode(true/false)
+```
+
+HandleKey handles: up/k, down/j, pgup, pgdown, home, end. Returns `bool` so parent can fall through for unhandled keys.
+
 **Global keyboard handling** - When any input is active (search, filter, editor, modal), global keybindings (q, r, tab, ?, m, etc.) must be disabled so users can type. Use the consolidated `hasActiveInput()` helper:
 
 ```go
