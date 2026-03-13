@@ -191,22 +191,12 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 }
 
 func (m MappingsModel) handleFilterInput(msg tea.KeyPressMsg) (MappingsModel, tea.Cmd) {
-	switch msg.String() {
-	case "enter", "esc":
+	text, action := HandleFilterKey(m.filterText, msg.String())
+	m.filterText = text
+	if action == FilterClose || action == FilterConfirm {
 		m.filterActive = false
-		m.indexNav.Reset()
-	case "backspace":
-		if len(m.filterText) > 0 {
-			r := []rune(m.filterText)
-			m.filterText = string(r[:len(r)-1])
-			m.indexNav.Reset()
-		}
-	default:
-		if len(msg.String()) == 1 {
-			m.filterText += msg.String()
-			m.indexNav.Reset()
-		}
 	}
+	m.indexNav.Reset()
 	return m, nil
 }
 
@@ -235,9 +225,8 @@ func (m MappingsModel) filteredIndices() []es.IndexInfo {
 		return m.indices
 	}
 	var filtered []es.IndexInfo
-	filterLower := strings.ToLower(m.filterText)
 	for _, idx := range m.indices {
-		if strings.Contains(strings.ToLower(idx.Name), filterLower) {
+		if MatchesFilter(idx.Name, m.filterText) {
 			filtered = append(filtered, idx)
 		}
 	}

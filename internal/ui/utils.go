@@ -6,8 +6,48 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
 )
+
+type FilterAction int
+
+const (
+	FilterNone    FilterAction = iota
+	FilterClose                // esc
+	FilterConfirm              // enter
+)
+
+func HandleFilterKey(text, key string) (string, FilterAction) {
+	switch key {
+	case "enter":
+		return text, FilterConfirm
+	case "esc":
+		return text, FilterClose
+	case "backspace":
+		r := []rune(text)
+		if len(r) > 0 {
+			return string(r[:len(r)-1]), FilterNone
+		}
+		return text, FilterNone
+	default:
+		if len(key) == 1 {
+			return text + key, FilterNone
+		}
+		return text, FilterNone
+	}
+}
+
+func MatchesFilter(text, query string) bool {
+	return strings.Contains(strings.ToLower(text), strings.ToLower(query))
+}
+
+func newSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
+	return s
+}
 
 func Truncate(s string, maxLen int) string {
 	r := []rune(s)

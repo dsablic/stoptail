@@ -116,9 +116,8 @@ func (m BrowserModel) filteredIndices() []es.IndexInfo {
 		return m.indices
 	}
 	var filtered []es.IndexInfo
-	lower := strings.ToLower(m.filterText)
 	for _, idx := range m.indices {
-		if strings.Contains(strings.ToLower(idx.Name), lower) {
+		if MatchesFilter(idx.Name, m.filterText) {
 			filtered = append(filtered, idx)
 		}
 	}
@@ -215,23 +214,16 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 }
 
 func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.Cmd) {
-	switch msg.String() {
-	case "enter", "esc":
+	text, action := HandleFilterKey(m.filterText, msg.String())
+	m.filterText = text
+	if action == FilterClose || action == FilterConfirm {
 		m.filterActive = false
 		m.indexNav.Reset()
-		if msg.String() == "enter" {
+		if action == FilterConfirm {
 			return m, m.startFetchDocuments(false)
 		}
-	case "backspace":
-		if len(m.filterText) > 0 {
-			r := []rune(m.filterText)
-			m.filterText = string(r[:len(r)-1])
-		}
-	default:
-		if len(msg.String()) == 1 {
-			m.filterText += msg.String()
-			m.indexNav.Reset()
-		}
+	} else {
+		m.indexNav.Reset()
 	}
 	return m, nil
 }

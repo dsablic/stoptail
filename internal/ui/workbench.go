@@ -135,10 +135,6 @@ func NewWorkbench() WorkbenchModel {
 
 	editor.SetContent(dslContent)
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
-
 	bookmarks, _ := storage.LoadBookmarks()
 
 	return WorkbenchModel{
@@ -148,7 +144,7 @@ func NewWorkbench() WorkbenchModel {
 		focus:          FocusNone,
 		history:        history,
 		historyIdx:     -1,
-		spinner:        s,
+		spinner:        newSpinner(),
 		search:         NewSearchBar(),
 		fieldCache:     make(map[string][]CompletionItem),
 		clipboard:      NewClipboard(),

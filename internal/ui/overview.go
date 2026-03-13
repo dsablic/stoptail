@@ -66,15 +66,11 @@ func NewOverview() OverviewModel {
 	ti.Placeholder = "Filter indices..."
 	ti.CharLimit = 50
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
-
 	return OverviewModel{
 		filter:       ti,
 		aliasFilters: make(map[string]bool),
 		nodeNav:      NewCursorNav(),
-		spinner:      s,
+		spinner:      newSpinner(),
 	}
 }
 
@@ -306,44 +302,38 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 	case IndexCreatedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		return m, nil
 	case IndexDeletedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		m.selectedIndex = 0
 		return m, nil
 	case IndexOpenedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		return m, nil
 	case IndexClosedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		return m, nil
 	case AliasAddedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		return m, nil
 	case AliasRemovedMsg:
 		m.operationMsg = ""
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		return m, nil
 	case AllocationExplainMsg:
@@ -352,8 +342,7 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			return m, nil
 		}
 		if msg.Err != nil {
-			m.modal = NewErrorModal(msg.Err.Error())
-			return m, func() tea.Msg { return ModalInitMsg{} }
+			return m.showError(msg.Err)
 		}
 		m.allocationExplain = msg.Result
 		return m, nil
@@ -364,6 +353,11 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m OverviewModel) showError(err error) (OverviewModel, tea.Cmd) {
+	m.modal = NewErrorModal(err.Error())
+	return m, func() tea.Msg { return ModalInitMsg{} }
 }
 
 func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {
@@ -946,59 +940,37 @@ func (m OverviewModel) renderGrid() string {
 	}
 	b.WriteString("\n")
 
-	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
-		colWidth := colWidths[colIdx]
-		sizeStyle := lipgloss.NewStyle().
-			Width(colWidth).
-			Foreground(ColorGray)
+	writeGrayRow := func(textFn func(es.IndexInfo) string) {
+		b.WriteString(strings.Repeat(" ", nodeColWidth+2))
+		for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
+			style := lipgloss.NewStyle().Width(colWidths[colIdx]).Foreground(ColorGray)
+			b.WriteString(style.Render(Truncate(textFn(idx), colWidths[colIdx]-2)))
+		}
+		b.WriteString("\n")
+	}
+
+	writeGrayRow(func(idx es.IndexInfo) string {
 		priSize := idx.PriStoreSize
 		if priSize == "" {
 			priSize = idx.StoreSize
 		}
-		sizeText := priSize + "/" + idx.StoreSize
-		b.WriteString(sizeStyle.Render(Truncate(sizeText, colWidth-2)))
-	}
-	b.WriteString("\n")
-
-	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
-		colWidth := colWidths[colIdx]
-		docsStyle := lipgloss.NewStyle().
-			Width(colWidth).
-			Foreground(ColorGray)
-		docsText := FormatNumber(idx.DocsCount) + " docs"
-		b.WriteString(docsStyle.Render(Truncate(docsText, colWidth-2)))
-	}
-	b.WriteString("\n")
-
-	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
-		colWidth := colWidths[colIdx]
-		deletedStyle := lipgloss.NewStyle().
-			Width(colWidth).
-			Foreground(ColorGray)
-		deletedText := ""
+		return priSize + "/" + idx.StoreSize
+	})
+	writeGrayRow(func(idx es.IndexInfo) string {
+		return FormatNumber(idx.DocsCount) + " docs"
+	})
+	writeGrayRow(func(idx es.IndexInfo) string {
 		if idx.DocsDeleted != "" && idx.DocsDeleted != "0" {
-			deletedText = FormatNumber(idx.DocsDeleted) + " deleted"
+			return FormatNumber(idx.DocsDeleted) + " deleted"
 		}
-		b.WriteString(deletedStyle.Render(Truncate(deletedText, colWidth-2)))
-	}
-	b.WriteString("\n")
-
-	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
-	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {
-		colWidth := colWidths[colIdx]
-		versionStyle := lipgloss.NewStyle().
-			Width(colWidth).
-			Foreground(ColorGray)
-		versionText := ""
+		return ""
+	})
+	writeGrayRow(func(idx es.IndexInfo) string {
 		if idx.Version != "" {
-			versionText = "created: " + idx.Version
+			return "created: " + idx.Version
 		}
-		b.WriteString(versionStyle.Render(Truncate(versionText, colWidth-2)))
-	}
-	b.WriteString("\n")
+		return ""
+	})
 
 	b.WriteString(strings.Repeat(" ", nodeColWidth+2))
 	for colIdx, idx := range indices[m.scrollX : m.scrollX+visibleCols] {

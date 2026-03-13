@@ -73,10 +73,6 @@ func New(client *es.Client, cfg *config.Config) Model {
 	br := NewBrowser()
 	br.SetClient(client)
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(SpinnerClr)
-
 	return Model{
 		client:    client,
 		cfg:       cfg,
@@ -87,7 +83,7 @@ func New(client *es.Client, cfg *config.Config) Model {
 		nodes:     NewNodes(),
 		tasks:     NewTasks(),
 		shardCalc: NewShardCalc(),
-		spinner:   s,
+		spinner:   newSpinner(),
 		activeTab: TabOverview,
 		loading:   true,
 	}

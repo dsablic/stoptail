@@ -63,7 +63,7 @@ func (m NodesModel) matchesFilter(text string) bool {
 	if m.filter.Value() == "" {
 		return true
 	}
-	return strings.Contains(strings.ToLower(text), strings.ToLower(m.filter.Value()))
+	return MatchesFilter(text, m.filter.Value())
 }
 
 func (m NodesModel) getFilteredSettings() []clusterSetting {
