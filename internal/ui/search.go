@@ -21,7 +21,6 @@ const (
 type SearchBar struct {
 	input      textinput.Model
 	matches    []int
-	matchCount int
 	currentIdx int
 	active     bool
 }
@@ -43,7 +42,6 @@ func (s *SearchBar) Activate() {
 	s.input.Focus()
 	s.input.SetValue("")
 	s.matches = nil
-	s.matchCount = 0
 	s.currentIdx = 0
 }
 
@@ -65,30 +63,7 @@ func (s *SearchBar) Matches() []int {
 }
 
 func (s *SearchBar) MatchCount() int {
-	if s.matchCount > 0 {
-		return s.matchCount
-	}
 	return len(s.matches)
-}
-
-func (s *SearchBar) SetMatchCount(n int) {
-	s.matchCount = n
-	s.currentIdx = 0
-}
-
-func (s *SearchBar) IncrementIdx() {
-	if s.matchCount > 0 {
-		s.currentIdx = (s.currentIdx + 1) % s.matchCount
-	}
-}
-
-func (s *SearchBar) DecrementIdx() {
-	if s.matchCount > 0 {
-		s.currentIdx--
-		if s.currentIdx < 0 {
-			s.currentIdx = s.matchCount - 1
-		}
-	}
 }
 
 func (s *SearchBar) CurrentIdx() int {
@@ -143,19 +118,10 @@ func (s *SearchBar) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, SearchAction) {
 		s.Deactivate()
 		return nil, SearchActionClose
 	case "enter", "ctrl+n":
-		count := s.MatchCount()
-		if count > 0 {
-			s.currentIdx = (s.currentIdx + 1) % count
-		}
+		s.NextMatch()
 		return nil, SearchActionNext
 	case "shift+enter", "ctrl+p":
-		count := s.MatchCount()
-		if count > 0 {
-			s.currentIdx--
-			if s.currentIdx < 0 {
-				s.currentIdx = count - 1
-			}
-		}
+		s.PrevMatch()
 		return nil, SearchActionPrev
 	default:
 		var cmd tea.Cmd
@@ -182,10 +148,10 @@ func (s *SearchBar) HandleClick(relX int) SearchAction {
 		nextEnd := prevEnd + 5
 
 		if relX >= statusEnd && relX < prevEnd {
-			s.DecrementIdx()
+			s.PrevMatch()
 			return SearchActionPrev
 		} else if relX >= prevEnd && relX < nextEnd {
-			s.IncrementIdx()
+			s.NextMatch()
 			return SearchActionNext
 		} else if relX >= nextEnd {
 			s.Deactivate()

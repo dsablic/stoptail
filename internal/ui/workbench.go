@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/charmbracelet/x/ansi"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/labtiva/stoptail/internal/es"
@@ -49,8 +49,10 @@ type WorkbenchModel struct {
 	methodDropdown Dropdown
 	path           textinput.Model
 	editor             Editor
-	response           viewport.Model
 	responseText       string
+	responseRawText    string
+	responseScroll     int
+	responseLines      []string
 	statusCode         int
 	duration           string
 	focus              WorkbenchFocus
@@ -98,12 +100,6 @@ func NewWorkbench() WorkbenchModel {
 
 	editor := NewEditor()
 
-	vp := viewport.New(viewport.WithWidth(40), viewport.WithHeight(10))
-	vp.MouseWheelEnabled = true
-	vp.MouseWheelDelta = 3
-	vp.HighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#854d0e"))
-	vp.SelectedHighlightStyle = lipgloss.NewStyle().Background(lipgloss.Color("#ca8a04")).Bold(true)
-
 	history, _ := storage.LoadHistory()
 
 	methodDropdown := NewDropdown(methods)
@@ -149,7 +145,6 @@ func NewWorkbench() WorkbenchModel {
 		methodDropdown: methodDropdown,
 		path:           path,
 		editor:         editor,
-		response:       vp,
 		focus:          FocusNone,
 		history:        history,
 		historyIdx:     -1,
@@ -188,8 +183,7 @@ func (m *WorkbenchModel) SetSize(width, height int) {
 
 	m.path.SetWidth(paneInnerWidth - 8)
 	m.editor.SetSize(paneInnerWidth, bodyHeight-3)
-	m.response.SetWidth(paneInnerWidth)
-	m.response.SetHeight(bodyHeight - 3)
+	m.wrapResponseLines()
 }
 
 func (m *WorkbenchModel) Prefill(index string) {
@@ -280,23 +274,25 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		m.executing = false
 		if msg.result.Error != nil {
 			m.err = msg.result.Error
-			m.responseText = fmt.Sprintf("Error: %v", msg.result.Error)
+			m.responseRawText = fmt.Sprintf("Error: %v", msg.result.Error)
+			m.responseText = m.responseRawText
 		} else {
 			m.err = nil
 			m.statusCode = msg.result.StatusCode
 			m.duration = msg.result.Duration.String()
 			var pretty bytes.Buffer
 			if err := json.Indent(&pretty, []byte(msg.result.Body), "", "  "); err == nil {
-				m.responseText = highlightJSON(SanitizeForTerminal(pretty.String()))
+				m.responseRawText = SanitizeForTerminal(pretty.String())
 			} else {
-				m.responseText = highlightJSON(SanitizeForTerminal(msg.result.Body))
+				m.responseRawText = SanitizeForTerminal(msg.result.Body)
 			}
+			m.responseText = highlightJSON(m.responseRawText)
 			if msg.result.StatusCode < 400 {
 				m.addToHistory()
 			}
 		}
-		m.response.SetContent(m.responseText)
-		m.response.GotoTop()
+		m.wrapResponseLines()
+		m.responseScroll = 0
 		return m, nil
 
 	case mappingResultMsg:
@@ -366,12 +362,12 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			cmd, action := m.search.HandleKey(msg)
 			switch action {
 			case SearchActionClose:
-				m.response.ClearHighlights()
 				m.focus = FocusResponse
+
 			case SearchActionNext:
-				m.response.HighlightNext()
+				m.scrollToSearchMatch()
 			case SearchActionPrev:
-				m.response.HighlightPrevious()
+				m.scrollToSearchMatch()
 			case SearchActionNone:
 				m.updateSearchMatches()
 			}
@@ -388,6 +384,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case "ctrl+f":
 			if m.focus == FocusResponse {
 				m.search.Activate()
+
 				return m, textinput.Blink
 			}
 		case "ctrl+r":
@@ -409,7 +406,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			case FocusBody:
 				text = m.editor.Content()
 			case FocusResponse:
-				text = m.responseText
+				text = m.responseRawText
 			}
 			return m, m.clipboard.Copy(text)
 		case "ctrl+e":
@@ -432,8 +429,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		case "ctrl+a":
 			if m.focus == FocusBody {
-				m.editor.SelectAll()
-				return m, nil
+				break
 			}
 		case "ctrl+v":
 			if m.focus == FocusBody {
@@ -449,16 +445,50 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				m.editor.Redo()
 				return m, nil
 			}
+		case "pgup":
+			if m.focus == FocusResponse {
+				m.responseScroll -= m.responsePageSize()
+				m.clampResponseScroll()
+				return m, nil
+			}
+		case "pgdown":
+			if m.focus == FocusResponse {
+				m.responseScroll += m.responsePageSize()
+				m.clampResponseScroll()
+				return m, nil
+			}
+		case "home":
+			if m.focus == FocusResponse {
+				m.responseScroll = 0
+				return m, nil
+			}
+		case "end":
+			if m.focus == FocusResponse {
+				m.responseScroll = m.maxResponseScroll()
+				return m, nil
+			}
+		case "up":
+			if m.focus == FocusResponse {
+				m.responseScroll--
+				m.clampResponseScroll()
+				return m, nil
+			}
+		case "down":
+			if m.focus == FocusResponse {
+				m.responseScroll++
+				m.clampResponseScroll()
+				return m, nil
+			}
 		case "n", "ctrl+n":
 			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
-				m.search.IncrementIdx()
-				m.response.HighlightNext()
+				m.search.NextMatch()
+				m.scrollToSearchMatch()
 				return m, nil
 			}
 		case "N", "ctrl+p":
 			if m.focus == FocusResponse && m.search.MatchCount() > 0 && !m.search.Active() {
-				m.search.DecrementIdx()
-				m.response.HighlightPrevious()
+				m.search.PrevMatch()
+				m.scrollToSearchMatch()
 				return m, nil
 			}
 		case "tab":
@@ -563,9 +593,6 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					}
 				}
 			}
-		case FocusResponse:
-			m.response, cmd = m.response.Update(msg)
-			cmds = append(cmds, cmd)
 		}
 	case tea.MouseReleaseMsg:
 		paneInnerWidth := (m.width - 5) / 2
@@ -673,11 +700,11 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					action := m.search.HandleClick(relX)
 					switch action {
 					case SearchActionNext:
-						m.response.HighlightNext()
+						m.scrollToSearchMatch()
 					case SearchActionPrev:
-						m.response.HighlightPrevious()
+						m.scrollToSearchMatch()
 					case SearchActionClose:
-						m.response.ClearHighlights()
+		
 					}
 				}
 			}
@@ -689,15 +716,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		scrollAmount := 3
 
 		if msg.Y > topRowHeight && msg.X < paneInnerWidth+2 {
+			key := tea.KeyDown
 			if msg.Button == tea.MouseWheelUp {
-				m.editor.SetCursor(max(0, m.editor.Line()-scrollAmount))
-			} else {
-				m.editor.SetCursor(m.editor.Line() + scrollAmount)
+				key = tea.KeyUp
+			}
+			for range scrollAmount {
+				m.editor.Update(tea.KeyPressMsg{Code: key})
 			}
 			return m, nil
 		}
-		m.response, cmd = m.response.Update(msg)
-		return m, cmd
+		if msg.Button == tea.MouseWheelUp {
+			m.responseScroll -= 3
+		} else {
+			m.responseScroll += 3
+		}
+		m.clampResponseScroll()
+		return m, nil
 	}
 
 	return m, tea.Batch(cmds...)
@@ -828,30 +862,86 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 }
 
 func (m *WorkbenchModel) updateSearchMatches() {
-	query := strings.ToLower(m.search.Query())
-	if query == "" {
-		m.response.ClearHighlights()
-		m.search.SetMatchCount(0)
+	lines := strings.Split(m.responseRawText, "\n")
+	m.search.FindMatches(lines)
+	m.scrollToSearchMatch()
+}
+
+func (m *WorkbenchModel) scrollToSearchMatch() {
+	if match := m.search.CurrentMatch(); match >= 0 {
+		m.responseScroll = match
+		m.clampResponseScroll()
+	}
+}
+
+func (m WorkbenchModel) responseVisibleHeight() int {
+	h := m.height - 9
+	if m.search.Active() {
+		h--
+	}
+	if h < 1 {
+		return 10
+	}
+	return h
+}
+
+func (m WorkbenchModel) responsePageSize() int {
+	return m.responseVisibleHeight()
+}
+
+func (m WorkbenchModel) maxResponseScroll() int {
+	maxScroll := len(m.responseLines) - m.responseVisibleHeight()
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
+}
+
+func (m *WorkbenchModel) clampResponseScroll() {
+	if m.responseScroll < 0 {
+		m.responseScroll = 0
+	}
+	if mx := m.maxResponseScroll(); m.responseScroll > mx {
+		m.responseScroll = mx
+	}
+}
+
+func (m WorkbenchModel) renderResponseContent(paneInnerWidth int) string {
+	var b strings.Builder
+	visibleHeight := m.responseVisibleHeight()
+	endIdx := min(m.responseScroll+visibleHeight, len(m.responseLines))
+	startIdx := m.responseScroll
+	if startIdx >= len(m.responseLines) {
+		startIdx = max(0, len(m.responseLines)-1)
+	}
+
+	for i := startIdx; i < endIdx; i++ {
+		b.WriteString(m.responseLines[i])
+		if i < endIdx-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	if m.search.Active() {
+		b.WriteString("\n")
+		b.WriteString(m.search.View(paneInnerWidth - 4))
+	}
+
+	return b.String()
+}
+
+func (m *WorkbenchModel) wrapResponseLines() {
+	if m.responseText == "" {
+		m.responseLines = nil
 		return
 	}
-	content := strings.ToLower(m.responseText)
-	var highlights [][]int
-	start := 0
-	for {
-		idx := strings.Index(content[start:], query)
-		if idx < 0 {
-			break
-		}
-		matchStart := start + idx
-		matchEnd := matchStart + len(query)
-		highlights = append(highlights, []int{matchStart, matchEnd})
-		start = matchEnd
+	paneInnerWidth := (m.width - 5) / 2
+	if paneInnerWidth < 10 {
+		paneInnerWidth = 40
 	}
-	m.response.SetHighlights(highlights)
-	m.search.SetMatchCount(len(highlights))
-	if len(highlights) > 0 {
-		m.response.HighlightNext()
-	}
+	wrapWidth := paneInnerWidth - 2
+	wrapped := ansi.Hardwrap(m.responseText, wrapWidth, false)
+	m.responseLines = strings.Split(wrapped, "\n")
 }
 
 func (m WorkbenchModel) execute() tea.Cmd {
@@ -1012,15 +1102,17 @@ func (m WorkbenchModel) View() string {
 	}
 	bodyHeader := lipgloss.NewStyle().Bold(true).Render(bodyHeaderText) + "  " + bodyValidation
 
+	paneHeight := m.height - 6
 	bodyPaneContent := lipgloss.JoinVertical(lipgloss.Left,
 		bodyHeader,
 		bodyContent)
 	bodyPane := lipgloss.NewStyle().
 		Border(bodyBorder).
 		BorderForeground(bodyBorderColor).
-		Width(paneInnerWidth).
-		Height(m.height - 6).
+		Width(paneInnerWidth + 2).
+		Height(paneHeight).
 		Render(bodyPaneContent)
+	bodyPane = clipPane(bodyPane, paneHeight)
 
 	// Right pane - response
 	responseBorder := lipgloss.RoundedBorder()
@@ -1043,11 +1135,7 @@ func (m WorkbenchModel) View() string {
 		responseHeader = m.spinner.View() + " Executing..."
 	}
 
-	responseContent := m.response.View()
-	if m.search.Active() {
-		searchBar := m.search.View(paneInnerWidth - 4)
-		responseContent = lipgloss.JoinVertical(lipgloss.Left, responseContent, searchBar)
-	}
+	responseContent := m.renderResponseContent(paneInnerWidth)
 
 	responsePaneContent := lipgloss.JoinVertical(lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render(responseHeader),
@@ -1056,9 +1144,10 @@ func (m WorkbenchModel) View() string {
 	responsePane := lipgloss.NewStyle().
 		Border(responseBorder).
 		BorderForeground(responseBorderColor).
-		Width(paneInnerWidth).
-		Height(m.height - 6).
+		Width(paneInnerWidth + 2).
+		Height(paneHeight).
 		Render(responsePaneContent)
+	responsePane = clipPane(responsePane, paneHeight)
 
 	bodyLines := strings.Split(bodyPane, "\n")
 	responseLines := strings.Split(responsePane, "\n")
@@ -1313,6 +1402,17 @@ func (m WorkbenchModel) overlayDropdown(bodyView, dropdown string) string {
 	copy(result[len(bodyLines)-dropdownHeight:], dropdownLines)
 
 	return strings.Join(result, "\n")
+}
+
+func clipPane(rendered string, targetHeight int) string {
+	lines := strings.Split(rendered, "\n")
+	if len(lines) <= targetHeight {
+		return rendered
+	}
+	clipped := make([]string, targetHeight)
+	copy(clipped, lines[:targetHeight-1])
+	clipped[targetHeight-1] = lines[len(lines)-1]
+	return strings.Join(clipped, "\n")
 }
 
 func highlightJSON(input string) string {

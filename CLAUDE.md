@@ -256,7 +256,7 @@ When adding new functionality, check if a utility already exists before creating
   - `v.WindowTitle` for dynamic terminal window title
 - Sub-models keep returning `string` from View() - only models passed to `tea.NewProgram()` return `tea.View`
 - Clipboard uses native OSC52: `tea.SetClipboard()` returns `tea.Cmd`, paste is async via `tea.ReadClipboard()` / `tea.ClipboardMsg`
-- Viewport has built-in mouse wheel support (`MouseWheelEnabled = true`) and search highlighting (`SetHighlights()`, `HighlightNext()`, `HighlightPrevious()`)
+- **Do not use `viewport.Model` for scrollable text content** - the viewport component has fundamental issues with ANSI-encoded content (broken byte-offset highlighting, key handling quirks). Use manual scroll rendering instead: store `scroll int` and `lines []string`, render a window of visible lines in View(), and handle pgup/pgdown/home/end/up/down/mouse wheel with simple integer arithmetic. See workbench response view and mappings view for examples. Use `ansi.Hardwrap()` from `github.com/charmbracelet/x/ansi` for ANSI-safe line wrapping.
 
 **Create reusable components** - Always build reusable UI components that can be composed to create custom views. When a feature appears in multiple places (e.g., search, filtering, navigation), create a shared component:
 
@@ -268,7 +268,7 @@ type SearchBar struct {
     active     bool
 }
 
-func (s *SearchBar) HandleKey(msg tea.KeyMsg) (tea.Cmd, SearchAction) {
+func (s *SearchBar) HandleKey(msg tea.KeyPressMsg) (tea.Cmd, SearchAction) {
     switch msg.String() {
     case "esc":
         s.Deactivate()
@@ -346,7 +346,7 @@ Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding
 **Filter vs Search** - Use the right pattern for the content type:
 
 - **Tables (structured data)**: Use filter (`/`) - instantly hides non-matching rows
-- **Text content (logs, code)**: Use search (`Ctrl+F`) - viewport built-in highlighting shows all matches (gold) with current match distinct (bright gold), navigate with n/N. Uses `viewport.SetHighlights()` for byte-offset matching and `HighlightNext()`/`HighlightPrevious()` for auto-scroll navigation.
+- **Text content (logs, code)**: Use search (`Ctrl+F`) with `SearchBar` component - uses line-based matching via `FindMatches(lines)` returning line indices, navigate with n/N. Sets scroll offset directly to matched line index.
 
 Tables in Cluster tab use filter because users want to narrow down to specific nodes/settings. Workbench response uses search because users want to find text within the JSON while seeing surrounding context.
 
@@ -445,27 +445,23 @@ if msg.Y < topRowHeight+1 {
 }
 ```
 
-**Add mouse scroll support** - Handle wheel events for scrollable content:
+**Add mouse scroll support** - Handle `tea.MouseWheelMsg` for scrollable content:
 
 ```go
-if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-    if msg.Button == tea.MouseButtonWheelUp {
+case tea.MouseWheelMsg:
+    if msg.Button == tea.MouseWheelUp {
         m.scrollY = max(0, m.scrollY-3)
     } else {
         m.scrollY = min(maxScroll, m.scrollY+3)
     }
-}
 ```
 
-**Adjust coordinates for nested views** - When delegating mouse events to sub-models, adjust Y for any header/chrome offset:
+**Adjust coordinates for nested views** - When delegating mouse events to sub-models, adjust Y for any header/chrome offset. In Bubble Tea v2, mouse events are separate types (`tea.MouseReleaseMsg`, `tea.MouseWheelMsg`), not a single `tea.MouseMsg`:
 
 ```go
-delegateMsg := msg
-if mouseMsg, ok := msg.(tea.MouseMsg); ok {
-    mouseMsg.Y -= headerHeight
-    delegateMsg = mouseMsg
-}
-subModel.Update(delegateMsg)
+case tea.MouseReleaseMsg:
+    msg.Y -= headerHeight
+    subModel.Update(msg)
 ```
 
 **Keep tab click handlers in sync** - When adding new views to tabs (e.g., Cluster tab), update BOTH the `renderTabs()` function AND the mouse click handler in `Update()`. The tabs list must be identical in both places:

@@ -254,6 +254,16 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			if m.selectedNode >= m.scrollY+maxVisible {
 				m.scrollY = m.selectedNode - maxVisible + 1
 			}
+		case "home":
+			m.selectedNode = 0
+			m.scrollY = 0
+		case "end":
+			nodes := m.getNodeList()
+			m.selectedNode = max(0, len(nodes)-1)
+			maxVisible := m.maxVisibleNodes()
+			if m.selectedNode >= maxVisible {
+				m.scrollY = m.selectedNode - maxVisible + 1
+			}
 		case "left", "h":
 			if m.selectedIndex > 0 {
 				m.selectedIndex--

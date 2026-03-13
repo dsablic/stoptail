@@ -415,6 +415,22 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			if m.scrollY > m.getMaxScroll() {
 				m.scrollY = m.getMaxScroll()
 			}
+		case "home":
+			m.scrollY = 0
+			if m.activeView == ViewClusterSettings {
+				m.selectedSetting = 0
+			} else if m.activeView == ViewTemplates {
+				m.selectedTemplate = 0
+			}
+		case "end":
+			m.scrollY = m.getMaxScroll()
+			if m.activeView == ViewClusterSettings {
+				filtered := m.getFilteredSettings()
+				m.selectedSetting = max(0, len(filtered)-1)
+			} else if m.activeView == ViewTemplates {
+				filtered := m.getFilteredTemplates()
+				m.selectedTemplate = max(0, len(filtered)-1)
+			}
 		}
 	case tea.MouseReleaseMsg:
 		if msg.Button == tea.MouseLeft {

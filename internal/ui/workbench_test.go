@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -266,11 +267,120 @@ func TestCtrlRExecutionState(t *testing.T) {
 	}
 }
 
+func TestResponsePgDownFullFlow(t *testing.T) {
+	m := New(nil, nil)
+	m.connected = true
+	m.activeTab = TabWorkbench
+	m.width = 80
+	m.height = 30
+	m.workbench.SetSize(80, 26)
+
+	var lines []string
+	for i := range 100 {
+		lines = append(lines, fmt.Sprintf("line %d content here", i))
+	}
+	content := strings.Join(lines, "\n")
+	m.workbench.responseRawText = content
+	m.workbench.responseText = content
+	m.workbench.wrapResponseLines()
+	m.workbench.focus = FocusResponse
+
+	before := m.workbench.responseScroll
+
+	pgDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+	updated, _ := m.Update(pgDown)
+	m = updated.(Model)
+
+	after := m.workbench.responseScroll
+	t.Logf("FULL FLOW: before=%d after=%d hasActiveInput=%v focus=%d",
+		before, after, m.hasActiveInput(), m.workbench.focus)
+	if after <= before {
+		t.Errorf("pgdown through model should scroll: before=%d after=%d", before, after)
+	}
+}
+
+func TestResponseWrapping(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+
+	rawJSON := `{"took": 5, "timed_out": false, "hits": {"total": {"value": 100, "relation": "eq"}, "max_score": 1.0, "hits": [{"_index": "test", "_id": "1", "_score": 1.0, "_source": {"field1": "value1", "field2": "value2", "field3": "this is a long value that should cause wrapping"}}]}}`
+	highlighted := highlightJSON(rawJSON)
+	w.responseRawText = rawJSON
+	w.responseText = highlighted
+	w.wrapResponseLines()
+
+	rawLines := strings.Split(rawJSON, "\n")
+	t.Logf("raw lines=%d, wrapped lines=%d", len(rawLines), len(w.responseLines))
+
+	if len(w.responseLines) <= len(rawLines) {
+		t.Errorf("wrapping should produce more lines (%d) than raw lines (%d)",
+			len(w.responseLines), len(rawLines))
+	}
+}
+
+func TestResponsePgDownScrolls(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+
+	var lines []string
+	for i := range 100 {
+		lines = append(lines, fmt.Sprintf("line %d content here", i))
+	}
+	content := strings.Join(lines, "\n")
+	w.responseRawText = content
+	w.responseText = content
+	w.wrapResponseLines()
+	w.focus = FocusResponse
+
+	before := w.responseScroll
+
+	pgDown := tea.KeyPressMsg{Code: tea.KeyPgDown}
+	w, _ = w.Update(pgDown)
+
+	after := w.responseScroll
+	t.Logf("before=%d after=%d height=%d focus=%d", before, after, w.height, w.focus)
+	if after <= before {
+		t.Errorf("pgdown should scroll: before=%d after=%d", before, after)
+	}
+}
+
+func TestResponseHomeEnd(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(80, 30)
+
+	var lines []string
+	for i := range 100 {
+		lines = append(lines, fmt.Sprintf("line %d content here", i))
+	}
+	content := strings.Join(lines, "\n")
+	w.responseRawText = content
+	w.responseText = content
+	w.wrapResponseLines()
+	w.focus = FocusResponse
+
+	endKey := tea.KeyPressMsg{Code: tea.KeyEnd}
+	w, _ = w.Update(endKey)
+	atEnd := w.responseScroll
+	t.Logf("after End: scroll=%d", atEnd)
+	if atEnd == 0 {
+		t.Errorf("end key should scroll to bottom, scroll=%d", atEnd)
+	}
+
+	homeKey := tea.KeyPressMsg{Code: tea.KeyHome}
+	w, _ = w.Update(homeKey)
+	atHome := w.responseScroll
+	t.Logf("after Home: scroll=%d", atHome)
+	if atHome != 0 {
+		t.Errorf("home key should scroll to top, scroll=%d", atHome)
+	}
+}
+
 func TestSearchNavigationWhenActive(t *testing.T) {
 	w := NewWorkbench()
 	w.SetSize(80, 30)
-	w.responseText = "line1\nmatch\nline3\nmatch\nline5"
-	w.response.SetContent(w.responseText)
+	w.responseRawText = "line1\nmatch\nline3\nmatch\nline5"
+	w.responseText = w.responseRawText
+	w.wrapResponseLines()
 	w.focus = FocusResponse
 
 	ctrlF := tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}

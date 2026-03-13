@@ -205,6 +205,16 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 			if cmd != nil {
 				return m, cmd
 			}
+		case "home":
+			cmd := m.handleHome()
+			if cmd != nil {
+				return m, cmd
+			}
+		case "end":
+			cmd := m.handleEnd()
+			if cmd != nil {
+				return m, cmd
+			}
 		case "ctrl+y":
 			if m.activePane == BrowserPaneDetail && len(m.documents) > 0 {
 				return m, m.clipboard.Copy(m.selectedDocSource())
@@ -254,7 +264,8 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.
 		}
 	case "backspace":
 		if len(m.filterText) > 0 {
-			m.filterText = m.filterText[:len(m.filterText)-1]
+			r := []rune(m.filterText)
+			m.filterText = string(r[:len(r)-1])
 		}
 	default:
 		if len(msg.String()) == 1 {
@@ -387,6 +398,40 @@ func (m *BrowserModel) handlePageDown() tea.Cmd {
 	case BrowserPaneDetail:
 		maxScroll := max(0, len(m.detailContent)-m.detailHeight)
 		m.detailScroll = min(maxScroll, m.detailScroll+m.detailHeight)
+	}
+	return nil
+}
+
+func (m *BrowserModel) handleHome() tea.Cmd {
+	switch m.activePane {
+	case BrowserPaneIndices:
+		m.selectedIndex = 0
+		m.indexScroll = 0
+	case BrowserPaneDocs:
+		m.selectedDoc = 0
+		m.docScroll = 0
+		m.updateDetailPane()
+	case BrowserPaneDetail:
+		m.detailScroll = 0
+	}
+	return nil
+}
+
+func (m *BrowserModel) handleEnd() tea.Cmd {
+	switch m.activePane {
+	case BrowserPaneIndices:
+		filtered := m.filteredIndices()
+		m.selectedIndex = max(0, len(filtered)-1)
+		m.indexScroll = m.maxIndexScroll()
+	case BrowserPaneDocs:
+		m.selectedDoc = max(0, len(m.documents)-1)
+		m.docScroll = m.maxDocScroll()
+		m.updateDetailPane()
+		if m.shouldLoadMore() {
+			return m.startFetchDocuments(true)
+		}
+	case BrowserPaneDetail:
+		m.detailScroll = max(0, len(m.detailContent)-m.detailHeight)
 	}
 	return nil
 }

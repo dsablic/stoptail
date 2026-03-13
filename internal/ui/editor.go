@@ -257,38 +257,12 @@ func (e Editor) renderWithSelection(content string) string {
 	return strings.Join(result, "\n")
 }
 
-func (e Editor) renderWithCursor(content string) string {
-	lines := strings.Split(content, "\n")
-	cursorLine := e.textarea.Line()
-	cursorCol := e.logicalCol()
-
-	if cursorLine < 0 || cursorLine >= len(lines) {
-		return content
-	}
-
-	runes := []rune(lines[cursorLine])
-	if cursorCol > len(runes) {
-		cursorCol = len(runes)
-	}
-
-	cursorStyle := lipgloss.NewStyle().Reverse(true)
-	if cursorCol >= len(runes) {
-		lines[cursorLine] = string(runes) + cursorStyle.Render(" ")
-	} else {
-		lines[cursorLine] = string(runes[:cursorCol]) + cursorStyle.Render(string(runes[cursorCol])) + string(runes[cursorCol+1:])
-	}
-	return strings.Join(lines, "\n")
-}
 
 func (e Editor) View() string {
-	content := e.textarea.Value()
 	if e.selection.Active {
-		return e.renderWithSelection(content)
+		return e.renderWithSelection(e.textarea.Value())
 	}
-	if e.textarea.Focused() {
-		return e.renderWithCursor(content)
-	}
-	return content
+	return e.textarea.View()
 }
 
 func (e Editor) GetSelectedText() string {
@@ -464,6 +438,7 @@ func (e *Editor) InsertString(s string) {
 func (e *Editor) SetCursor(pos int) {
 	e.textarea.SetCursorColumn(pos)
 }
+
 
 func (e Editor) CursorOffset() int {
 	return e.getCursorOffset()

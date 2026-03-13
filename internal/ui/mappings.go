@@ -245,6 +245,24 @@ func (m MappingsModel) Update(msg tea.Msg) (MappingsModel, tea.Cmd) {
 					m.mappingScroll = maxScroll
 				}
 			}
+		case "home":
+			if m.activePane == PaneIndices {
+				m.selectedIndex = 0
+				m.scrollY = 0
+			} else {
+				m.mappingScroll = 0
+			}
+		case "end":
+			if m.activePane == PaneIndices {
+				filtered := m.filteredIndices()
+				m.selectedIndex = max(0, len(filtered)-1)
+				maxVisible := m.maxVisibleIndices()
+				if m.selectedIndex >= maxVisible {
+					m.scrollY = m.selectedIndex - maxVisible + 1
+				}
+			} else {
+				m.mappingScroll = m.maxMappingScroll()
+			}
 		}
 	case tea.MouseWheelMsg:
 		scrollAmount := 3
@@ -275,7 +293,8 @@ func (m MappingsModel) handleFilterInput(msg tea.KeyPressMsg) (MappingsModel, te
 		m.scrollY = 0
 	case "backspace":
 		if len(m.filterText) > 0 {
-			m.filterText = m.filterText[:len(m.filterText)-1]
+			r := []rune(m.filterText)
+			m.filterText = string(r[:len(r)-1])
 			m.selectedIndex = 0
 			m.scrollY = 0
 		}

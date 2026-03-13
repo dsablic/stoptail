@@ -137,6 +137,12 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			if m.selectedRow >= m.scrollY+maxVisible {
 				m.scrollY = m.selectedRow - maxVisible + 1
 			}
+		case "home":
+			m.selectedRow = 0
+			m.scrollY = 0
+		case "end":
+			m.selectedRow = max(0, len(m.tasks)-1)
+			m.scrollY = m.maxScroll()
 		case "c":
 			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) && m.tasks[m.selectedRow].Cancellable {
 				m.confirming = m.tasks[m.selectedRow].ID
