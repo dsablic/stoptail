@@ -24,23 +24,21 @@ const (
 )
 
 type BrowserModel struct {
-	client        *es.Client
-	indices       []es.IndexInfo
-	selectedIndex int
-	indexScroll   int
-	filterActive  bool
-	filterText    string
+	client       *es.Client
+	indices      []es.IndexInfo
+	indexNav     ListNav
+	filterActive bool
+	filterText   string
 
 	documents   []es.DocumentHit
-	selectedDoc int
-	docScroll   int
+	docNav      ListNav
 	loading     bool
 	hasMore     bool
 	searchAfter []any
 	total       int64
 
 	detailContent []string
-	detailScroll  int
+	detailNav     ListNav
 	detailHeight  int
 	activePane    BrowserPane
 	clipboard     Clipboard
@@ -58,6 +56,9 @@ type browserSearchMsg struct {
 func NewBrowser() BrowserModel {
 	return BrowserModel{
 		activePane: BrowserPaneIndices,
+		indexNav:   NewCursorNav(),
+		docNav:     NewCursorNav(),
+		detailNav:  NewScrollNav(),
 		clipboard:  NewClipboard(),
 		hasMore:    true,
 	}
@@ -69,8 +70,8 @@ func (m *BrowserModel) SetClient(client *es.Client) {
 
 func (m *BrowserModel) SetIndices(indices []es.IndexInfo) {
 	m.indices = indices
-	if m.selectedIndex >= len(indices) {
-		m.selectedIndex = max(0, len(indices)-1)
+	if m.indexNav.Selected >= len(indices) {
+		m.indexNav.Selected = max(0, len(indices)-1)
 	}
 }
 
@@ -83,7 +84,7 @@ func (m *BrowserModel) SetSize(width, height int) {
 func (m *BrowserModel) SelectIndexByName(name string) bool {
 	for i, idx := range m.indices {
 		if idx.Name == name {
-			m.selectedIndex = i
+			m.indexNav.Selected = i
 			m.activePane = BrowserPaneDocs
 			return true
 		}
@@ -126,8 +127,8 @@ func (m BrowserModel) filteredIndices() []es.IndexInfo {
 
 func (m BrowserModel) selectedIndexName() string {
 	filtered := m.filteredIndices()
-	if m.selectedIndex >= 0 && m.selectedIndex < len(filtered) {
-		return filtered[m.selectedIndex].Name
+	if m.indexNav.Selected >= 0 && m.indexNav.Selected < len(filtered) {
+		return filtered[m.indexNav.Selected].Name
 	}
 	return ""
 }
@@ -151,8 +152,7 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 			m.documents = append(m.documents, msg.result.Hits...)
 		} else {
 			m.documents = msg.result.Hits
-			m.selectedDoc = 0
-			m.docScroll = 0
+			m.docNav.Reset()
 		}
 		m.total = msg.result.Total
 		m.hasMore = len(m.documents) < int(m.total)
@@ -188,32 +188,14 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 				m.activePane = BrowserPaneDocs
 				return m, m.startFetchDocuments(false)
 			}
-		case "up", "k":
-			m.handleUp()
-		case "down", "j":
-			cmd := m.handleDown()
-			if cmd != nil {
-				return m, cmd
-			}
-		case "pgup":
-			cmd := m.handlePageUp()
-			if cmd != nil {
-				return m, cmd
-			}
-		case "pgdown":
-			cmd := m.handlePageDown()
-			if cmd != nil {
-				return m, cmd
-			}
-		case "home":
-			cmd := m.handleHome()
-			if cmd != nil {
-				return m, cmd
-			}
-		case "end":
-			cmd := m.handleEnd()
-			if cmd != nil {
-				return m, cmd
+		case "up", "k", "down", "j", "pgup", "pgdown", "home", "end":
+			nav, total, visible := m.activeNavParams()
+			nav.HandleKey(msg.String(), total, visible)
+			if m.activePane == BrowserPaneDocs {
+				m.updateDetailPane()
+				if m.shouldLoadMore() {
+					return m, m.startFetchDocuments(true)
+				}
 			}
 		case "ctrl+y":
 			if m.activePane == BrowserPaneDetail && len(m.documents) > 0 {
@@ -222,31 +204,10 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 		}
 
 	case tea.MouseWheelMsg:
-		scrollAmount := 3
-		switch m.activePane {
-		case BrowserPaneIndices:
-			maxScroll := m.maxIndexScroll()
-			if msg.Button == tea.MouseWheelUp {
-				m.indexScroll = max(0, m.indexScroll-scrollAmount)
-			} else {
-				m.indexScroll = min(maxScroll, m.indexScroll+scrollAmount)
-			}
-		case BrowserPaneDocs:
-			if msg.Button == tea.MouseWheelUp {
-				m.docScroll = max(0, m.docScroll-scrollAmount)
-			} else {
-				cmd := m.scrollDocsDown(scrollAmount)
-				if cmd != nil {
-					return m, cmd
-				}
-			}
-		case BrowserPaneDetail:
-			if msg.Button == tea.MouseWheelUp {
-				m.detailScroll = max(0, m.detailScroll-scrollAmount)
-			} else {
-				maxScroll := max(0, len(m.detailContent)-m.detailHeight)
-				m.detailScroll = min(maxScroll, m.detailScroll+scrollAmount)
-			}
+		nav, total, visible := m.activeNavParams()
+		nav.HandleWheel(msg.Button != tea.MouseWheelUp, total, visible)
+		if m.activePane == BrowserPaneDocs && m.shouldLoadMore() {
+			return m, m.startFetchDocuments(true)
 		}
 	}
 
@@ -257,8 +218,7 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.
 	switch msg.String() {
 	case "enter", "esc":
 		m.filterActive = false
-		m.selectedIndex = 0
-		m.indexScroll = 0
+		m.indexNav.Reset()
 		if msg.String() == "enter" {
 			return m, m.startFetchDocuments(false)
 		}
@@ -270,206 +230,59 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.
 	default:
 		if len(msg.String()) == 1 {
 			m.filterText += msg.String()
-			m.selectedIndex = 0
-			m.indexScroll = 0
+			m.indexNav.Reset()
 		}
 	}
 	return m, nil
 }
 
-func (m *BrowserModel) handleUp() {
+func (m *BrowserModel) activeNavParams() (*ListNav, int, int) {
+	visible := m.height - 7
 	switch m.activePane {
 	case BrowserPaneIndices:
-		if m.selectedIndex > 0 {
-			m.selectedIndex--
-			if m.selectedIndex < m.indexScroll {
-				m.indexScroll = m.selectedIndex
-			}
-		}
+		return &m.indexNav, len(m.filteredIndices()), visible
 	case BrowserPaneDocs:
-		if m.selectedDoc > 0 {
-			m.selectedDoc--
-			if m.selectedDoc < m.docScroll {
-				m.docScroll = m.selectedDoc
-			}
-			m.updateDetailPane()
-		}
-	case BrowserPaneDetail:
-		m.detailScroll = max(0, m.detailScroll-1)
+		return &m.docNav, len(m.documents), visible
+	default:
+		return &m.detailNav, len(m.detailContent), m.detailHeight
 	}
-}
-
-func (m *BrowserModel) handleDown() tea.Cmd {
-	switch m.activePane {
-	case BrowserPaneIndices:
-		filtered := m.filteredIndices()
-		if m.selectedIndex < len(filtered)-1 {
-			m.selectedIndex++
-			maxVisible := m.maxVisibleIndices()
-			if m.selectedIndex >= m.indexScroll+maxVisible {
-				m.indexScroll = m.selectedIndex - maxVisible + 1
-			}
-		}
-	case BrowserPaneDocs:
-		if m.selectedDoc < len(m.documents)-1 {
-			m.selectedDoc++
-			maxVisible := m.maxVisibleDocs()
-			if m.selectedDoc >= m.docScroll+maxVisible {
-				m.docScroll = m.selectedDoc - maxVisible + 1
-			}
-			m.updateDetailPane()
-
-			if m.shouldLoadMore() {
-				return m.startFetchDocuments(true)
-			}
-		}
-	case BrowserPaneDetail:
-		maxScroll := max(0, len(m.detailContent)-m.detailHeight)
-		m.detailScroll = min(maxScroll, m.detailScroll+1)
-	}
-	return nil
-}
-
-func (m *BrowserModel) scrollDocsDown(amount int) tea.Cmd {
-	maxScroll := m.maxDocScroll()
-	m.docScroll = min(maxScroll, m.docScroll+amount)
-
-	if m.shouldLoadMore() {
-		return m.startFetchDocuments(true)
-	}
-	return nil
-}
-
-func (m *BrowserModel) handlePageUp() tea.Cmd {
-	switch m.activePane {
-	case BrowserPaneIndices:
-		pageSize := m.maxVisibleIndices()
-		m.selectedIndex -= pageSize
-		if m.selectedIndex < 0 {
-			m.selectedIndex = 0
-		}
-		if m.selectedIndex < m.indexScroll {
-			m.indexScroll = m.selectedIndex
-		}
-	case BrowserPaneDocs:
-		pageSize := m.maxVisibleDocs()
-		m.selectedDoc -= pageSize
-		if m.selectedDoc < 0 {
-			m.selectedDoc = 0
-		}
-		if m.selectedDoc < m.docScroll {
-			m.docScroll = m.selectedDoc
-		}
-		m.updateDetailPane()
-	case BrowserPaneDetail:
-		m.detailScroll = max(0, m.detailScroll-m.detailHeight)
-	}
-	return nil
-}
-
-func (m *BrowserModel) handlePageDown() tea.Cmd {
-	switch m.activePane {
-	case BrowserPaneIndices:
-		filtered := m.filteredIndices()
-		pageSize := m.maxVisibleIndices()
-		m.selectedIndex += pageSize
-		if m.selectedIndex >= len(filtered) {
-			m.selectedIndex = len(filtered) - 1
-		}
-		maxVisible := m.maxVisibleIndices()
-		if m.selectedIndex >= m.indexScroll+maxVisible {
-			m.indexScroll = m.selectedIndex - maxVisible + 1
-		}
-	case BrowserPaneDocs:
-		pageSize := m.maxVisibleDocs()
-		m.selectedDoc += pageSize
-		if m.selectedDoc >= len(m.documents) {
-			m.selectedDoc = len(m.documents) - 1
-		}
-		maxVisible := m.maxVisibleDocs()
-		if m.selectedDoc >= m.docScroll+maxVisible {
-			m.docScroll = m.selectedDoc - maxVisible + 1
-		}
-		m.updateDetailPane()
-
-		if m.shouldLoadMore() {
-			return m.startFetchDocuments(true)
-		}
-	case BrowserPaneDetail:
-		maxScroll := max(0, len(m.detailContent)-m.detailHeight)
-		m.detailScroll = min(maxScroll, m.detailScroll+m.detailHeight)
-	}
-	return nil
-}
-
-func (m *BrowserModel) handleHome() tea.Cmd {
-	switch m.activePane {
-	case BrowserPaneIndices:
-		m.selectedIndex = 0
-		m.indexScroll = 0
-	case BrowserPaneDocs:
-		m.selectedDoc = 0
-		m.docScroll = 0
-		m.updateDetailPane()
-	case BrowserPaneDetail:
-		m.detailScroll = 0
-	}
-	return nil
-}
-
-func (m *BrowserModel) handleEnd() tea.Cmd {
-	switch m.activePane {
-	case BrowserPaneIndices:
-		filtered := m.filteredIndices()
-		m.selectedIndex = max(0, len(filtered)-1)
-		m.indexScroll = m.maxIndexScroll()
-	case BrowserPaneDocs:
-		m.selectedDoc = max(0, len(m.documents)-1)
-		m.docScroll = m.maxDocScroll()
-		m.updateDetailPane()
-		if m.shouldLoadMore() {
-			return m.startFetchDocuments(true)
-		}
-	case BrowserPaneDetail:
-		m.detailScroll = max(0, len(m.detailContent)-m.detailHeight)
-	}
-	return nil
 }
 
 func (m BrowserModel) shouldLoadMore() bool {
 	if !m.hasMore || m.loading {
 		return false
 	}
-	return m.docScroll+m.maxVisibleDocs() >= len(m.documents)-5
+	visible := m.height - 7
+	return m.docNav.Scroll+visible >= len(m.documents)-5
 }
 
 func (m *BrowserModel) updateDetailPane() {
-	if m.selectedDoc < 0 || m.selectedDoc >= len(m.documents) {
+	if m.docNav.Selected < 0 || m.docNav.Selected >= len(m.documents) {
 		m.detailContent = nil
-		m.detailScroll = 0
+		m.detailNav.Scroll = 0
 		return
 	}
 
-	doc := m.documents[m.selectedDoc]
+	doc := m.documents[m.docNav.Selected]
 	var obj any
 	if err := json.Unmarshal([]byte(doc.Source), &obj); err == nil {
 		if pretty, err := json.MarshalIndent(obj, "", "  "); err == nil {
 			sanitized := SanitizeForTerminal(string(pretty))
 			highlighted := highlightJSON(sanitized)
 			m.detailContent = strings.Split(highlighted, "\n")
-			m.detailScroll = 0
+			m.detailNav.Scroll = 0
 			return
 		}
 	}
 	m.detailContent = []string{SanitizeForTerminal(doc.Source)}
-	m.detailScroll = 0
+	m.detailNav.Scroll = 0
 }
 
 func (m BrowserModel) selectedDocSource() string {
-	if m.selectedDoc < 0 || m.selectedDoc >= len(m.documents) {
+	if m.docNav.Selected < 0 || m.docNav.Selected >= len(m.documents) {
 		return ""
 	}
-	doc := m.documents[m.selectedDoc]
+	doc := m.documents[m.docNav.Selected]
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, []byte(doc.Source), "", "  "); err == nil {
 		return pretty.String()
@@ -504,25 +317,8 @@ func (m BrowserModel) maxVisibleIndices() int {
 	return m.height - 7
 }
 
-func (m BrowserModel) maxIndexScroll() int {
-	filtered := m.filteredIndices()
-	maxScroll := len(filtered) - m.maxVisibleIndices()
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
-}
-
 func (m BrowserModel) maxVisibleDocs() int {
 	return m.height - 7
-}
-
-func (m BrowserModel) maxDocScroll() int {
-	maxScroll := len(m.documents) - m.maxVisibleDocs()
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
 }
 
 func (m BrowserModel) View() string {
@@ -581,13 +377,13 @@ func (m BrowserModel) renderIndexList(width int) string {
 	content.WriteString("\n")
 
 	maxVisible := m.maxVisibleIndices()
-	for i := m.indexScroll; i < len(filtered) && i < m.indexScroll+maxVisible; i++ {
+	for i := m.indexNav.Scroll; i < len(filtered) && i < m.indexNav.Scroll+maxVisible; i++ {
 		idx := filtered[i]
 		name := Truncate(idx.Name, innerWidth-2)
 
 		style := lipgloss.NewStyle()
 		prefix := "  "
-		if i == m.selectedIndex {
+		if i == m.indexNav.Selected {
 			style = style.Background(ActiveBg).Foreground(ColorWhite)
 			prefix = "> "
 		}
@@ -632,14 +428,14 @@ func (m BrowserModel) renderDocList(width int) string {
 		previewWidth := innerWidth - idWidth - 3
 
 		maxVisible := m.maxVisibleDocs()
-		for i := m.docScroll; i < len(m.documents) && i < m.docScroll+maxVisible; i++ {
+		for i := m.docNav.Scroll; i < len(m.documents) && i < m.docNav.Scroll+maxVisible; i++ {
 			doc := m.documents[i]
 			id := Truncate(doc.ID, idWidth)
 			preview := Truncate(sanitizeLine(doc.Source), previewWidth)
 
 			style := lipgloss.NewStyle()
 			prefix := "  "
-			if i == m.selectedDoc {
+			if i == m.docNav.Selected {
 				style = style.Background(ActiveBg).Foreground(ColorWhite)
 				prefix = "> "
 			}
@@ -667,8 +463,8 @@ func (m BrowserModel) renderDetailPane(width int) string {
 
 	var content strings.Builder
 	header := "Document"
-	if m.selectedDoc >= 0 && m.selectedDoc < len(m.documents) {
-		header = fmt.Sprintf("Document: %s", Truncate(m.documents[m.selectedDoc].ID, width-15))
+	if m.docNav.Selected >= 0 && m.docNav.Selected < len(m.documents) {
+		header = fmt.Sprintf("Document: %s", Truncate(m.documents[m.docNav.Selected].ID, width-15))
 	}
 	content.WriteString(lipgloss.NewStyle().Bold(true).Render(header))
 	content.WriteString("\n")
@@ -677,7 +473,7 @@ func (m BrowserModel) renderDetailPane(width int) string {
 	boxInnerHeight := m.height - 4
 	visibleLines := max(0, boxInnerHeight-3)
 	linesWritten := 0
-	for i := m.detailScroll; i < len(m.detailContent) && linesWritten < visibleLines; i++ {
+	for i := m.detailNav.Scroll; i < len(m.detailContent) && linesWritten < visibleLines; i++ {
 		line := m.detailContent[i]
 		wrapped := wrapLine(line, innerWidth)
 		for _, wl := range wrapped {
