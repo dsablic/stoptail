@@ -12,8 +12,7 @@ import (
 type TasksModel struct {
 	tasks        []es.TaskInfo
 	pendingTasks []es.PendingTask
-	selectedRow  int
-	scrollY      int
+	nav          ListNav
 	width        int
 	height       int
 	loading      bool
@@ -24,6 +23,7 @@ type TasksModel struct {
 
 func NewTasks() TasksModel {
 	return TasksModel{
+		nav:     NewCursorNav(),
 		loading: true,
 		search:  NewSearchBar(),
 	}
@@ -32,8 +32,8 @@ func NewTasks() TasksModel {
 func (m *TasksModel) SetTasks(tasks []es.TaskInfo) {
 	m.tasks = tasks
 	m.loading = false
-	if m.selectedRow >= len(tasks) {
-		m.selectedRow = max(0, len(tasks)-1)
+	if m.nav.Selected >= len(tasks) {
+		m.nav.Selected = max(0, len(tasks)-1)
 	}
 }
 
@@ -47,8 +47,8 @@ func (m *TasksModel) SetSize(width, height int) {
 }
 
 func (m TasksModel) SelectedTaskID() string {
-	if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
-		return m.tasks[m.selectedRow].ID
+	if m.nav.Selected >= 0 && m.nav.Selected < len(m.tasks) {
+		return m.tasks[m.nav.Selected].ID
 	}
 	return ""
 }
@@ -74,8 +74,8 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 				// search deactivated
 			case SearchActionNext, SearchActionPrev:
 				if match := m.search.CurrentMatch(); match >= 0 {
-					m.selectedRow = match
-					m.scrollY = max(0, match-5)
+					m.nav.Selected = match
+					m.nav.Scroll = max(0, match-5)
 				}
 			case SearchActionNone:
 				(&m).updateTaskSearch()
@@ -97,55 +97,19 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			return m, nil
 		}
 
+		if m.nav.HandleKey(msg.String(), len(m.tasks), m.maxVisibleRows()) {
+			break
+		}
+
 		switch msg.String() {
 		case "enter":
-			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) {
+			if m.nav.Selected >= 0 && m.nav.Selected < len(m.tasks) {
 				m.showingModal = true
 			}
 			return m, nil
-		case "up", "k":
-			if m.selectedRow > 0 {
-				m.selectedRow--
-				if m.selectedRow < m.scrollY {
-					m.scrollY = m.selectedRow
-				}
-			}
-		case "down", "j":
-			if m.selectedRow < len(m.tasks)-1 {
-				m.selectedRow++
-				maxVisible := m.maxVisibleRows()
-				if m.selectedRow >= m.scrollY+maxVisible {
-					m.scrollY = m.selectedRow - maxVisible + 1
-				}
-			}
-		case "pgup":
-			pageSize := m.maxVisibleRows()
-			m.selectedRow -= pageSize
-			if m.selectedRow < 0 {
-				m.selectedRow = 0
-			}
-			if m.selectedRow < m.scrollY {
-				m.scrollY = m.selectedRow
-			}
-		case "pgdown":
-			pageSize := m.maxVisibleRows()
-			m.selectedRow += pageSize
-			if m.selectedRow >= len(m.tasks) {
-				m.selectedRow = len(m.tasks) - 1
-			}
-			maxVisible := m.maxVisibleRows()
-			if m.selectedRow >= m.scrollY+maxVisible {
-				m.scrollY = m.selectedRow - maxVisible + 1
-			}
-		case "home":
-			m.selectedRow = 0
-			m.scrollY = 0
-		case "end":
-			m.selectedRow = max(0, len(m.tasks)-1)
-			m.scrollY = m.maxScroll()
 		case "c":
-			if m.selectedRow >= 0 && m.selectedRow < len(m.tasks) && m.tasks[m.selectedRow].Cancellable {
-				m.confirming = m.tasks[m.selectedRow].ID
+			if m.nav.Selected >= 0 && m.nav.Selected < len(m.tasks) && m.tasks[m.nav.Selected].Cancellable {
+				m.confirming = m.tasks[m.nav.Selected].ID
 			}
 		case "ctrl+f":
 			if m.confirming == "" {
@@ -154,13 +118,7 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
-		scrollAmount := 3
-		maxScroll := m.maxScroll()
-		if msg.Button == tea.MouseWheelUp {
-			m.scrollY = max(0, m.scrollY-scrollAmount)
-		} else {
-			m.scrollY = min(maxScroll, m.scrollY+scrollAmount)
-		}
+		m.nav.HandleWheel(msg.Button != tea.MouseWheelUp, len(m.tasks), m.maxVisibleRows())
 	}
 	return m, nil
 }
@@ -173,14 +131,6 @@ func (m TasksModel) maxVisibleRows() int {
 	return rows
 }
 
-func (m TasksModel) maxScroll() int {
-	maxScroll := len(m.tasks) - m.maxVisibleRows()
-	if maxScroll < 0 {
-		return 0
-	}
-	return maxScroll
-}
-
 func (m *TasksModel) updateTaskSearch() {
 	var lines []string
 	for _, task := range m.tasks {
@@ -188,8 +138,8 @@ func (m *TasksModel) updateTaskSearch() {
 	}
 	m.search.FindMatches(lines)
 	if match := m.search.CurrentMatch(); match >= 0 {
-		m.selectedRow = match
-		m.scrollY = max(0, match-5)
+		m.nav.Selected = match
+		m.nav.Scroll = max(0, match-5)
 	}
 }
 
@@ -223,11 +173,11 @@ func (m TasksModel) View() string {
 	}
 
 	maxVisible := m.maxVisibleRows()
-	endIdx := min(m.scrollY+maxVisible, len(m.tasks))
+	endIdx := min(m.nav.Scroll+maxVisible, len(m.tasks))
 
 	var rows [][]string
 	var rowStates []string
-	for i := m.scrollY; i < endIdx; i++ {
+	for i := m.nav.Scroll; i < endIdx; i++ {
 		task := m.tasks[i]
 		cancelText := "-"
 		if task.Cancellable {
@@ -237,7 +187,7 @@ func (m TasksModel) View() string {
 		if m.confirming == task.ID {
 			cancelText = "y/n?"
 			state = "confirming"
-		} else if i == m.selectedRow {
+		} else if i == m.nav.Selected {
 			state = "selected"
 		}
 		rowStates = append(rowStates, state)
@@ -305,10 +255,10 @@ func (m TasksModel) truncateAction(action string) string {
 }
 
 func (m TasksModel) renderDetailsModal() string {
-	if m.selectedRow < 0 || m.selectedRow >= len(m.tasks) {
+	if m.nav.Selected < 0 || m.nav.Selected >= len(m.tasks) {
 		return ""
 	}
-	task := m.tasks[m.selectedRow]
+	task := m.tasks[m.nav.Selected]
 
 	labelStyle := lipgloss.NewStyle().Foreground(ColorGray)
 	valueStyle := lipgloss.NewStyle().Foreground(ColorWhite)
