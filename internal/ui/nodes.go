@@ -36,12 +36,10 @@ type NodesModel struct {
 	templates        []es.IndexTemplate
 	deprecations     *es.DeprecationInfo
 	shardHealth      []es.ShardHealth
-	activeView       NodesView
-	scrollY          int
-	selectedSetting  int
-	settingDetail    *clusterSetting
-	selectedTemplate int
-	templateDetail   *es.IndexTemplate
+	activeView     NodesView
+	nav            ListNav
+	settingDetail  *clusterSetting
+	templateDetail *es.IndexTemplate
 	width            int
 	height           int
 	loading          bool
@@ -55,6 +53,7 @@ func NewNodes() NodesModel {
 	f.CharLimit = 100
 	return NodesModel{
 		activeView: ViewMemory,
+		nav:        NewScrollNav(),
 		loading:    true,
 		filter:     f,
 	}
@@ -179,7 +178,7 @@ func (m NodesModel) countHotThreads() (total, filtered int) {
 func (m *NodesModel) SetState(state *es.NodesState) {
 	m.state = state
 	m.loading = state == nil
-	m.scrollY = 0
+	m.nav.Reset()
 }
 
 func (m *NodesModel) SetClusterSettings(settings *es.ClusterSettings) {
@@ -246,24 +245,29 @@ func (m *NodesModel) SetView(view string) {
 
 func (m *NodesModel) selectView(view NodesView) {
 	m.activeView = view
-	m.scrollY = 0
-	m.selectedSetting = 0
+	m.nav.Reset()
+	m.nav.SetCursorMode(view == ViewClusterSettings || view == ViewTemplates)
 	m.settingDetail = nil
-	m.selectedTemplate = 0
 	m.templateDetail = nil
 }
 
-func (m NodesModel) getMaxScroll() int {
-	total := m.getItemCount()
-	maxVisible := m.height - 8
-	if maxVisible < 1 {
-		maxVisible = 10
+func (m NodesModel) nodesVisibleHeight() int {
+	h := m.height - 8
+	if h < 1 {
+		return 10
 	}
-	maxScroll := total - maxVisible
-	if maxScroll < 0 {
-		return 0
+	return h
+}
+
+func (m NodesModel) getFilteredItemCount() int {
+	switch m.activeView {
+	case ViewClusterSettings:
+		return len(m.getFilteredSettings())
+	case ViewTemplates:
+		return len(m.getFilteredTemplates())
+	default:
+		return m.getItemCount()
 	}
-	return maxScroll
 }
 
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
@@ -278,9 +282,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			default:
 				var cmd tea.Cmd
 				m.filter, cmd = m.filter.Update(msg)
-				m.scrollY = 0
-				m.selectedSetting = 0
-				m.selectedTemplate = 0
+				m.nav.Reset()
 				return m, cmd
 			}
 		}
@@ -305,9 +307,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 		case "esc":
 			if m.filter.Value() != "" {
 				m.filter.SetValue("")
-				m.scrollY = 0
-				m.selectedSetting = 0
-				m.selectedTemplate = 0
+				m.nav.Reset()
 			}
 			return m, nil
 		case "1":
@@ -331,106 +331,20 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 		case "enter":
 			if m.activeView == ViewClusterSettings {
 				filtered := m.getFilteredSettings()
-				if m.selectedSetting >= 0 && m.selectedSetting < len(filtered) {
-					s := filtered[m.selectedSetting]
+				if m.nav.Selected >= 0 && m.nav.Selected < len(filtered) {
+					s := filtered[m.nav.Selected]
 					m.settingDetail = &s
 				}
 			} else if m.activeView == ViewTemplates {
 				filtered := m.getFilteredTemplates()
-				if m.selectedTemplate >= 0 && m.selectedTemplate < len(filtered) {
-					t := filtered[m.selectedTemplate]
+				if m.nav.Selected >= 0 && m.nav.Selected < len(filtered) {
+					t := filtered[m.nav.Selected]
 					m.templateDetail = &t
 				}
 			}
 			return m, nil
-		case "up", "k":
-			if m.activeView == ViewClusterSettings {
-				if m.selectedSetting > 0 {
-					m.selectedSetting--
-					maxVisible := m.height - 10
-					if maxVisible < 1 {
-						maxVisible = 10
-					}
-					if m.selectedSetting < m.scrollY {
-						m.scrollY = m.selectedSetting
-					}
-				}
-			} else if m.activeView == ViewTemplates {
-				if m.selectedTemplate > 0 {
-					m.selectedTemplate--
-					maxVisible := m.height - 10
-					if maxVisible < 1 {
-						maxVisible = 10
-					}
-					if m.selectedTemplate < m.scrollY {
-						m.scrollY = m.selectedTemplate
-					}
-				}
-			} else if m.scrollY > 0 {
-				m.scrollY--
-			}
-		case "down", "j":
-			if m.activeView == ViewClusterSettings {
-				filtered := m.getFilteredSettings()
-				if m.selectedSetting < len(filtered)-1 {
-					m.selectedSetting++
-					maxVisible := m.height - 10
-					if maxVisible < 1 {
-						maxVisible = 10
-					}
-					if m.selectedSetting >= m.scrollY+maxVisible {
-						m.scrollY = m.selectedSetting - maxVisible + 1
-					}
-				}
-			} else if m.activeView == ViewTemplates {
-				filtered := m.getFilteredTemplates()
-				if m.selectedTemplate < len(filtered)-1 {
-					m.selectedTemplate++
-					maxVisible := m.height - 10
-					if maxVisible < 1 {
-						maxVisible = 10
-					}
-					if m.selectedTemplate >= m.scrollY+maxVisible {
-						m.scrollY = m.selectedTemplate - maxVisible + 1
-					}
-				}
-			} else if m.scrollY < m.getMaxScroll() {
-				m.scrollY++
-			}
-		case "pgup":
-			pageSize := m.height - 8
-			if pageSize < 1 {
-				pageSize = 10
-			}
-			m.scrollY -= pageSize
-			if m.scrollY < 0 {
-				m.scrollY = 0
-			}
-		case "pgdown":
-			pageSize := m.height - 8
-			if pageSize < 1 {
-				pageSize = 10
-			}
-			m.scrollY += pageSize
-			if m.scrollY > m.getMaxScroll() {
-				m.scrollY = m.getMaxScroll()
-			}
-		case "home":
-			m.scrollY = 0
-			if m.activeView == ViewClusterSettings {
-				m.selectedSetting = 0
-			} else if m.activeView == ViewTemplates {
-				m.selectedTemplate = 0
-			}
-		case "end":
-			m.scrollY = m.getMaxScroll()
-			if m.activeView == ViewClusterSettings {
-				filtered := m.getFilteredSettings()
-				m.selectedSetting = max(0, len(filtered)-1)
-			} else if m.activeView == ViewTemplates {
-				filtered := m.getFilteredTemplates()
-				m.selectedTemplate = max(0, len(filtered)-1)
-			}
+		default:
+			m.nav.HandleKey(msg.String(), m.getFilteredItemCount(), m.nodesVisibleHeight())
 		}
 	case tea.MouseReleaseMsg:
 		if msg.Button == tea.MouseLeft {
@@ -462,12 +376,7 @@ func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
-		scrollAmount := 3
-		if msg.Button == tea.MouseWheelUp {
-			m.scrollY = max(0, m.scrollY-scrollAmount)
-		} else {
-			m.scrollY = min(m.getMaxScroll(), m.scrollY+scrollAmount)
-		}
+		m.nav.HandleWheel(msg.Button != tea.MouseWheelUp, m.getFilteredItemCount(), m.nodesVisibleHeight())
 	}
 	return m, nil
 }
@@ -864,7 +773,7 @@ func (m NodesModel) visibleItems(total int) visibleRange {
 		maxVisible = 10
 	}
 
-	start := m.scrollY
+	start := m.nav.Scroll
 	if start >= total {
 		start = total - 1
 	}
@@ -1030,7 +939,7 @@ func (m NodesModel) renderClusterSettingsTable() string {
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
-			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedSetting {
+			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
 				return style.Background(ColorBlue).Foreground(ColorOnAccent)
 			}
 			if col == 2 && row >= 0 && row < len(fittedRows) {
@@ -1365,7 +1274,7 @@ func (m NodesModel) renderTemplates() string {
 			if row == table.HeaderRow {
 				return style.Bold(true).Foreground(ColorWhite)
 			}
-			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.selectedTemplate {
+			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
 				return style.Background(ColorBlue).Foreground(ColorOnAccent)
 			}
 			if col == 2 && row >= 0 && row < len(fittedRows) {

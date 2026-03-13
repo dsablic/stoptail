@@ -16,6 +16,10 @@ func NewScrollNav() ListNav {
 	return ListNav{}
 }
 
+func (n *ListNav) SetCursorMode(cursor bool) {
+	n.cursor = cursor
+}
+
 func (n *ListNav) Reset() {
 	n.Selected = 0
 	n.Scroll = 0
