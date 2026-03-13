@@ -56,6 +56,18 @@ go build .
 ./stoptail --render cluster --view deprecations --width 120 --height 40 [cluster]
 ./stoptail --render cluster --view shardhealth --width 120 --height 40 [cluster]
 ./stoptail --render tasks --width 120 --height 40 [cluster]
+
+# Start interactive TUI on a specific tab
+./stoptail --tab browser [cluster]
+./stoptail --tab browser --view INDEX_NAME [cluster]
+./stoptail --tab cluster [cluster]
+./stoptail --tab workbench [cluster]
+./stoptail --tab mappings [cluster]
+./stoptail --tab tasks [cluster]
+
+# Simulate keypresses with --render (for testing interactions)
+./stoptail --render browser --view INDEX_NAME --keys "right,down,down,down" --width 120 --height 40 [cluster]
+./stoptail --render cluster --view settings --keys "down,down,enter" --width 120 --height 40 [cluster]
 ```
 
 ## Testing
@@ -532,6 +544,25 @@ Always verify UI changes using the render flag before committing:
 
 This renders the UI to stdout without starting the full TUI, allowing visual verification of layout, borders, and styling.
 
+For testing interactions without the full TUI, use `--keys` to simulate keypresses:
+
+```bash
+# Test browser detail pane scrolling
+./stoptail --render browser --view INDEX --keys "right,down,down,down,down" --width 120 --height 40 [cluster]
+
+# Test cluster settings detail modal
+./stoptail --render cluster --view settings --keys "down,down,enter" --width 120 --height 40 [cluster]
+
+# Supported keys: up, down, left, right, enter, tab, esc, space, pgup, pgdown, home, end, backspace, ctrl+X, single chars (a-z, 0-9, /, etc.)
+```
+
+For full interactive testing, use `--tab` to start the TUI on a specific tab:
+
+```bash
+./stoptail --tab browser --view INDEX_NAME [cluster]
+./stoptail --tab cluster [cluster]
+```
+
 ### Update Demo GIF When UI Changes
 
 When making UI changes (new tabs, new keybindings, layout changes), update `demo.tape` and regenerate `demo.gif`:
@@ -577,6 +608,49 @@ When modifying `demo.tape`, always verify the generated `demo.gif` before commit
 - Use `http://localhost:9200` URL directly (not cluster names from config)
 - Use `Hide`/`Show` to hide shell prompt (avoids showing username/machine)
 - ES node should be named `es-node-1` (set via `node.name` in docker-compose.yml)
+
+### Troubleshooting UI with VHS
+
+Prefer `--render --keys` for quick checks (instant, no external tools). Use VHS only when you need to verify animations, mouse events, or multi-step async flows.
+
+For VHS testing, use `--tab` to skip tab navigation:
+
+```tape
+Output debug.gif
+Set Shell "bash"
+Set Width 1200
+Set Height 700
+Set FontSize 14
+Set Theme "Dracula"
+
+Hide
+Type "./stoptail --tab browser --view INDEX_NAME CLUSTER"
+Enter
+Sleep 8s
+Show
+
+# Test interactions...
+Right
+Down
+Down
+Down
+
+Type "q"
+```
+
+Run and verify:
+
+```bash
+go build . && vhs debug.tape
+mkdir -p /tmp/debug-frames
+ffmpeg -i debug.gif -vf "select=not(mod(n\\,15))" -vsync vfr /tmp/debug-frames/frame_%03d.png
+```
+
+Then inspect the extracted PNGs. Key tips:
+- Use `--tab` to skip tab navigation (avoids timing issues with slow clusters)
+- Use `Hide`/`Show` to skip the initial connection phase
+- VHS uses `Tab` command (not `Type "\t"`) for the Tab key
+- Allow enough `Sleep` time for async operations (document loads, cluster fetches)
 
 ## Releasing
 

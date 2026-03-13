@@ -35,11 +35,13 @@ type Model struct {
 	activeTab    int
 	width        int
 	height       int
-	connected    bool
-	loading      bool
-	err          error
-	showHelp     bool
+	connected     bool
+	loading       bool
+	err           error
+	showHelp      bool
 	showShardCalc bool
+	startTab      int
+	startView     string
 }
 
 type connectedMsg struct{ state *es.ClusterState }
@@ -62,6 +64,24 @@ type settingsMsg struct {
 	err      error
 }
 type errMsg struct{ err error }
+
+func (m *Model) SetStartTab(tab string, view string) {
+	switch tab {
+	case "overview":
+		m.startTab = TabOverview
+	case "cluster":
+		m.startTab = TabCluster
+	case "workbench":
+		m.startTab = TabWorkbench
+	case "browser":
+		m.startTab = TabBrowser
+	case "mappings":
+		m.startTab = TabMappings
+	case "tasks":
+		m.startTab = TabTasks
+	}
+	m.startView = view
+}
 
 func New(client *es.Client, cfg *config.Config) Model {
 	wb := NewWorkbench()
@@ -284,6 +304,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cluster = msg.state
 		m.overview.SetCluster(msg.state)
 		m.nodes.SetShardHealth(msg.state.Indices)
+		if m.startTab != TabOverview {
+			m.activeTab = m.startTab
+			m.startTab = TabOverview
+			switch m.activeTab {
+			case TabCluster:
+				m.loading = true
+				return m, m.fetchClusterTab()
+			case TabWorkbench:
+				m.workbench.Blur()
+			case TabBrowser:
+				m.browser.SetIndices(msg.state.Indices)
+				if m.startView != "" {
+					if m.browser.SelectIndexByName(m.startView) {
+						return m, m.browser.startFetchDocuments(false)
+					}
+				}
+			case TabMappings:
+				m.mappings.SetIndices(msg.state.Indices)
+			case TabTasks:
+				m.loading = true
+				return m, m.fetchTasksTab()
+			}
+			return m, nil
+		}
 		m.err = nil
 	case nodesStateMsg:
 		m.loading = false

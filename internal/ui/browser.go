@@ -37,9 +37,10 @@ type BrowserModel struct {
 	searchAfter []any
 	total       int64
 
-	detailContent []string
-	detailNav     ListNav
-	detailHeight  int
+	detailSourceLines []string
+	detailLines       []string
+	detailNav         ListNav
+	detailHeight      int
 	activePane    BrowserPane
 	clipboard     Clipboard
 
@@ -76,9 +77,13 @@ func (m *BrowserModel) SetIndices(indices []es.IndexInfo) {
 }
 
 func (m *BrowserModel) SetSize(width, height int) {
+	oldWidth := m.width
 	m.width = width
 	m.height = height
 	m.detailHeight = height - 7
+	if width != oldWidth && len(m.detailSourceLines) > 0 {
+		m.rewrapDetailPane()
+	}
 }
 
 func (m *BrowserModel) SelectIndexByName(name string) bool {
@@ -203,10 +208,19 @@ func (m BrowserModel) Update(msg tea.Msg) (BrowserModel, tea.Cmd) {
 		}
 
 	case tea.MouseWheelMsg:
-		nav, total, visible := m.activeNavParams()
-		nav.HandleWheel(msg.Button != tea.MouseWheelUp, total, visible)
-		if m.activePane == BrowserPaneDocs && m.shouldLoadMore() {
-			return m, m.startFetchDocuments(true)
+		down := msg.Button != tea.MouseWheelUp
+		visible := m.maxVisibleDocs()
+		pane := m.paneAtX(msg.X)
+		switch pane {
+		case BrowserPaneIndices:
+			m.indexNav.HandleWheel(down, len(m.filteredIndices()), visible)
+		case BrowserPaneDocs:
+			m.docNav.HandleWheel(down, len(m.documents), visible)
+			if m.shouldLoadMore() {
+				return m, m.startFetchDocuments(true)
+			}
+		case BrowserPaneDetail:
+			m.detailNav.HandleWheel(down, len(m.detailLines), m.detailHeight)
 		}
 	}
 
@@ -229,14 +243,14 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.
 }
 
 func (m *BrowserModel) activeNavParams() (*ListNav, int, int) {
-	visible := m.height - 7
+	visible := m.maxVisibleDocs()
 	switch m.activePane {
 	case BrowserPaneIndices:
 		return &m.indexNav, len(m.filteredIndices()), visible
 	case BrowserPaneDocs:
 		return &m.docNav, len(m.documents), visible
 	default:
-		return &m.detailNav, len(m.detailContent), m.detailHeight
+		return &m.detailNav, len(m.detailLines), m.detailHeight
 	}
 }
 
@@ -244,30 +258,48 @@ func (m BrowserModel) shouldLoadMore() bool {
 	if !m.hasMore || m.loading {
 		return false
 	}
-	visible := m.height - 7
-	return m.docNav.Scroll+visible >= len(m.documents)-5
+	return m.docNav.Scroll+m.maxVisibleDocs() >= len(m.documents)-5
 }
 
 func (m *BrowserModel) updateDetailPane() {
 	if m.docNav.Selected < 0 || m.docNav.Selected >= len(m.documents) {
-		m.detailContent = nil
+		m.detailSourceLines = nil
+		m.detailLines = nil
 		m.detailNav.Scroll = 0
 		return
 	}
 
 	doc := m.documents[m.docNav.Selected]
+	var sourceLines []string
 	var obj any
 	if err := json.Unmarshal([]byte(doc.Source), &obj); err == nil {
 		if pretty, err := json.MarshalIndent(obj, "", "  "); err == nil {
 			sanitized := SanitizeForTerminal(string(pretty))
 			highlighted := highlightJSON(sanitized)
-			m.detailContent = strings.Split(highlighted, "\n")
-			m.detailNav.Scroll = 0
-			return
+			sourceLines = strings.Split(highlighted, "\n")
 		}
 	}
-	m.detailContent = []string{SanitizeForTerminal(doc.Source)}
+	if sourceLines == nil {
+		sourceLines = []string{SanitizeForTerminal(doc.Source)}
+	}
+
+	m.detailSourceLines = sourceLines
+	m.rewrapDetailPane()
 	m.detailNav.Scroll = 0
+}
+
+func (m *BrowserModel) rewrapDetailPane() {
+	innerWidth := m.detailInnerWidth()
+	var wrapped []string
+	for _, line := range m.detailSourceLines {
+		wrapped = append(wrapped, wrapLine(line, innerWidth)...)
+	}
+	m.detailLines = wrapped
+}
+
+func (m BrowserModel) detailInnerWidth() int {
+	rightWidth := m.width - m.width/4 - m.width/3 - 4
+	return rightWidth - 4
 }
 
 func (m BrowserModel) selectedDocSource() string {
@@ -303,6 +335,18 @@ func (m *BrowserModel) startFetchDocuments(appendDocs bool) tea.Cmd {
 		result, err := client.SearchDocuments(context.Background(), index, after, browserPageSize)
 		return browserSearchMsg{result: result, err: err, append: appendDocs}
 	}
+}
+
+func (m BrowserModel) paneAtX(x int) BrowserPane {
+	leftWidth := m.width / 4
+	middleWidth := m.width / 3
+	if x < leftWidth+1 {
+		return BrowserPaneIndices
+	}
+	if x < leftWidth+middleWidth+2 {
+		return BrowserPaneDocs
+	}
+	return BrowserPaneDetail
 }
 
 func (m BrowserModel) maxVisibleIndices() int {
@@ -461,21 +505,11 @@ func (m BrowserModel) renderDetailPane(width int) string {
 	content.WriteString(lipgloss.NewStyle().Bold(true).Render(header))
 	content.WriteString("\n")
 
-	innerWidth := width - 4
 	boxInnerHeight := m.height - 4
 	visibleLines := max(0, boxInnerHeight-3)
-	linesWritten := 0
-	for i := m.detailNav.Scroll; i < len(m.detailContent) && linesWritten < visibleLines; i++ {
-		line := m.detailContent[i]
-		wrapped := wrapLine(line, innerWidth)
-		for _, wl := range wrapped {
-			if linesWritten >= visibleLines {
-				break
-			}
-			content.WriteString(wl)
-			content.WriteString("\n")
-			linesWritten++
-		}
+	for i := m.detailNav.Scroll; i < len(m.detailLines) && i-m.detailNav.Scroll < visibleLines; i++ {
+		content.WriteString(m.detailLines[i])
+		content.WriteString("\n")
 	}
 
 	return lipgloss.NewStyle().

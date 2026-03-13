@@ -26,6 +26,8 @@ var (
 var (
 	themeFlag  string
 	renderFlag string
+	tabFlag    string
+	keysFlag   string
 	widthFlag  int
 	heightFlag int
 	bodyFlag   string
@@ -53,6 +55,8 @@ Examples:
 
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
 	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, browser, mappings, cluster, tasks)")
+	rootCmd.Flags().StringVar(&tabFlag, "tab", "", "Start on a specific tab (overview, cluster, workbench, browser, mappings, tasks)")
+	rootCmd.Flags().StringVar(&keysFlag, "keys", "", "Simulate keypresses for --render (comma-separated: up,down,right,enter,pgdown,...)")
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
@@ -106,7 +110,11 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	p := tea.NewProgram(ui.New(client, cfg))
+	model := ui.New(client, cfg)
+	if tabFlag != "" {
+		model.SetStartTab(tabFlag, viewFlag)
+	}
+	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
 		return err
 	}
@@ -131,7 +139,7 @@ func runRenderMode(args []string) error {
 		return fmt.Errorf("client error: %w", err)
 	}
 
-	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag)
+	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag, keysFlag)
 }
 
 func resolveESURL(args []string, skipUI bool) (string, string, error) {
@@ -381,8 +389,9 @@ func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI
 	return resolved.url, entry.AWSProfile, nil
 }
 
-func renderAndExit(client *es.Client, tab string, width, height int, body, view string) error {
+func renderAndExit(client *es.Client, tab string, width, height int, body, view, keys string) error {
 	ctx := context.Background()
+	keyMsgs := parseKeys(keys)
 
 	switch tab {
 	case "overview":
@@ -393,6 +402,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		overview := ui.NewOverview()
 		overview.SetSize(width, height)
 		overview.SetCluster(state)
+		for _, k := range keyMsgs {
+			overview, _ = overview.Update(k)
+		}
 		fmt.Println(overview.View())
 
 	case "cluster":
@@ -413,6 +425,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 			}
 			cluster.SetDeprecations(deprecations)
 		}
+		for _, k := range keyMsgs {
+			cluster, _ = cluster.Update(k)
+		}
 		fmt.Println(cluster.View())
 
 	case "workbench":
@@ -421,6 +436,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		workbench.SetSize(width, height)
 		if body != "" {
 			workbench.SetBody(body)
+		}
+		for _, k := range keyMsgs {
+			workbench, _ = workbench.Update(k)
 		}
 		fmt.Println(workbench.View())
 
@@ -432,6 +450,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		mappings := ui.NewMappings()
 		mappings.SetSize(width, height)
 		mappings.SetIndices(state.Indices)
+		for _, k := range keyMsgs {
+			mappings, _ = mappings.Update(k)
+		}
 		fmt.Println(mappings.View())
 
 	case "browser":
@@ -450,6 +471,9 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 				}
 			}
 		}
+		for _, k := range keyMsgs {
+			browser, _ = browser.Update(k)
+		}
 		fmt.Println(browser.View())
 
 	case "tasks":
@@ -460,11 +484,46 @@ func renderAndExit(client *es.Client, tab string, width, height int, body, view 
 		tasksModel := ui.NewTasks()
 		tasksModel.SetSize(width, height)
 		tasksModel.SetTasks(tasks)
+		for _, k := range keyMsgs {
+			tasksModel, _ = tasksModel.Update(k)
+		}
 		fmt.Println(tasksModel.View())
 
 	default:
 		return fmt.Errorf("unknown tab: %s (use: overview, workbench, browser, mappings, cluster, tasks)", tab)
 	}
 	return nil
+}
+
+func parseKeys(keys string) []tea.KeyPressMsg {
+	if keys == "" {
+		return nil
+	}
+
+	specialKeys := map[string]rune{
+		"up": tea.KeyUp, "down": tea.KeyDown,
+		"left": tea.KeyLeft, "right": tea.KeyRight,
+		"enter": tea.KeyEnter, "tab": tea.KeyTab,
+		"esc": tea.KeyEscape, "space": ' ',
+		"pgup": tea.KeyPgUp, "pgdown": tea.KeyPgDown,
+		"home": tea.KeyHome, "end": tea.KeyEnd,
+		"backspace": tea.KeyBackspace,
+	}
+
+	var msgs []tea.KeyPressMsg
+	for _, k := range strings.Split(keys, ",") {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if code, ok := specialKeys[k]; ok {
+			msgs = append(msgs, tea.KeyPressMsg{Code: code})
+		} else if rest, ok := strings.CutPrefix(k, "ctrl+"); ok && len(rest) == 1 {
+			msgs = append(msgs, tea.KeyPressMsg{Code: rune(rest[0]), Mod: tea.ModCtrl})
+		} else if len(k) == 1 {
+			msgs = append(msgs, tea.KeyPressMsg{Code: rune(k[0]), Text: k})
+		}
+	}
+	return msgs
 }
 
