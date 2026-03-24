@@ -29,6 +29,8 @@ var (
 	InactiveTabStyle lipgloss.Style
 	StatusBarStyle   lipgloss.Style
 	HelpStyle        lipgloss.Style
+
+	ThemeDark bool
 )
 
 func init() {
@@ -44,6 +46,8 @@ func SetTheme(theme string) {
 	case "light":
 		isDark = false
 	}
+
+	ThemeDark = isDark
 
 	if isDark {
 		ColorGreen = lipgloss.Color("#22c55e")

@@ -401,6 +401,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.workbench, cmd = m.workbench.Update(msg)
 		return m, cmd
 	case tea.KeyPressMsg:
+		if m.showHelp {
+			if msg.String() == "esc" || msg.String() == "?" {
+				m.showHelp = false
+				return m, nil
+			}
+			return m, nil
+		}
 		if m.showShardCalc {
 			if msg.String() == "esc" {
 				m.showShardCalc = false
@@ -413,7 +420,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.hasActiveInput() {
 			switch msg.String() {
 			case "?":
-				m.showHelp = !m.showHelp
+				m.showHelp = true
 				return m, nil
 			case "S":
 				m.showShardCalc = true

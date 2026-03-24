@@ -182,7 +182,7 @@ stoptail stores data in `~/.stoptail/`:
 |-----|--------|
 | `Tab` / `Shift+Tab` | Switch between tabs (Overview, Workbench, Browser, Mappings, Cluster, Tasks) |
 | `r` | Refresh data |
-| `?` | Toggle help overlay |
+| `?` / `Esc` | Toggle help overlay |
 | `S` | Shard calculator |
 | `q` / `Ctrl+C` | Quit |
 

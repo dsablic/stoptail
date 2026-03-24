@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"os"
-
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -13,7 +11,7 @@ var helpGlobal = `## Global
 |-----|--------|
 | Tab / Shift+Tab | Switch tabs |
 | q / Ctrl+C | Quit |
-| ? | Toggle help |
+| ? / Esc | Toggle help |
 | r | Refresh |
 | S | Shard calculator |
 `
@@ -113,7 +111,7 @@ var helpTasks = `## Tasks
 
 func renderHelp(width, height, activeTab int) string {
 	styleName := "dark"
-	if !lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
+	if !ThemeDark {
 		styleName = "light"
 	}
 
@@ -138,7 +136,7 @@ func renderHelp(width, height, activeTab int) string {
 		tabHelp = helpTasks
 	}
 
-	content, _ := r.Render(helpGlobal + tabHelp + "\n*Press ? to close*")
+	content, _ := r.Render(helpGlobal + tabHelp + "\n*Press ? or Esc to close*")
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
