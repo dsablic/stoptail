@@ -1,10 +1,10 @@
 package es
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 func (c *Client) SearchDocuments(ctx context.Context, index string, after []interface{}, size int) (*SearchResult, error) {
@@ -27,7 +27,7 @@ func (c *Client) SearchDocuments(ctx context.Context, index string, after []inte
 	res, err := c.es.Search(
 		c.es.Search.WithContext(ctx),
 		c.es.Search.WithIndex(index),
-		c.es.Search.WithBody(strings.NewReader(string(queryBytes))),
+		c.es.Search.WithBody(bytes.NewReader(queryBytes)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("searching documents: %w", err)

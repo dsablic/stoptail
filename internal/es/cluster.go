@@ -1,11 +1,11 @@
 package es
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 )
 
 func (c *Client) FetchClusterState(ctx context.Context) (*ClusterState, error) {
@@ -60,12 +60,13 @@ func (c *Client) fetchClusterHealth(ctx context.Context) (*ClusterHealth, error)
 	}
 	defer res.Body.Close()
 
-	if err := checkError(res); err != nil {
+	body, err := readBody(res, "cluster health")
+	if err != nil {
 		return nil, err
 	}
 
 	var health ClusterHealth
-	if err := json.NewDecoder(res.Body).Decode(&health); err != nil {
+	if err := json.Unmarshal(body, &health); err != nil {
 		return nil, fmt.Errorf("parsing cluster health: %w", err)
 	}
 
@@ -229,7 +230,7 @@ func (c *Client) FetchAllocationExplain(ctx context.Context, index string, shard
 	reqBytes, _ := json.Marshal(reqBodyObj)
 	res, err := c.es.Cluster.AllocationExplain(
 		c.es.Cluster.AllocationExplain.WithContext(ctx),
-		c.es.Cluster.AllocationExplain.WithBody(strings.NewReader(string(reqBytes))),
+		c.es.Cluster.AllocationExplain.WithBody(bytes.NewReader(reqBytes)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetching allocation explain: %w", err)

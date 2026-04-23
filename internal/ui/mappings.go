@@ -98,10 +98,6 @@ func (m MappingsModel) SelectedIndexName() string {
 	return ""
 }
 
-func (m MappingsModel) IsLoading() bool {
-	return m.loadingIndex != ""
-}
-
 func (m *MappingsModel) SetLoading(indexName string) {
 	m.loadingIndex = indexName
 }

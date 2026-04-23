@@ -818,17 +818,7 @@ func (m NodesModel) renderClusterSettingsTable() string {
 }
 
 func (m NodesModel) renderDetailModal(content string) string {
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		MaxWidth(m.width - 10)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return RenderDetailModal(content, 0, m.width, m.height)
 }
 
 func (m NodesModel) renderSettingDetailModal() string {
@@ -1232,12 +1222,11 @@ func (m NodesModel) getFilteredDeprecations() []es.Deprecation {
 	if m.filter.Value() == "" {
 		return m.deprecations.Deprecations
 	}
-	filterVal := strings.ToLower(m.filter.Value())
 	var filtered []es.Deprecation
 	for _, dep := range m.deprecations.Deprecations {
-		if strings.Contains(strings.ToLower(dep.Message), filterVal) ||
-			strings.Contains(strings.ToLower(dep.Category), filterVal) ||
-			strings.Contains(strings.ToLower(dep.Resource), filterVal) {
+		if m.matchesFilter(dep.Message) ||
+			m.matchesFilter(dep.Category) ||
+			m.matchesFilter(dep.Resource) {
 			filtered = append(filtered, dep)
 		}
 	}
@@ -1248,11 +1237,10 @@ func (m NodesModel) getFilteredShardHealth() []es.ShardHealth {
 	if m.filter.Value() == "" {
 		return m.shardHealth
 	}
-	filterVal := strings.ToLower(m.filter.Value())
 	var filtered []es.ShardHealth
 	for _, h := range m.shardHealth {
-		if strings.Contains(strings.ToLower(h.IndexName), filterVal) ||
-			strings.Contains(strings.ToLower(h.StatusText), filterVal) {
+		if m.matchesFilter(h.IndexName) ||
+			m.matchesFilter(h.StatusText) {
 			filtered = append(filtered, h)
 		}
 	}

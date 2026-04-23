@@ -1128,8 +1128,9 @@ func (m *WorkbenchModel) triggerCompletion() {
 		textUpToCursor += lines[i] + "\n"
 	}
 	if row < len(lines) {
-		if col <= len(lines[row]) {
-			textUpToCursor += lines[row][:col]
+		lineRunes := []rune(lines[row])
+		if col <= len(lineRunes) {
+			textUpToCursor += string(lineRunes[:col])
 		} else {
 			textUpToCursor += lines[row]
 		}
@@ -1237,13 +1238,13 @@ func (m *WorkbenchModel) acceptCompletion() {
 
 	needsOpenQuote := true
 	if row < len(lines) {
-		line := lines[row]
-		if m.completion.TriggerCol > 0 && m.completion.TriggerCol <= len(line) {
-			if line[m.completion.TriggerCol-1] == '"' {
+		lineRunes := []rune(lines[row])
+		if m.completion.TriggerCol > 0 && m.completion.TriggerCol <= len(lineRunes) {
+			if lineRunes[m.completion.TriggerCol-1] == '"' {
 				needsOpenQuote = false
 			}
 		}
-		if col < len(line) && line[col] == '"' {
+		if col < len(lineRunes) && lineRunes[col] == '"' {
 			m.editor.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
 		}
 	}

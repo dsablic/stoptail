@@ -77,21 +77,32 @@ func TestTrimANSI(t *testing.T) {
 }
 
 func TestHealthColor(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"green", "green"},
-		{"yellow", "yellow"},
-		{"red", "red"},
-		{"unknown", "gray"},
-	}
+	green := HealthColor("green")
+	yellow := HealthColor("yellow")
+	red := HealthColor("red")
+	unknown := HealthColor("unknown")
+	gray := ColorGray
 
-	for _, tt := range tests {
-		got := HealthColor(tt.input)
-		if got == nil {
-			t.Errorf("HealthColor(%q) returned nil", tt.input)
-		}
+	if green == yellow {
+		t.Error("green and yellow should return different colors")
+	}
+	if green == red {
+		t.Error("green and red should return different colors")
+	}
+	if yellow == red {
+		t.Error("yellow and red should return different colors")
+	}
+	if unknown != gray {
+		t.Errorf("unknown health should return ColorGray, got %v", unknown)
+	}
+	if green != ColorGreen {
+		t.Errorf("HealthColor(green) = %v, want %v", green, ColorGreen)
+	}
+	if yellow != ColorYellow {
+		t.Errorf("HealthColor(yellow) = %v, want %v", yellow, ColorYellow)
+	}
+	if red != ColorRed {
+		t.Errorf("HealthColor(red) = %v, want %v", red, ColorRed)
 	}
 }
 

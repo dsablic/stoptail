@@ -25,6 +25,49 @@ func TestParseSize(t *testing.T) {
 	}
 }
 
+func TestFormatSize(t *testing.T) {
+	tests := []struct {
+		input int64
+		want  string
+	}{
+		{0, "0.0 MB"},
+		{1024 * 1024, "1.0 MB"},
+		{500 * 1024 * 1024, "500.0 MB"},
+		{1024 * 1024 * 1024, "1.0 GB"},
+		{int64(1.5 * 1024 * 1024 * 1024), "1.5 GB"},
+		{10 * 1024 * 1024 * 1024, "10.0 GB"},
+	}
+
+	for _, tt := range tests {
+		got := formatSize(tt.input)
+		if got != tt.want {
+			t.Errorf("formatSize(%d) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestFormatDocs(t *testing.T) {
+	tests := []struct {
+		input int64
+		want  string
+	}{
+		{0, "0"},
+		{500, "500"},
+		{1000, "1.0K"},
+		{1500, "1.5K"},
+		{999999, "1000.0K"},
+		{1000000, "1.0M"},
+		{5500000, "5.5M"},
+	}
+
+	for _, tt := range tests {
+		got := formatDocs(tt.input)
+		if got != tt.want {
+			t.Errorf("formatDocs(%d) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestShardCalcCalculate(t *testing.T) {
 	tests := []struct {
 		name       string

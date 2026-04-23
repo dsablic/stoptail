@@ -272,17 +272,7 @@ func (m TasksModel) renderDetailsModal() string {
 		valueStyle.Render(task.Description),
 	}, "\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		Width(70)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return RenderDetailModal(content, 70, m.width, m.height)
 }
 
 func (m TasksModel) HasModal() bool {

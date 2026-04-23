@@ -208,15 +208,5 @@ func RenderShardInfoModal(sh *es.ShardInfo, ae *es.AllocationExplain, ri *es.Rec
 
 	content := strings.Join(lines, "\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		Width(60)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
+	return RenderDetailModal(content, 60, width, height)
 }

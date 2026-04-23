@@ -616,6 +616,263 @@ func TestParseAnalyzerInfoWithNormalizer(t *testing.T) {
 	}
 }
 
+func TestParseAllocationExplain(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		wantErr         bool
+		wantIndex       string
+		wantShard       int
+		wantPrimary     bool
+		wantState       string
+		wantReason      string
+		wantAllocStatus string
+		wantDetail      string
+	}{
+		{
+			name: "basic unassigned shard",
+			input: `{
+				"index": "test-idx",
+				"shard": 0,
+				"primary": true,
+				"current_state": "unassigned",
+				"unassigned_info": {"reason": "INDEX_CREATED", "at": "2024-01-01T00:00:00.000Z"},
+				"can_allocate": "no",
+				"allocate_explanation": "cannot allocate because allocation is not permitted"
+			}`,
+			wantIndex:       "test-idx",
+			wantShard:       0,
+			wantPrimary:     true,
+			wantState:       "unassigned",
+			wantReason:      "INDEX_CREATED",
+			wantAllocStatus: "no",
+			wantDetail:      "cannot allocate because allocation is not permitted",
+		},
+		{
+			name: "assigned shard with can_move_to_other_node",
+			input: `{
+				"index": "logs-2024",
+				"shard": 2,
+				"primary": false,
+				"current_state": "started",
+				"can_move_to_other_node": "yes",
+				"move_explanation": "can move to another node"
+			}`,
+			wantIndex:       "logs-2024",
+			wantShard:       2,
+			wantPrimary:     false,
+			wantState:       "started",
+			wantReason:      "",
+			wantAllocStatus: "yes",
+			wantDetail:      "can move to another node",
+		},
+		{
+			name: "no unassigned_info",
+			input: `{
+				"index": "metrics",
+				"shard": 1,
+				"primary": true,
+				"current_state": "started",
+				"can_allocate": "yes"
+			}`,
+			wantIndex:       "metrics",
+			wantShard:       1,
+			wantPrimary:     true,
+			wantState:       "started",
+			wantReason:      "",
+			wantAllocStatus: "yes",
+		},
+		{
+			name:    "invalid JSON",
+			input:   `{not valid json`,
+			wantErr: true,
+		},
+		{
+			name:        "minimal valid JSON",
+			input:       `{"index": "minimal", "shard": 5, "primary": true}`,
+			wantIndex:   "minimal",
+			wantShard:   5,
+			wantPrimary: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseAllocationExplain([]byte(tt.input))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.Index != tt.wantIndex {
+				t.Errorf("Index = %q, want %q", result.Index, tt.wantIndex)
+			}
+			if result.Shard != tt.wantShard {
+				t.Errorf("Shard = %d, want %d", result.Shard, tt.wantShard)
+			}
+			if result.Primary != tt.wantPrimary {
+				t.Errorf("Primary = %v, want %v", result.Primary, tt.wantPrimary)
+			}
+			if result.CurrentState != tt.wantState {
+				t.Errorf("CurrentState = %q, want %q", result.CurrentState, tt.wantState)
+			}
+			if result.UnassignedReason != tt.wantReason {
+				t.Errorf("UnassignedReason = %q, want %q", result.UnassignedReason, tt.wantReason)
+			}
+			if result.AllocationStatus != tt.wantAllocStatus {
+				t.Errorf("AllocationStatus = %q, want %q", result.AllocationStatus, tt.wantAllocStatus)
+			}
+			if result.ExplanationDetail != tt.wantDetail {
+				t.Errorf("ExplanationDetail = %q, want %q", result.ExplanationDetail, tt.wantDetail)
+			}
+		})
+	}
+}
+
+func TestParseClusterSettings(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		wantErr        bool
+		wantPersistent map[string]string
+		wantTransient  map[string]string
+		wantDefaults   map[string]string
+	}{
+		{
+			name: "all three tiers populated",
+			input: `{
+				"persistent": {"cluster.routing.allocation.enable": "all"},
+				"transient": {"cluster.routing.rebalance.enable": "none"},
+				"defaults": {"cluster.max_shards_per_node": "1000"}
+			}`,
+			wantPersistent: map[string]string{"cluster.routing.allocation.enable": "all"},
+			wantTransient:  map[string]string{"cluster.routing.rebalance.enable": "none"},
+			wantDefaults:   map[string]string{"cluster.max_shards_per_node": "1000"},
+		},
+		{
+			name:           "empty maps for all tiers",
+			input:          `{"persistent": {}, "transient": {}, "defaults": {}}`,
+			wantPersistent: map[string]string{},
+			wantTransient:  map[string]string{},
+			wantDefaults:   map[string]string{},
+		},
+		{
+			name:           "only defaults populated",
+			input:          `{"persistent": {}, "transient": {}, "defaults": {"action.auto_create_index": "true"}}`,
+			wantPersistent: map[string]string{},
+			wantTransient:  map[string]string{},
+			wantDefaults:   map[string]string{"action.auto_create_index": "true"},
+		},
+		{
+			name:    "invalid JSON",
+			input:   `{broken`,
+			wantErr: true,
+		},
+		{
+			name: "array values in settings",
+			input: `{
+				"persistent": {"cluster.routing.allocation.awareness.attributes": ["zone", "rack"]},
+				"transient": {},
+				"defaults": {}
+			}`,
+			wantPersistent: map[string]string{"cluster.routing.allocation.awareness.attributes": "[zone, rack]"},
+			wantTransient:  map[string]string{},
+			wantDefaults:   map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseClusterSettings([]byte(tt.input))
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for k, v := range tt.wantPersistent {
+				if result.Persistent[k] != v {
+					t.Errorf("Persistent[%q] = %q, want %q", k, result.Persistent[k], v)
+				}
+			}
+			if len(result.Persistent) != len(tt.wantPersistent) {
+				t.Errorf("Persistent has %d entries, want %d", len(result.Persistent), len(tt.wantPersistent))
+			}
+			for k, v := range tt.wantTransient {
+				if result.Transient[k] != v {
+					t.Errorf("Transient[%q] = %q, want %q", k, result.Transient[k], v)
+				}
+			}
+			if len(result.Transient) != len(tt.wantTransient) {
+				t.Errorf("Transient has %d entries, want %d", len(result.Transient), len(tt.wantTransient))
+			}
+			for k, v := range tt.wantDefaults {
+				if result.Defaults[k] != v {
+					t.Errorf("Defaults[%q] = %q, want %q", k, result.Defaults[k], v)
+				}
+			}
+			if len(result.Defaults) != len(tt.wantDefaults) {
+				t.Errorf("Defaults has %d entries, want %d", len(result.Defaults), len(tt.wantDefaults))
+			}
+		})
+	}
+}
+
+func TestFlattenSettings(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]any
+		want  map[string]string
+	}{
+		{
+			name:  "string values",
+			input: map[string]any{"key1": "val1", "key2": "val2"},
+			want:  map[string]string{"key1": "val1", "key2": "val2"},
+		},
+		{
+			name:  "array values",
+			input: map[string]any{"tags": []any{"item1", "item2"}},
+			want:  map[string]string{"tags": "[item1, item2]"},
+		},
+		{
+			name:  "numeric values",
+			input: map[string]any{"count": float64(42), "ratio": float64(3.14)},
+			want:  map[string]string{"count": "42", "ratio": "3.14"},
+		},
+		{
+			name:  "empty map",
+			input: map[string]any{},
+			want:  map[string]string{},
+		},
+		{
+			name:  "nil map",
+			input: nil,
+			want:  map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := flattenSettings(tt.input)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d entries, want %d", len(got), len(tt.want))
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("got[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
 func TestAnalyzeShardHealth(t *testing.T) {
 	tests := []struct {
 		name       string

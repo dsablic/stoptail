@@ -172,3 +172,25 @@ func TestParseAllHotThreads(t *testing.T) {
 		}
 	})
 }
+
+func TestParsePercent(t *testing.T) {
+	tests := []struct {
+		input string
+		want  float64
+	}{
+		{"0", 0},
+		{"45.5", 45.5},
+		{"100", 100},
+		{"  67.8  ", 67.8},
+		{"abc", 0},
+		{"", 0},
+	}
+
+	m := NodesModel{}
+	for _, tt := range tests {
+		got := m.parsePercent(tt.input)
+		if got != tt.want {
+			t.Errorf("parsePercent(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}

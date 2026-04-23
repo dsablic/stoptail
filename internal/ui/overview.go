@@ -640,14 +640,6 @@ func (m OverviewModel) showShardInfo(sh *es.ShardInfo) (OverviewModel, tea.Cmd) 
 	return m, nil
 }
 
-func (m OverviewModel) SelectedNode() string {
-	nodes := m.getNodeList()
-	if m.nodeNav.Selected >= 0 && m.nodeNav.Selected < len(nodes) {
-		return nodes[m.nodeNav.Selected].Name
-	}
-	return ""
-}
-
 func (m OverviewModel) SelectedIndex() string {
 	indices := m.filteredIndices()
 	if m.selectedIndex >= 0 && m.selectedIndex < len(indices) {
@@ -1299,16 +1291,6 @@ func (m OverviewModel) renderAllocationExplainModal() string {
 		valueStyle.Render(ae.ExplanationDetail),
 	}, "\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		Width(60)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return RenderDetailModal(content, 60, m.width, m.height)
 }
 

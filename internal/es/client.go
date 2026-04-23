@@ -106,7 +106,6 @@ func (c *Client) Request(ctx context.Context, method, path, body string) Request
 		return RequestResult{Error: err, Duration: time.Since(start)}
 	}
 
-	// Pretty print JSON
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, respBody, "", "  "); err == nil {
 		return RequestResult{

@@ -323,10 +323,6 @@ func (e *Editor) Blur() {
 	e.textarea.Blur()
 }
 
-func (e Editor) Focused() bool {
-	return e.textarea.Focused()
-}
-
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
 		key := keyMsg.String()
@@ -448,10 +444,6 @@ func (e *Editor) ClearSelection() {
 	e.selection.Active = false
 }
 
-func (e Editor) GetSelection() Selection {
-	return e.selection
-}
-
 func (e *Editor) SetSelection(startLine, startCol, endLine, endCol int) {
 	e.selection.StartLine = startLine
 	e.selection.StartCol = startCol
@@ -467,7 +459,7 @@ func (e *Editor) SelectAll() {
 	}
 	lines := strings.Split(content, "\n")
 	lastLine := len(lines) - 1
-	lastCol := len(lines[lastLine])
+	lastCol := len([]rune(lines[lastLine]))
 	e.SetSelection(0, 0, lastLine, lastCol)
 }
 

@@ -159,6 +159,25 @@ func OverlayModal(background, modal string, width, height int) string {
 	return strings.Join(result, "\n")
 }
 
+func RenderDetailModal(content string, contentWidth, termWidth, termHeight int) string {
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2)
+
+	if contentWidth > 0 {
+		boxStyle = boxStyle.Width(contentWidth)
+	} else {
+		boxStyle = boxStyle.MaxWidth(termWidth - 10)
+	}
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(termWidth, termHeight, lipgloss.Center, lipgloss.Center, modal)
+}
+
 func FormatNumber(s string) string {
 	if s == "" || s == "-" {
 		return s

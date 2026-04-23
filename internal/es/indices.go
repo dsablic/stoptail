@@ -1,6 +1,7 @@
 package es
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -257,7 +258,7 @@ func (c *Client) CreateIndex(ctx context.Context, name string, shards, replicas 
 	res, err := c.es.Indices.Create(
 		name,
 		c.es.Indices.Create.WithContext(ctx),
-		c.es.Indices.Create.WithBody(strings.NewReader(string(reqBytes))),
+		c.es.Indices.Create.WithBody(bytes.NewReader(reqBytes)),
 	)
 	if err != nil {
 		return fmt.Errorf("creating index: %w", err)
@@ -318,7 +319,7 @@ func (c *Client) updateAlias(ctx context.Context, action, index, alias string) e
 	}
 	reqBytes, _ := json.Marshal(reqBodyObj)
 	res, err := c.es.Indices.UpdateAliases(
-		strings.NewReader(string(reqBytes)),
+		bytes.NewReader(reqBytes),
 		c.es.Indices.UpdateAliases.WithContext(ctx),
 	)
 	if err != nil {

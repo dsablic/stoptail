@@ -439,11 +439,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.fetchTasksTab()
 				}
-			case "tab":
-				if m.showHelp {
-					break
-				}
-				switch m.activeTab {
+		case "tab":
+			switch m.activeTab {
 				case TabOverview:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
@@ -467,11 +464,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.switchTab(TabOverview)
 				}
-			case "shift+tab":
-				if m.showHelp {
-					break
-				}
-				switch m.activeTab {
+		case "shift+tab":
+			switch m.activeTab {
 				case TabCluster:
 					return m, m.switchTab(TabOverview)
 				case TabWorkbench:
