@@ -202,7 +202,7 @@ func (m ShardCalcModel) calculate() calcResult {
 		return result
 	}
 
-	totalSize := parseSize(sizeStr)
+	totalSize := ParseSizeOrZero(sizeStr)
 	if totalSize <= 0 {
 		result.err = "Invalid size format"
 		return result
@@ -248,47 +248,6 @@ func (m ShardCalcModel) calculate() calcResult {
 	}
 
 	return result
-}
-
-func parseSize(s string) int64 {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return 0
-	}
-
-	var multiplier int64 = 1
-	var numStr string
-
-	switch {
-	case strings.HasSuffix(s, "tb"):
-		multiplier = 1024 * 1024 * 1024 * 1024
-		numStr = strings.TrimSuffix(s, "tb")
-	case strings.HasSuffix(s, "gb"):
-		multiplier = 1024 * 1024 * 1024
-		numStr = strings.TrimSuffix(s, "gb")
-	case strings.HasSuffix(s, "mb"):
-		multiplier = 1024 * 1024
-		numStr = strings.TrimSuffix(s, "mb")
-	case strings.HasSuffix(s, "t"):
-		multiplier = 1024 * 1024 * 1024 * 1024
-		numStr = strings.TrimSuffix(s, "t")
-	case strings.HasSuffix(s, "g"):
-		multiplier = 1024 * 1024 * 1024
-		numStr = strings.TrimSuffix(s, "g")
-	case strings.HasSuffix(s, "m"):
-		multiplier = 1024 * 1024
-		numStr = strings.TrimSuffix(s, "m")
-	default:
-		numStr = s
-	}
-
-	numStr = strings.TrimSpace(numStr)
-	value, err := strconv.ParseFloat(numStr, 64)
-	if err != nil {
-		return 0
-	}
-
-	return int64(value * float64(multiplier))
 }
 
 func formatSize(bytes int64) string {

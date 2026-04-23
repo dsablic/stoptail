@@ -551,9 +551,9 @@ func TestDecodeESVersion(t *testing.T) {
 	}
 }
 
-func TestParseMappingResponse(t *testing.T) {
+func TestFlattenFields(t *testing.T) {
 	raw := `{
-		"products": {
+		"test-index": {
 			"mappings": {
 				"properties": {
 					"title": {"type": "text"},
@@ -571,10 +571,18 @@ func TestParseMappingResponse(t *testing.T) {
 		}
 	}`
 
-	fields, err := parseMappingResponse([]byte(raw))
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
+	var response map[string]struct {
+		Mappings struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"mappings"`
 	}
+	if err := json.Unmarshal([]byte(raw), &response); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	indexData := response["test-index"]
+	mappingFields := parseMappingProperties(indexData.Mappings.Properties, "")
+	fields := flattenFields(mappingFields)
 
 	expected := []string{"title", "price", "category.name", "category.id", "tags"}
 	if len(fields) != len(expected) {

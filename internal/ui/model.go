@@ -123,7 +123,7 @@ func (m Model) hasActiveInput() bool {
 	case TabMappings:
 		return m.mappings.filterActive || m.mappings.search.Active()
 	case TabCluster:
-		return m.nodes.filterActive || m.nodes.settingDetail != nil
+		return m.nodes.filterActive || m.nodes.settingDetail != nil || m.nodes.templateDetail != nil
 	case TabTasks:
 		return m.tasks.confirming != "" || m.tasks.HasModal() || m.tasks.search.Active()
 	}
@@ -590,11 +590,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case TabCluster:
 			m.nodes, cmd = m.nodes.Update(delegateMsg)
 		case TabTasks:
-			var cmd tea.Cmd
 			m.tasks, cmd = m.tasks.Update(delegateMsg)
-			if cmd != nil {
-				return m, cmd
-			}
 		}
 	}
 

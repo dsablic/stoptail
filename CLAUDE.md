@@ -140,7 +140,7 @@ When adding or modifying functionality, tests are required:
 1. **New functions** - Add unit tests in `*_test.go` files alongside the implementation
 2. **New methods on structs** - Test the method behavior, including edge cases
 3. **Bug fixes** - Add a test that would have caught the bug before fixing it
-4. **ES API changes** - Update JSON parsing tests in `internal/es/cluster_test.go`
+4. **ES API changes** - Update JSON parsing tests in the appropriate `internal/es/*_test.go` file (e.g., `cluster_test.go`, `analysis_test.go`, `mappings_test.go`)
 5. **Config changes** - Update tests in `internal/config/config_test.go`
 6. **Sorting/filtering logic** - Test that results are ordered correctly and edge cases are handled
 
@@ -233,6 +233,8 @@ Common utility functions are in `internal/ui/utils.go` to avoid duplication:
 - `AutoColumnWidths(headers []string, rows [][]string, maxTotal int) []int` - Calculate optimal column widths for tables (ANSI-aware)
 - `FitColumns(rows [][]string, widths []int) [][]string` - Truncate table cells to fit widths (ANSI-safe)
 - `SanitizeForTerminal(s string) string` - Remove problematic Unicode characters that break terminal rendering (C0/C1 control chars, zero-width spaces, bidirectional marks, BOM)
+- `JoinPanesHorizontal(maxLines int, panes ...string) string` - Join rendered panes side-by-side using TrimANSI (pass 0 for auto-height)
+- `NewFittedTable(headers, rows, width, border, borderColor) (*table.Table, [][]string)` - Create a table with auto-sized columns; returns the table and fitted rows for use in StyleFunc
 
 **JSON display** (`internal/ui/workbench.go`):
 - `highlightJSON(input string) string` - Apply syntax highlighting to JSON using chroma (monokai theme)
@@ -245,10 +247,13 @@ highlighted := highlightJSON(sanitized)
 
 This prevents invisible Unicode characters (zero-width spaces U+200B-200F, bidirectional marks U+202A-202E, etc.) from corrupting terminal output. These characters have zero visual width but can cause cursor positioning issues and layout corruption in TUI applications.
 
-**ES utilities** (`internal/es/cluster.go`):
-- `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first
-- `sortShardsByShardPrimary(shards []ShardInfo)` - Sort shards by shard number, primary first (for single-index queries)
-- `AnalyzeShardHealth(idx IndexInfo) ShardHealth` - Analyze index for shard sizing issues (undersized, oversized, sparse)
+**ES utilities** (`internal/es/`):
+- `ParseSize(s string) int64` - Parse size strings like "1.5gb", "100mb" to bytes (`analysis.go`)
+- `FormatBytes(b int64) string` - Format byte count to human-readable string (`analysis.go`)
+- `sortShardsByIndexShardPrimary(shards []ShardInfo)` - Sort shards by index, shard number, primary first (`analysis.go`)
+- `sortShardsByShardPrimary(shards []ShardInfo)` - Sort shards by shard number, primary first (`analysis.go`)
+- `AnalyzeShardHealth(idx IndexInfo) ShardHealth` - Analyze index for shard sizing issues (`analysis.go`)
+- `readBody(res)` / `checkError(res)` - ES response helpers (`client.go`)
 
 **Storage utilities** (`internal/storage/history.go`):
 - `StoptailDir() (string, error)` - Get the stoptail config directory (`~/.stoptail`)
@@ -334,8 +339,10 @@ func (m Model) hasActiveInput() bool {
         return m.workbench.HasActiveInput()
     case TabMappings:
         return m.mappings.filterActive || m.mappings.search.Active()
+    case TabCluster:
+        return m.nodes.filterActive || m.nodes.settingDetail != nil || m.nodes.templateDetail != nil
     case TabTasks:
-        return m.tasks.confirming != ""
+        return m.tasks.confirming != "" || m.tasks.HasModal() || m.tasks.search.Active()
     }
     return false
 }
@@ -383,14 +390,15 @@ Sub-models should expose `HasActiveInput()` or `HasModal()` methods. When adding
 
 Tables in Cluster tab use filter because users want to narrow down to specific nodes/settings. Workbench response uses search because users want to find text within the JSON while seeing surrounding context.
 
-**Table column sizing** - All tables should use automatic column sizing:
+**Table column sizing** - All tables should use `NewFittedTable` for automatic column sizing:
 
 ```go
 headers := []string{"name", "value", "status"}
-widths := AutoColumnWidths(headers, rows, m.width)
-rows = FitColumns(rows, widths)
-
-t := table.New().Headers(headers...).Rows(rows...)
+t, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.NormalBorder(), ColorGray)
+t = t.StyleFunc(func(row, col int) lipgloss.Style {
+    // Use fittedRows[row][col] for cell-value-based styling
+})
+return t.Render()
 ```
 
 This ensures columns fit their content up to terminal width, and handles ANSI escape codes correctly (e.g., progress bars with colors).
@@ -434,12 +442,11 @@ if focused {
 style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(borderColor)
 ```
 
-**Manual line joining for side-by-side panes** - `lipgloss.JoinHorizontal` with `Height()` causes excessive padding. Join lines manually using `TrimANSI()` from `internal/ui/utils.go`:
+**Side-by-side pane joining** - `lipgloss.JoinHorizontal` with `Height()` causes excessive padding. Use `JoinPanesHorizontal()` from `internal/ui/utils.go`:
 
 ```go
-for i := 0; i < maxLines; i++ {
-    paneLines = append(paneLines, TrimANSI(leftLines[i])+" "+TrimANSI(rightLines[i]))
-}
+panes := JoinPanesHorizontal(0, leftPane, rightPane)           // auto-height
+panes := JoinPanesHorizontal(m.height-2, left, middle, right)  // fixed height, 3 panes
 ```
 
 **ANSI escape codes break rune-based positioning** - Styled/colorized strings contain invisible ANSI escape codes. Never use `[]rune` slicing or `len()` to position content within styled strings - the rune count includes escape sequences but they have zero visual width:

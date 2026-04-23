@@ -295,25 +295,7 @@ func (m MappingsModel) View() string {
 		rightPane = m.renderMappingsPane(rightWidth)
 	}
 
-	leftLines := strings.Split(leftPane, "\n")
-	rightLines := strings.Split(rightPane, "\n")
-
-	maxLines := max(len(leftLines), len(rightLines))
-
-	var paneLines []string
-	for i := range maxLines {
-		left := ""
-		right := ""
-		if i < len(leftLines) {
-			left = leftLines[i]
-		}
-		if i < len(rightLines) {
-			right = rightLines[i]
-		}
-		paneLines = append(paneLines, TrimANSI(left)+" "+TrimANSI(right))
-	}
-
-	return strings.Join(paneLines, "\n")
+	return JoinPanesHorizontal(0, leftPane, rightPane)
 }
 
 func (m MappingsModel) renderIndexList(width int) string {

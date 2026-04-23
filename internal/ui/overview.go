@@ -175,32 +175,11 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			m.selectedIndex = 0
 			m.nodeNav.Reset()
 		case "U":
-			if m.shardStateFilter == "UNASSIGNED" {
-				m.shardStateFilter = ""
-			} else {
-				m.shardStateFilter = "UNASSIGNED"
-			}
-			m.selectedIndex = 0
-			m.scrollX = 0
-			m.nodeNav.Reset()
+			m.toggleShardStateFilter("UNASSIGNED")
 		case "R":
-			if m.shardStateFilter == "RELOCATING" {
-				m.shardStateFilter = ""
-			} else {
-				m.shardStateFilter = "RELOCATING"
-			}
-			m.selectedIndex = 0
-			m.scrollX = 0
-			m.nodeNav.Reset()
+			m.toggleShardStateFilter("RELOCATING")
 		case "I":
-			if m.shardStateFilter == "INITIALIZING" {
-				m.shardStateFilter = ""
-			} else {
-				m.shardStateFilter = "INITIALIZING"
-			}
-			m.selectedIndex = 0
-			m.scrollX = 0
-			m.nodeNav.Reset()
+			m.toggleShardStateFilter("INITIALIZING")
 		case ".":
 			m.showSystem = !m.showSystem
 			m.selectedIndex = 0
@@ -300,42 +279,17 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 			}
 		}
 	case IndexCreatedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		return m, nil
+		return m.handleOperationResult(msg.Err, false)
 	case IndexDeletedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		m.selectedIndex = 0
-		return m, nil
+		return m.handleOperationResult(msg.Err, true)
 	case IndexOpenedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		return m, nil
+		return m.handleOperationResult(msg.Err, false)
 	case IndexClosedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		return m, nil
+		return m.handleOperationResult(msg.Err, false)
 	case AliasAddedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		return m, nil
+		return m.handleOperationResult(msg.Err, false)
 	case AliasRemovedMsg:
-		m.operationMsg = ""
-		if msg.Err != nil {
-			return m.showError(msg.Err)
-		}
-		return m, nil
+		return m.handleOperationResult(msg.Err, false)
 	case AllocationExplainMsg:
 		m.allocationLoading = false
 		if m.shardInfo == nil {
@@ -358,6 +312,28 @@ func (m OverviewModel) Update(msg tea.Msg) (OverviewModel, tea.Cmd) {
 func (m OverviewModel) showError(err error) (OverviewModel, tea.Cmd) {
 	m.modal = NewErrorModal(err.Error())
 	return m, func() tea.Msg { return ModalInitMsg{} }
+}
+
+func (m OverviewModel) handleOperationResult(err error, resetSelection bool) (OverviewModel, tea.Cmd) {
+	m.operationMsg = ""
+	if err != nil {
+		return m.showError(err)
+	}
+	if resetSelection {
+		m.selectedIndex = 0
+	}
+	return m, nil
+}
+
+func (m *OverviewModel) toggleShardStateFilter(state string) {
+	if m.shardStateFilter == state {
+		m.shardStateFilter = ""
+	} else {
+		m.shardStateFilter = state
+	}
+	m.selectedIndex = 0
+	m.scrollX = 0
+	m.nodeNav.Reset()
 }
 
 func (m OverviewModel) handleModalDone() (OverviewModel, tea.Cmd) {

@@ -488,19 +488,20 @@ func (e *Editor) DeleteSelection() {
 
 	var result strings.Builder
 	for i, line := range lines {
+		lineRunes := []rune(line)
 		if i < startLine {
 			result.WriteString(line)
 			result.WriteString("\n")
 		} else if i == startLine && i == endLine {
-			result.WriteString(line[:startCol])
-			result.WriteString(line[endCol:])
+			result.WriteString(string(lineRunes[:startCol]))
+			result.WriteString(string(lineRunes[endCol:]))
 			if i < len(lines)-1 {
 				result.WriteString("\n")
 			}
 		} else if i == startLine {
-			result.WriteString(line[:startCol])
+			result.WriteString(string(lineRunes[:startCol]))
 		} else if i == endLine {
-			result.WriteString(line[endCol:])
+			result.WriteString(string(lineRunes[endCol:]))
 			if i < len(lines)-1 {
 				result.WriteString("\n")
 			}

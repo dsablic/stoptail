@@ -373,27 +373,7 @@ func (m BrowserModel) View() string {
 	middlePane := m.renderDocList(middleWidth)
 	rightPane := m.renderDetailPane(rightWidth)
 
-	leftLines := strings.Split(leftPane, "\n")
-	middleLines := strings.Split(middlePane, "\n")
-	rightLines := strings.Split(rightPane, "\n")
-
-	targetLines := m.height - 2
-	var lines []string
-	for i := 0; i < targetLines; i++ {
-		ll, ml, rl := "", "", ""
-		if i < len(leftLines) {
-			ll = TrimANSI(leftLines[i])
-		}
-		if i < len(middleLines) {
-			ml = TrimANSI(middleLines[i])
-		}
-		if i < len(rightLines) {
-			rl = TrimANSI(rightLines[i])
-		}
-		lines = append(lines, ll+" "+ml+" "+rl)
-	}
-
-	return strings.Join(lines, "\n")
+	return JoinPanesHorizontal(m.height-2, leftPane, middlePane, rightPane)
 }
 
 func (m BrowserModel) renderIndexList(width int) string {

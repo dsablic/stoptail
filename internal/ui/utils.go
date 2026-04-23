@@ -8,6 +8,8 @@ import (
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+	"github.com/labtiva/stoptail/internal/es"
 )
 
 type FilterAction int
@@ -255,70 +257,20 @@ func FitColumns(rows [][]string, widths []int) [][]string {
 	return result
 }
 
-func ParseSize(s string) (int64, error) {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-		tb = gb * 1024
-	)
-
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return 0, fmt.Errorf("empty size string")
-	}
-
-	var multiplier int64 = 1
-	var numStr string
-
-	if strings.HasSuffix(s, "tb") {
-		multiplier = tb
-		numStr = strings.TrimSuffix(s, "tb")
-	} else if strings.HasSuffix(s, "gb") {
-		multiplier = gb
-		numStr = strings.TrimSuffix(s, "gb")
-	} else if strings.HasSuffix(s, "mb") {
-		multiplier = mb
-		numStr = strings.TrimSuffix(s, "mb")
-	} else if strings.HasSuffix(s, "kb") {
-		multiplier = kb
-		numStr = strings.TrimSuffix(s, "kb")
-	} else if strings.HasSuffix(s, "b") {
-		multiplier = 1
-		numStr = strings.TrimSuffix(s, "b")
-	} else {
-		numStr = s
-	}
-
-	numStr = strings.TrimSpace(numStr)
-	value, err := strconv.ParseFloat(numStr, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid size format: %s", s)
-	}
-
-	return int64(value * float64(multiplier)), nil
+func FormatBytes(b int64) string {
+	return es.FormatBytes(b)
 }
 
-func FormatBytes(b int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-		tb = gb * 1024
-	)
-
-	switch {
-	case b >= tb:
-		return fmt.Sprintf("%.1ftb", float64(b)/float64(tb))
-	case b >= gb:
-		return fmt.Sprintf("%.1fgb", float64(b)/float64(gb))
-	case b >= mb:
-		return fmt.Sprintf("%.1fmb", float64(b)/float64(mb))
-	case b >= kb:
-		return fmt.Sprintf("%.1fkb", float64(b)/float64(kb))
-	default:
-		return fmt.Sprintf("%db", b)
+func ParseSize(s string) (int64, error) {
+	v := es.ParseSize(s)
+	if v == 0 && strings.TrimSpace(s) != "" && strings.TrimSpace(s) != "0" {
+		return 0, fmt.Errorf("invalid size format: %s", s)
 	}
+	return v, nil
+}
+
+func ParseSizeOrZero(s string) int64 {
+	return es.ParseSize(s)
 }
 
 func SanitizeForTerminal(s string) string {
@@ -347,4 +299,42 @@ func SanitizeForTerminal(s string) string {
 		}
 	}
 	return b.String()
+}
+
+func JoinPanesHorizontal(maxLines int, panes ...string) string {
+	splitPanes := make([][]string, len(panes))
+	computed := 0
+	for i, p := range panes {
+		splitPanes[i] = strings.Split(p, "\n")
+		if len(splitPanes[i]) > computed {
+			computed = len(splitPanes[i])
+		}
+	}
+	if maxLines <= 0 {
+		maxLines = computed
+	}
+	var lines []string
+	for i := range maxLines {
+		var parts []string
+		for _, sp := range splitPanes {
+			line := ""
+			if i < len(sp) {
+				line = TrimANSI(sp[i])
+			}
+			parts = append(parts, line)
+		}
+		lines = append(lines, strings.Join(parts, " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func NewFittedTable(headers []string, rows [][]string, width int, border lipgloss.Border, borderColor color.Color) (*table.Table, [][]string) {
+	widths := AutoColumnWidths(headers, rows, width)
+	fittedRows := FitColumns(rows, widths)
+	t := table.New().
+		Border(border).
+		BorderStyle(lipgloss.NewStyle().Foreground(borderColor)).
+		Headers(headers...).
+		Rows(fittedRows...)
+	return t, fittedRows
 }

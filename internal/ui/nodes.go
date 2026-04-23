@@ -145,30 +145,11 @@ func (m NodesModel) getRowCounts() (filtered, total int) {
 }
 
 func (m NodesModel) countHotThreads() (total, filtered int) {
-	if m.hotThreads == "" {
-		return 0, 0
-	}
-	var currentNode string
-	lines := strings.Split(m.hotThreads, "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "::: {") {
-			end := strings.Index(line[5:], "}")
-			if end > 0 {
-				currentNode = line[5 : 5+end]
-			}
-		} else if currentNode != "" {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "Hot threads at") || trimmed == "" {
-				continue
-			}
-			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
-				if ht := parseHotThread(currentNode, trimmed); ht != nil {
-					total++
-					if m.matchesFilter(ht.node + " " + ht.total + " " + ht.cpu) {
-						filtered++
-					}
-				}
-			}
+	threads := parseAllHotThreads(m.hotThreads)
+	for _, t := range threads {
+		total++
+		if m.matchesFilter(t.node + " " + t.total + " " + t.cpu) {
+			filtered++
 		}
 	}
 	return total, filtered
@@ -260,14 +241,8 @@ func (m NodesModel) nodesVisibleHeight() int {
 }
 
 func (m NodesModel) getFilteredItemCount() int {
-	switch m.activeView {
-	case ViewClusterSettings:
-		return len(m.getFilteredSettings())
-	case ViewTemplates:
-		return len(m.getFilteredTemplates())
-	default:
-		return m.getItemCount()
-	}
+	filtered, _ := m.getRowCounts()
+	return filtered
 }
 
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
@@ -487,72 +462,34 @@ func (m NodesModel) renderTabs() string {
 }
 
 func (m NodesModel) renderMemoryTable() string {
-	var filtered []es.NodeStats
-	for _, node := range m.state.Nodes {
-		if m.matchesFilter(node.Name + " " + node.Version) {
-			filtered = append(filtered, node)
-		}
-	}
-
-	if len(filtered) == 0 {
-		if m.filter.Value() != "" {
-			return "No matching nodes"
-		}
-		return "No nodes found"
-	}
-
-	headers := []string{"node", "version", "heap%", "heap", "fielddata", "query_cache", "segments"}
-	var rows [][]string
-	var pctValues []string
-	visibleNodes := m.visibleItems(len(filtered))
-	for _, node := range filtered[visibleNodes.start:visibleNodes.end] {
-		heapPct := m.parsePercent(node.HeapPercent)
-		pctValues = append(pctValues, node.HeapPercent)
-
-		nodeName := node.Name
-		if node.Master == "*" {
-			nodeName = lipgloss.NewStyle().Bold(true).Render(nodeName + " *")
-		}
-
-		rows = append(rows, []string{
-			nodeName,
-			node.Version,
-			fmt.Sprintf("%s %s", node.HeapPercent, RenderBar(heapPct, 10)),
-			node.HeapCurrent,
-			node.FielddataSize,
-			node.QueryCacheSize,
-			node.SegmentsCount,
-		})
-	}
-
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Headers(headers...).
-		Rows(fittedRows...).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle()
-			if col >= 3 {
-				base = base.Align(lipgloss.Right)
-			} else if col == 2 {
-				base = base.Align(lipgloss.Center)
+	return m.renderNodeTable(
+		[]string{"node", "version", "heap%", "heap", "fielddata", "query_cache", "segments"},
+		func(node es.NodeStats) (string, []string) {
+			return node.HeapPercent, []string{
+				node.HeapCurrent,
+				node.FielddataSize,
+				node.QueryCacheSize,
+				node.SegmentsCount,
 			}
-			if row == table.HeaderRow {
-				return base.Bold(true).Foreground(ColorWhite)
-			}
-			if col == 2 && row >= 0 && row < len(pctValues) {
-				return base.Inherit(m.percentStyle(pctValues[row]))
-			}
-			return base
-		})
-
-	return t.Render()
+		},
+	)
 }
 
 func (m NodesModel) renderDiskTable() string {
+	return m.renderNodeTable(
+		[]string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards"},
+		func(node es.NodeStats) (string, []string) {
+			return node.DiskPercent, []string{
+				node.DiskAvail,
+				node.DiskTotal,
+				node.DiskUsed,
+				node.Shards,
+			}
+		},
+	)
+}
+
+func (m NodesModel) renderNodeTable(headers []string, nodeRow func(es.NodeStats) (string, []string)) string {
 	var filtered []es.NodeStats
 	for _, node := range m.state.Nodes {
 		if m.matchesFilter(node.Name + " " + node.Version) {
@@ -567,53 +504,43 @@ func (m NodesModel) renderDiskTable() string {
 		return "No nodes found"
 	}
 
-	headers := []string{"node", "version", "disk%", "disk.avail", "disk.total", "disk.used", "shards"}
 	var rows [][]string
 	var pctValues []string
 	visibleNodes := m.visibleItems(len(filtered))
 	for _, node := range filtered[visibleNodes.start:visibleNodes.end] {
-		diskPct := m.parsePercent(node.DiskPercent)
-		pctValues = append(pctValues, node.DiskPercent)
+		pctStr, cols := nodeRow(node)
+		pctVal := m.parsePercent(pctStr)
+		pctValues = append(pctValues, pctStr)
 
 		nodeName := node.Name
 		if node.Master == "*" {
 			nodeName = lipgloss.NewStyle().Bold(true).Render(nodeName + " *")
 		}
 
-		rows = append(rows, []string{
+		row := []string{
 			nodeName,
 			node.Version,
-			fmt.Sprintf("%s %s", node.DiskPercent, RenderBar(diskPct, 10)),
-			node.DiskAvail,
-			node.DiskTotal,
-			node.DiskUsed,
-			node.Shards,
-		})
+			fmt.Sprintf("%s %s", pctStr, RenderBar(pctVal, 10)),
+		}
+		rows = append(rows, append(row, cols...))
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Headers(headers...).
-		Rows(fittedRows...).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle()
-			if col >= 3 {
-				base = base.Align(lipgloss.Right)
-			} else if col == 2 {
-				base = base.Align(lipgloss.Center)
-			}
-			if row == table.HeaderRow {
-				return base.Bold(true).Foreground(ColorWhite)
-			}
-			if col == 2 && row >= 0 && row < len(pctValues) {
-				return base.Inherit(m.percentStyle(pctValues[row]))
-			}
-			return base
-		})
+	t, _ := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		base := lipgloss.NewStyle()
+		if col >= 3 {
+			base = base.Align(lipgloss.Right)
+		} else if col == 2 {
+			base = base.Align(lipgloss.Center)
+		}
+		if row == table.HeaderRow {
+			return base.Bold(true).Foreground(ColorWhite)
+		}
+		if col == 2 && row >= 0 && row < len(pctValues) {
+			return base.Inherit(m.percentStyle(pctValues[row]))
+		}
+		return base
+	})
 
 	return t.Render()
 }
@@ -720,40 +647,33 @@ func (m NodesModel) renderFielddataTable() string {
 		rows = append(rows, []string{
 			fd.Index,
 			field,
-			formatBytes(fd.Size),
+			FormatBytes(fd.Size),
 			fmt.Sprintf("%s %s", percentStr, RenderBar(heapPercent, 10)),
 		})
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Headers(headers...).
-		Rows(fittedRows...).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle()
-			if col >= 2 && col != 3 {
-				base = base.Align(lipgloss.Right)
-			} else if col == 3 {
-				base = base.Align(lipgloss.Center)
-			}
-			if row == table.HeaderRow {
-				return base.Bold(true).Foreground(ColorWhite)
-			}
-			if col == 3 && row >= 0 && row < len(pctValues) {
-				return base.Inherit(m.percentStyle(pctValues[row]))
-			}
-			return base
-		})
+	t, _ := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		base := lipgloss.NewStyle()
+		if col >= 2 && col != 3 {
+			base = base.Align(lipgloss.Right)
+		} else if col == 3 {
+			base = base.Align(lipgloss.Center)
+		}
+		if row == table.HeaderRow {
+			return base.Bold(true).Foreground(ColorWhite)
+		}
+		if col == 3 && row >= 0 && row < len(pctValues) {
+			return base.Inherit(m.percentStyle(pctValues[row]))
+		}
+		return base
+	})
 
 	totalPercentStr := fmt.Sprintf("%.1f", totalPercentage)
 	boldStyle := lipgloss.NewStyle().Bold(true)
 	totalLine := fmt.Sprintf("%s  %s  %s",
 		boldStyle.Render("TOTAL"),
-		boldStyle.Render(formatBytes(totalFielddata)),
+		boldStyle.Render(FormatBytes(totalFielddata)),
 		boldStyle.Inherit(m.percentStyle(totalPercentStr)).Render(
 			fmt.Sprintf("%s %s", totalPercentStr, RenderBar(totalPercentage, 10)),
 		),
@@ -789,41 +709,6 @@ func (m NodesModel) visibleItems(total int) visibleRange {
 	return visibleRange{start: start, end: end}
 }
 
-func (m NodesModel) getItemCount() int {
-	switch m.activeView {
-	case ViewMemory, ViewDisk:
-		if m.state == nil {
-			return 0
-		}
-		return len(m.state.Nodes)
-	case ViewFielddata:
-		if m.state == nil {
-			return 0
-		}
-		return len(m.aggregateFielddataByIndexField())
-	case ViewClusterSettings:
-		if m.clusterSettings == nil {
-			return 0
-		}
-		return len(m.getClusterSettingsList())
-	case ViewThreadPools:
-		return len(m.threadPools)
-	case ViewHotThreads:
-		total, _ := m.countHotThreads()
-		return total
-	case ViewTemplates:
-		return len(m.templates)
-	case ViewDeprecations:
-		if m.deprecations == nil {
-			return 0
-		}
-		return len(m.getFilteredDeprecations())
-	case ViewShardHealth:
-		return len(m.getFilteredShardHealth())
-	}
-	return 0
-}
-
 func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {
 	pct, err := strconv.ParseFloat(strings.TrimSpace(pctStr), 64)
 	if err != nil {
@@ -844,25 +729,6 @@ func (m NodesModel) parsePercent(pctStr string) float64 {
 		return 0
 	}
 	return pct
-}
-
-func formatBytes(bytes int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-	)
-
-	switch {
-	case bytes >= gb:
-		return fmt.Sprintf("%.1fgb", float64(bytes)/float64(gb))
-	case bytes >= mb:
-		return fmt.Sprintf("%.1fmb", float64(bytes)/float64(mb))
-	case bytes >= kb:
-		return fmt.Sprintf("%.1fkb", float64(bytes)/float64(kb))
-	default:
-		return fmt.Sprintf("%db", bytes)
-	}
 }
 
 
@@ -926,36 +792,43 @@ func (m NodesModel) renderClusterSettingsTable() string {
 		rowIndices = append(rowIndices, i)
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().Padding(0, 1)
-			if row == table.HeaderRow {
-				return style.Bold(true).Foreground(ColorWhite)
+	t, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.NormalBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if row == table.HeaderRow {
+			return style.Bold(true).Foreground(ColorWhite)
+		}
+		if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
+			return style.Background(ColorBlue).Foreground(ColorOnAccent)
+		}
+		if col == 2 && row >= 0 && row < len(fittedRows) {
+			switch fittedRows[row][2] {
+			case "transient":
+				return style.Foreground(ColorYellow)
+			case "persistent":
+				return style.Foreground(ColorBlue)
+			default:
+				return style.Foreground(ColorGray)
 			}
-			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
-				return style.Background(ColorBlue).Foreground(ColorOnAccent)
-			}
-			if col == 2 && row >= 0 && row < len(fittedRows) {
-				switch fittedRows[row][2] {
-				case "transient":
-					return style.Foreground(ColorYellow)
-				case "persistent":
-					return style.Foreground(ColorBlue)
-				default:
-					return style.Foreground(ColorGray)
-				}
-			}
-			return style.Foreground(ColorWhite)
-		})
+		}
+		return style.Foreground(ColorWhite)
+	})
 
 	return t.Render()
+}
+
+func (m NodesModel) renderDetailModal(content string) string {
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBlue).
+		Padding(1, 2).
+		MaxWidth(m.width - 10)
+
+	box := boxStyle.Render(content)
+	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
+
+	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
 }
 
 func (m NodesModel) renderSettingDetailModal() string {
@@ -977,28 +850,16 @@ func (m NodesModel) renderSettingDetailModal() string {
 		maxValueWidth = 100
 	}
 
-	value := s.Value
+	value := []rune(s.Value)
 	for len(value) > maxValueWidth {
-		lines = append(lines, valueStyle.Render(value[:maxValueWidth]))
+		lines = append(lines, valueStyle.Render(string(value[:maxValueWidth])))
 		value = value[maxValueWidth:]
 	}
 	if len(value) > 0 {
-		lines = append(lines, valueStyle.Render(value))
+		lines = append(lines, valueStyle.Render(string(value)))
 	}
 
-	content := strings.Join(lines, "\n")
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		MaxWidth(m.width - 10)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return m.renderDetailModal(strings.Join(lines, "\n"))
 }
 
 func (m NodesModel) renderThreadPoolsTable() string {
@@ -1025,37 +886,30 @@ func (m NodesModel) renderThreadPoolsTable() string {
 		rows = append(rows, []string{p.NodeName, p.Name, p.Active, p.Queue, p.Rejected, p.Completed, p.PoolSize, p.PoolType})
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().Padding(0, 1)
-			if row == table.HeaderRow {
-				return style.Bold(true).Foreground(ColorWhite)
-			}
-			if row >= 0 && row < len(fittedRows) {
-				switch col {
-				case 2:
-					if fittedRows[row][2] != "0" {
-						return style.Foreground(ColorGreen)
-					}
-				case 3:
-					if fittedRows[row][3] != "0" {
-						return style.Foreground(ColorYellow)
-					}
-				case 4:
-					if fittedRows[row][4] != "0" {
-						return style.Foreground(ColorRed)
-					}
+	t, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.NormalBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if row == table.HeaderRow {
+			return style.Bold(true).Foreground(ColorWhite)
+		}
+		if row >= 0 && row < len(fittedRows) {
+			switch col {
+			case 2:
+				if fittedRows[row][2] != "0" {
+					return style.Foreground(ColorGreen)
+				}
+			case 3:
+				if fittedRows[row][3] != "0" {
+					return style.Foreground(ColorYellow)
+				}
+			case 4:
+				if fittedRows[row][4] != "0" {
+					return style.Foreground(ColorRed)
 				}
 			}
-			return style.Foreground(ColorWhite)
-		})
+		}
+		return style.Foreground(ColorWhite)
+	})
 
 	return t.Render()
 }
@@ -1125,6 +979,35 @@ func extractThreadType(threadName string) string {
 	return "other"
 }
 
+func parseAllHotThreads(raw string) []hotThread {
+	if raw == "" {
+		return nil
+	}
+	var threads []hotThread
+	var currentNode string
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.HasPrefix(line, "::: {") {
+			end := strings.Index(line[5:], "}")
+			if end > 0 {
+				currentNode = line[5 : 5+end]
+			} else {
+				currentNode = "unknown"
+			}
+		} else if currentNode != "" {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Hot threads at") || trimmed == "" {
+				continue
+			}
+			if len(trimmed) > 0 && trimmed[0] >= '0' && trimmed[0] <= '9' {
+				if ht := parseHotThread(currentNode, trimmed); ht != nil {
+					threads = append(threads, *ht)
+				}
+			}
+		}
+	}
+	return threads
+}
+
 func threadTypeColor(threadType string) color.Color {
 	switch threadType {
 	case "search", "get":
@@ -1141,36 +1024,12 @@ func threadTypeColor(threadType string) color.Color {
 }
 
 func (m NodesModel) renderHotThreads() string {
-	if m.hotThreads == "" {
-		return "No hot threads data. Press 'r' to refresh."
-	}
-
-	var threads []hotThread
-	var currentNode string
-	lines := strings.Split(m.hotThreads, "\n")
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "::: {") {
-			end := strings.Index(line[5:], "}")
-			if end > 0 {
-				currentNode = line[5 : 5+end]
-			} else {
-				currentNode = "unknown"
-			}
-		} else if currentNode != "" {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "Hot threads at") || trimmed == "" {
-				continue
-			}
-			if len(trimmed) > 0 && (trimmed[0] >= '0' && trimmed[0] <= '9') {
-				if ht := parseHotThread(currentNode, trimmed); ht != nil {
-					threads = append(threads, *ht)
-				}
-			}
-		}
-	}
+	threads := parseAllHotThreads(m.hotThreads)
 
 	if len(threads) == 0 {
+		if m.hotThreads == "" {
+			return "No hot threads data. Press 'r' to refresh."
+		}
 		idleStyle := lipgloss.NewStyle().Foreground(ColorGray)
 		return idleStyle.Render("All nodes idle - no hot threads detected")
 	}
@@ -1195,28 +1054,21 @@ func (m NodesModel) renderHotThreads() string {
 		rows = append(rows, []string{t.node, t.threadType, t.total, t.cpu, t.other})
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	tbl := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().Padding(0, 1)
-			if row == table.HeaderRow {
-				return style.Bold(true).Foreground(ColorWhite)
-			}
-			if col == 1 && row >= 0 && row < len(fittedRows) {
-				return style.Foreground(threadTypeColor(fittedRows[row][1]))
-			}
-			if col == 2 && row >= 0 && row < len(fittedRows) {
-				pctStr := strings.TrimSuffix(fittedRows[row][2], "%")
-				return style.Inherit(m.percentStyle(pctStr))
-			}
-			return style.Foreground(ColorWhite)
-		})
+	tbl, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.NormalBorder(), ColorGray)
+	tbl = tbl.StyleFunc(func(row, col int) lipgloss.Style {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if row == table.HeaderRow {
+			return style.Bold(true).Foreground(ColorWhite)
+		}
+		if col == 1 && row >= 0 && row < len(fittedRows) {
+			return style.Foreground(threadTypeColor(fittedRows[row][1]))
+		}
+		if col == 2 && row >= 0 && row < len(fittedRows) {
+			pctStr := strings.TrimSuffix(fittedRows[row][2], "%")
+			return style.Inherit(m.percentStyle(pctStr))
+		}
+		return style.Foreground(ColorWhite)
+	})
 
 	return tbl.Render()
 }
@@ -1261,30 +1113,23 @@ func (m NodesModel) renderTemplates() string {
 		rowIndices = append(rowIndices, i)
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	tbl := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			style := lipgloss.NewStyle().Padding(0, 1)
-			if row == table.HeaderRow {
-				return style.Bold(true).Foreground(ColorWhite)
-			}
-			if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
-				return style.Background(ColorBlue).Foreground(ColorOnAccent)
-			}
-			if col == 2 && row >= 0 && row < len(fittedRows) {
-				return style.Align(lipgloss.Right)
-			}
-			if col == 5 && row >= 0 && row < len(fittedRows) && fittedRows[row][5] == "Y" {
-				return style.Foreground(ColorBlue)
-			}
-			return style.Foreground(ColorWhite)
-		})
+	tbl, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.NormalBorder(), ColorGray)
+	tbl = tbl.StyleFunc(func(row, col int) lipgloss.Style {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if row == table.HeaderRow {
+			return style.Bold(true).Foreground(ColorWhite)
+		}
+		if row >= 0 && row < len(rowIndices) && rowIndices[row] == m.nav.Selected {
+			return style.Background(ColorBlue).Foreground(ColorOnAccent)
+		}
+		if col == 2 && row >= 0 && row < len(fittedRows) {
+			return style.Align(lipgloss.Right)
+		}
+		if col == 5 && row >= 0 && row < len(fittedRows) && fittedRows[row][5] == "Y" {
+			return style.Foreground(ColorBlue)
+		}
+		return style.Foreground(ColorWhite)
+	})
 
 	return tbl.Render()
 }
@@ -1333,19 +1178,7 @@ func (m NodesModel) renderTemplateDetailModal() string {
 		lines = append(lines, labelStyle.Render("Data Stream: ")+lipgloss.NewStyle().Foreground(ColorBlue).Render("yes"))
 	}
 
-	content := strings.Join(lines, "\n")
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		MaxWidth(m.width - 10)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return m.renderDetailModal(strings.Join(lines, "\n"))
 }
 
 func (m NodesModel) renderDeprecations() string {
@@ -1371,30 +1204,23 @@ func (m NodesModel) renderDeprecations() string {
 		rows = append(rows, []string{dep.Level, dep.Category, resource, dep.Message})
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
-			}
-			if row >= 0 && row < len(filtered) {
-				if col == 0 {
-					switch filtered[row].Level {
-					case "critical":
-						return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-					case "warning":
-						return lipgloss.NewStyle().Foreground(ColorYellow)
-					}
+	t, _ := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		if row == table.HeaderRow {
+			return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+		}
+		if row >= 0 && row < len(rows) {
+			if col == 0 {
+				switch filtered[visible.start+row].Level {
+				case "critical":
+					return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+				case "warning":
+					return lipgloss.NewStyle().Foreground(ColorYellow)
 				}
 			}
-			return lipgloss.NewStyle()
-		})
+		}
+		return lipgloss.NewStyle()
+	})
 
 	return t.Render()
 }
@@ -1447,7 +1273,7 @@ func (m NodesModel) renderShardHealth() string {
 		h := filtered[i]
 		avgShard := "-"
 		if h.AvgShardSize > 0 {
-			avgShard = formatShardSize(h.AvgShardSize)
+			avgShard = FormatBytes(h.AvgShardSize)
 		}
 		docsPerShard := "-"
 		if h.AvgDocsPerShard > 0 {
@@ -1456,59 +1282,33 @@ func (m NodesModel) renderShardHealth() string {
 		rows = append(rows, []string{
 			h.IndexName,
 			fmt.Sprintf("%d", h.ShardCount),
-			formatShardSize(h.TotalSize),
+			FormatBytes(h.TotalSize),
 			avgShard,
 			docsPerShard,
 			h.StatusText,
 		})
 	}
 
-	widths := AutoColumnWidths(headers, rows, m.width)
-	fittedRows := FitColumns(rows, widths)
-
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		Headers(headers...).
-		Rows(fittedRows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+	t, _ := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		if row == table.HeaderRow {
+			return lipgloss.NewStyle().Bold(true).Foreground(ColorWhite)
+		}
+		if col == 5 && row >= 0 && row < len(rows) {
+			switch filtered[visible.start+row].Status {
+			case es.ShardHealthCritical:
+				return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+			case es.ShardHealthWarning:
+				return lipgloss.NewStyle().Foreground(ColorYellow)
+			case es.ShardHealthOK:
+				return lipgloss.NewStyle().Foreground(ColorGreen)
 			}
-			if col == 5 && row >= 0 && row < len(filtered) {
-				switch filtered[row].Status {
-				case es.ShardHealthCritical:
-					return lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-				case es.ShardHealthWarning:
-					return lipgloss.NewStyle().Foreground(ColorYellow)
-				case es.ShardHealthOK:
-					return lipgloss.NewStyle().Foreground(ColorGreen)
-				}
-			}
-			return lipgloss.NewStyle()
-		})
+		}
+		return lipgloss.NewStyle()
+	})
 
 	return t.Render()
 }
 
-func formatShardSize(b int64) string {
-	const (
-		kb = 1024
-		mb = kb * 1024
-		gb = mb * 1024
-		tb = gb * 1024
-	)
 
-	switch {
-	case b >= tb:
-		return fmt.Sprintf("%.1ftb", float64(b)/float64(tb))
-	case b >= gb:
-		return fmt.Sprintf("%.1fgb", float64(b)/float64(gb))
-	case b >= mb:
-		return fmt.Sprintf("%.1fmb", float64(b)/float64(mb))
-	case b >= kb:
-		return fmt.Sprintf("%.1fkb", float64(b)/float64(kb))
-	default:
-		return fmt.Sprintf("%db", b)
-	}
-}
+
