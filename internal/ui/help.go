@@ -55,6 +55,7 @@ var helpWorkbench = `## Workbench
 | Ctrl+Z | Undo |
 | Ctrl+Shift+Z | Redo |
 | Shift+Arrow | Select text |
+| Shift+Home/End | Select to start/end |
 | Up/Down | Navigate |
 | Esc | Cancel |
 `
@@ -106,7 +107,6 @@ var helpTasks = `## Tasks
 | c | Cancel task |
 | y/n | Confirm |
 | up/down | Select |
-| r | Refresh |
 `
 
 func renderHelp(width, height, activeTab int) string {

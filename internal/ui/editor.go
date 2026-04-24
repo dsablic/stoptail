@@ -440,6 +440,10 @@ func (e Editor) CursorOffset() int {
 	return e.getCursorOffset()
 }
 
+func (e Editor) GetSelection() Selection {
+	return e.selection
+}
+
 func (e *Editor) ClearSelection() {
 	e.selection.Active = false
 }
