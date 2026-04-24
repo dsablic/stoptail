@@ -170,15 +170,28 @@ func (m WorkbenchModel) ClipboardMessage() string {
 	return m.clipboard.Message()
 }
 
+func (m WorkbenchModel) paneInnerWidth() int {
+	return (m.width - 5) / 2
+}
+
+func (m *WorkbenchModel) selectMethod(method string) {
+	for i, v := range methods {
+		if v == method {
+			m.methodDropdown.SetSelectedIdx(i)
+			break
+		}
+	}
+}
+
 func (m *WorkbenchModel) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 
-	paneInnerWidth := (width - 5) / 2
+	pw := m.paneInnerWidth()
 	bodyHeight := height - 6
 
-	m.path.SetWidth(paneInnerWidth - 8)
-	m.editor.SetSize(paneInnerWidth, bodyHeight-3)
+	m.path.SetWidth(pw - 8)
+	m.editor.SetSize(pw, bodyHeight-3)
 	m.wrapResponseLines()
 }
 
@@ -342,12 +355,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				}
 			case BookmarkActionLoad:
 				if bookmark != nil {
-					for i, method := range methods {
-						if method == bookmark.Method {
-							m.methodDropdown.SetSelectedIdx(i)
-							break
-						}
-					}
+					m.selectMethod(bookmark.Method)
 					m.path.SetValue(bookmark.Path)
 					m.editor.SetContent(bookmark.Body)
 				}
@@ -562,7 +570,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			}
 		}
 	case tea.MouseReleaseMsg:
-		paneInnerWidth := (m.width - 5) / 2
+		paneInnerWidth := m.paneInnerWidth()
 		topRowHeight := 3
 		bodyPaneTop := topRowHeight + 2
 
@@ -678,7 +686,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			return m, nil
 		}
 	case tea.MouseWheelMsg:
-		paneInnerWidth := (m.width - 5) / 2
+		paneInnerWidth := m.paneInnerWidth()
 		topRowHeight := 3
 		scrollAmount := 3
 
@@ -703,7 +711,7 @@ func (m *WorkbenchModel) cycleFocus() {
 	m.path.Blur()
 	m.editor.Blur()
 
-	m.focus = (m.focus + 1) % 4
+	m.focus = (m.focus + 1) % 5
 	switch m.focus {
 	case FocusMethod:
 		// No component to focus
@@ -813,12 +821,7 @@ func (m *WorkbenchModel) loadHistoryEntry() {
 	}
 
 	entry := m.history.Entries[m.historyIdx]
-	for i, method := range methods {
-		if method == entry.Method {
-			m.methodDropdown.SetSelectedIdx(i)
-			break
-		}
-	}
+	m.selectMethod(entry.Method)
 	m.path.SetValue(entry.Path)
 	m.editor.SetContent(entry.Body)
 }
@@ -879,7 +882,7 @@ func (m *WorkbenchModel) wrapResponseLines() {
 		m.responseLines = nil
 		return
 	}
-	paneInnerWidth := (m.width - 5) / 2
+	paneInnerWidth := m.paneInnerWidth()
 	if paneInnerWidth < 10 {
 		paneInnerWidth = 40
 	}
@@ -913,12 +916,12 @@ func (m WorkbenchModel) execute() tea.Cmd {
 func (m WorkbenchModel) fetchMapping(index string) tea.Cmd {
 	return func() tea.Msg {
 		if m.client == nil {
-			return nil
+			return mappingResultMsg{}
 		}
 		ctx := context.Background()
 		fields, err := m.client.FetchMapping(ctx, index)
 		if err != nil {
-			return nil
+			return mappingResultMsg{}
 		}
 		return mappingResultMsg{index: index, fields: fields}
 	}
@@ -993,7 +996,7 @@ func (m WorkbenchModel) View() string {
 	// Split panes: account for borders (2 chars each pane) and divider (1 char)
 	// Total = 2 * (innerWidth + 2) + 1 = width
 	// innerWidth = (width - 5) / 2
-	paneInnerWidth := (m.width - 5) / 2
+	paneInnerWidth := m.paneInnerWidth()
 
 	// Left pane - body
 	bodyBorder := lipgloss.RoundedBorder()
@@ -1093,25 +1096,7 @@ func (m WorkbenchModel) View() string {
 		Render(responsePaneContent)
 	responsePane = clipPane(responsePane, paneHeight)
 
-	bodyLines := strings.Split(bodyPane, "\n")
-	responseLines := strings.Split(responsePane, "\n")
-	maxLines := len(bodyLines)
-	if len(responseLines) > maxLines {
-		maxLines = len(responseLines)
-	}
-	var paneLines []string
-	for i := 0; i < maxLines; i++ {
-		bl := ""
-		rl := ""
-		if i < len(bodyLines) {
-			bl = TrimANSI(bodyLines[i])
-		}
-		if i < len(responseLines) {
-			rl = TrimANSI(responseLines[i])
-		}
-		paneLines = append(paneLines, bl+" "+rl)
-	}
-	panes := strings.Join(paneLines, "\n")
+	panes := JoinPanesHorizontal(0, bodyPane, responsePane)
 
 	output := lipgloss.JoinVertical(lipgloss.Left, topRow, "", panes)
 
@@ -1143,8 +1128,9 @@ func (m *WorkbenchModel) triggerCompletion() {
 		textUpToCursor += lines[i] + "\n"
 	}
 	if row < len(lines) {
-		if col <= len(lines[row]) {
-			textUpToCursor += lines[row][:col]
+		lineRunes := []rune(lines[row])
+		if col <= len(lineRunes) {
+			textUpToCursor += string(lineRunes[:col])
 		} else {
 			textUpToCursor += lines[row]
 		}
@@ -1183,11 +1169,12 @@ func (m *WorkbenchModel) shouldAutoComplete() bool {
 	}
 
 	line := lines[row]
-	if col < 1 || col > len(line) {
+	lineRunes := []rune(line)
+	if col < 1 || col > len(lineRunes) {
 		return false
 	}
 
-	beforeQuote := strings.TrimRight(line[:col-1], " \t")
+	beforeQuote := strings.TrimRight(string(lineRunes[:col-1]), " \t")
 	if len(beforeQuote) == 0 {
 		for i := row - 1; i >= 0; i-- {
 			trimmed := strings.TrimRight(lines[i], " \t")
@@ -1216,8 +1203,9 @@ func (m *WorkbenchModel) getCompletionQuery() string {
 	}
 
 	line := lines[row]
-	if col > len(line) {
-		col = len(line)
+	lineRunes := []rune(line)
+	if col > len(lineRunes) {
+		col = len(lineRunes)
 	}
 
 	start := m.completion.TriggerCol
@@ -1225,7 +1213,7 @@ func (m *WorkbenchModel) getCompletionQuery() string {
 		return ""
 	}
 
-	return line[start:col]
+	return string(lineRunes[start:col])
 }
 
 func (m *WorkbenchModel) acceptCompletion() {
@@ -1250,13 +1238,13 @@ func (m *WorkbenchModel) acceptCompletion() {
 
 	needsOpenQuote := true
 	if row < len(lines) {
-		line := lines[row]
-		if m.completion.TriggerCol > 0 && m.completion.TriggerCol <= len(line) {
-			if line[m.completion.TriggerCol-1] == '"' {
+		lineRunes := []rune(lines[row])
+		if m.completion.TriggerCol > 0 && m.completion.TriggerCol <= len(lineRunes) {
+			if lineRunes[m.completion.TriggerCol-1] == '"' {
 				needsOpenQuote = false
 			}
 		}
-		if col < len(line) && line[col] == '"' {
+		if col < len(lineRunes) && lineRunes[col] == '"' {
 			m.editor.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
 		}
 	}

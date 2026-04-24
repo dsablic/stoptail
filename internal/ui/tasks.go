@@ -134,7 +134,7 @@ func (m TasksModel) maxVisibleRows() int {
 func (m *TasksModel) updateTaskSearch() {
 	var lines []string
 	for _, task := range m.tasks {
-		lines = append(lines, task.Action+" "+task.Description+" "+task.Index+" "+task.Node)
+		lines = append(lines, task.Action+" "+task.Description+" "+task.Node)
 	}
 	m.search.FindMatches(lines)
 	if match := m.search.CurrentMatch(); match >= 0 {
@@ -202,32 +202,25 @@ func (m TasksModel) View() string {
 	}
 
 	headers := []string{"action", "node", "description", "running", "cancel"}
-	widths := AutoColumnWidths(headers, rows, m.width)
-	rows = FitColumns(rows, widths)
-
-	t := table.New().
-		Headers(headers...).
-		Rows(rows...).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorGray)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle()
-			if col == 3 || col == 4 {
-				base = base.Align(lipgloss.Right)
+	t, _ := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorGray)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		base := lipgloss.NewStyle()
+		if col == 3 || col == 4 {
+			base = base.Align(lipgloss.Right)
+		}
+		if row == table.HeaderRow {
+			return base.Bold(true).Foreground(ColorWhite)
+		}
+		if row >= 0 && row < len(rowStates) {
+			switch rowStates[row] {
+			case "confirming":
+				return base.Background(ColorRed).Foreground(ColorOnAccent)
+			case "selected":
+				return base.Background(ColorBlue).Foreground(ColorOnAccent)
 			}
-			if row == table.HeaderRow {
-				return base.Bold(true).Foreground(ColorWhite)
-			}
-			if row >= 0 && row < len(rowStates) {
-				switch rowStates[row] {
-				case "confirming":
-					return base.Background(ColorRed).Foreground(ColorOnAccent)
-				case "selected":
-					return base.Background(ColorBlue).Foreground(ColorOnAccent)
-				}
-			}
-			return base
-		})
+		}
+		return base
+	})
 
 	content := t.Render()
 
@@ -279,17 +272,7 @@ func (m TasksModel) renderDetailsModal() string {
 		valueStyle.Render(task.Description),
 	}, "\n")
 
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ColorBlue).
-		Padding(1, 2).
-		Width(70)
-
-	box := boxStyle.Render(content)
-	footer := lipgloss.NewStyle().Foreground(ColorGray).Render("Press Enter or Esc to close")
-
-	modal := lipgloss.JoinVertical(lipgloss.Center, box, footer)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modal)
+	return RenderDetailModal(content, 70, m.width, m.height)
 }
 
 func (m TasksModel) HasModal() bool {
@@ -317,29 +300,22 @@ func (m TasksModel) renderPendingTasks() string {
 	}
 
 	headers := []string{"priority", "source", "queued", "exec"}
-	widths := AutoColumnWidths(headers, rows, m.width)
-	rows = FitColumns(rows, widths)
-
-	t := table.New().
-		Headers(headers...).
-		Rows(rows...).
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(ColorYellow)).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			base := lipgloss.NewStyle()
-			if row == table.HeaderRow {
-				return base.Bold(true).Foreground(ColorYellow)
+	t, fittedRows := NewFittedTable(headers, rows, m.width, lipgloss.RoundedBorder(), ColorYellow)
+	t = t.StyleFunc(func(row, col int) lipgloss.Style {
+		base := lipgloss.NewStyle()
+		if row == table.HeaderRow {
+			return base.Bold(true).Foreground(ColorYellow)
+		}
+		if col == 0 && row >= 0 && row < len(fittedRows) {
+			switch fittedRows[row][0] {
+			case "URGENT", "IMMEDIATE":
+				return base.Foreground(ColorRed)
+			case "HIGH":
+				return base.Foreground(ColorYellow)
 			}
-			if col == 0 && row >= 0 && row < len(rows) {
-				switch rows[row][0] {
-				case "URGENT", "IMMEDIATE":
-					return base.Foreground(ColorRed)
-				case "HIGH":
-					return base.Foreground(ColorYellow)
-				}
-			}
-			return base.Foreground(ColorWhite)
-		})
+		}
+		return base.Foreground(ColorWhite)
+	})
 
 	return title + "\n" + t.Render()
 }

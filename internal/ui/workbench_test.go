@@ -427,3 +427,34 @@ func TestSearchNavigationWhenActive(t *testing.T) {
 		t.Errorf("'n' should navigate when search is closed (but matches exist), searchIdx=%d", w.search.CurrentIdx())
 	}
 }
+
+func extractIndexFromPathStr(path string) string {
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	for _, part := range parts {
+		if part != "" && !strings.HasPrefix(part, "_") {
+			return part
+		}
+	}
+	return ""
+}
+
+func TestExtractIndexFromPath(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"/my-index/_search", "my-index"},
+		{"/_cat/indices", "indices"},
+		{"/", ""},
+		{"", ""},
+		{"/index/type/id", "index"},
+		{"my-index/_doc/1", "my-index"},
+	}
+
+	for _, tt := range tests {
+		got := extractIndexFromPathStr(tt.input)
+		if got != tt.want {
+			t.Errorf("extractIndexFromPathStr(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

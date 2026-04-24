@@ -19,7 +19,6 @@ var (
 	HeaderBg      color.Color
 	ActiveBg      color.Color
 	SpinnerClr    color.Color
-	TextBg        color.Color
 	ColorOnAccent color.Color
 
 	// Base styles
@@ -28,7 +27,6 @@ var (
 	ActiveTabStyle   lipgloss.Style
 	InactiveTabStyle lipgloss.Style
 	StatusBarStyle   lipgloss.Style
-	HelpStyle        lipgloss.Style
 
 	ThemeDark bool
 )
@@ -60,7 +58,6 @@ func SetTheme(theme string) {
 		HeaderBg = lipgloss.Color("#1f2937")
 		ActiveBg = lipgloss.Color("#374151")
 		SpinnerClr = lipgloss.Color("#3b82f6")
-		TextBg = lipgloss.Color("#111827")
 		ColorOnAccent = lipgloss.Color("#f9fafb")
 	} else {
 		ColorGreen = lipgloss.Color("#16a34a")
@@ -73,7 +70,6 @@ func SetTheme(theme string) {
 		HeaderBg = lipgloss.Color("#e5e7eb")
 		ActiveBg = lipgloss.Color("#d1d5db")
 		SpinnerClr = lipgloss.Color("#2563eb")
-		TextBg = lipgloss.Color("#f9fafb")
 		ColorOnAccent = lipgloss.Color("#f9fafb")
 	}
 
@@ -97,7 +93,4 @@ func SetTheme(theme string) {
 	StatusBarStyle = lipgloss.NewStyle().
 		Foreground(ColorGray).
 		Padding(0, 1)
-
-	HelpStyle = lipgloss.NewStyle().
-		Foreground(ColorGray)
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/labtiva/stoptail/internal/config"
 )
 
@@ -105,7 +106,6 @@ func (c *Client) Request(ctx context.Context, method, path, body string) Request
 		return RequestResult{Error: err, Duration: time.Since(start)}
 	}
 
-	// Pretty print JSON
 	var pretty bytes.Buffer
 	if err := json.Indent(&pretty, respBody, "", "  "); err == nil {
 		return RequestResult{
@@ -120,4 +120,24 @@ func (c *Client) Request(ctx context.Context, method, path, body string) Request
 		Body:       string(respBody),
 		Duration:   time.Since(start),
 	}
+}
+
+func readBody(res *esapi.Response, errContext string) ([]byte, error) {
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return nil, fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s response: %w", errContext, err)
+	}
+	return body, nil
+}
+
+func checkError(res *esapi.Response) error {
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
+	}
+	return nil
 }

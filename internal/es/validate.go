@@ -1,12 +1,12 @@
 package es
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 )
 
 type ValidateResult struct {
@@ -26,7 +26,7 @@ func (c *Client) ValidateQuery(ctx context.Context, index string, query json.Raw
 		path = "/_validate/query"
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.cfg.Host+path, strings.NewReader(string(bodyBytes)))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.cfg.Host+path, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}

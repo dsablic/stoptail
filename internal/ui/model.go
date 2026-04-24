@@ -123,7 +123,7 @@ func (m Model) hasActiveInput() bool {
 	case TabMappings:
 		return m.mappings.filterActive || m.mappings.search.Active()
 	case TabCluster:
-		return m.nodes.filterActive || m.nodes.settingDetail != nil
+		return m.nodes.filterActive || m.nodes.settingDetail != nil || m.nodes.templateDetail != nil
 	case TabTasks:
 		return m.tasks.confirming != "" || m.tasks.HasModal() || m.tasks.search.Active()
 	}
@@ -439,11 +439,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.fetchTasksTab()
 				}
-			case "tab":
-				if m.showHelp {
-					break
-				}
-				switch m.activeTab {
+		case "tab":
+			switch m.activeTab {
 				case TabOverview:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
@@ -467,11 +464,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.switchTab(TabOverview)
 				}
-			case "shift+tab":
-				if m.showHelp {
-					break
-				}
-				switch m.activeTab {
+		case "shift+tab":
+			switch m.activeTab {
 				case TabCluster:
 					return m, m.switchTab(TabOverview)
 				case TabWorkbench:
@@ -590,11 +584,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case TabCluster:
 			m.nodes, cmd = m.nodes.Update(delegateMsg)
 		case TabTasks:
-			var cmd tea.Cmd
 			m.tasks, cmd = m.tasks.Update(delegateMsg)
-			if cmd != nil {
-				return m, cmd
-			}
 		}
 	}
 

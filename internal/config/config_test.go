@@ -1,6 +1,8 @@
 package config
 
 import (
+	"sort"
+	"strings"
 	"testing"
 
 	yaml2 "gopkg.in/yaml.v3"
@@ -235,6 +237,111 @@ func TestMaskedURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDisplayHost(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *Config
+		want string
+	}{
+		{"simple localhost", &Config{Host: "http://localhost:9200"}, "localhost:9200"},
+		{"https with port", &Config{Host: "https://es.example.com:9200"}, "es.example.com:9200"},
+		{"strips www prefix", &Config{Host: "https://www.example.com"}, "example.com"},
+		{"empty string", &Config{Host: ""}, ""},
+		{"not a url", &Config{Host: "not-a-url"}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.DisplayHost(); got != tt.want {
+				t.Errorf("DisplayHost() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClusterNames(t *testing.T) {
+	t.Run("nil receiver", func(t *testing.T) {
+		var c *ClustersConfig
+		if got := c.ClusterNames(); got != nil {
+			t.Errorf("ClusterNames() = %v, want nil", got)
+		}
+	})
+
+	t.Run("empty clusters", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{}}
+		got := c.ClusterNames()
+		if len(got) != 0 {
+			t.Errorf("ClusterNames() len = %d, want 0", len(got))
+		}
+	})
+
+	t.Run("multiple clusters", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"prod":    {URL: "http://prod:9200"},
+			"staging": {URL: "http://staging:9200"},
+			"dev":     {URL: "http://dev:9200"},
+		}}
+		got := c.ClusterNames()
+		if len(got) != 3 {
+			t.Fatalf("ClusterNames() len = %d, want 3", len(got))
+		}
+		sort.Strings(got)
+		want := []string{"dev", "prod", "staging"}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("ClusterNames()[%d] = %q, want %q", i, got[i], want[i])
+			}
+		}
+	})
+}
+
+func TestResolveURL(t *testing.T) {
+	c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+		"prod":    {URL: "http://prod:9200"},
+		"cmd":     {URLCommand: "echo test-url"},
+		"neither": {},
+	}}
+
+	t.Run("known cluster with url", func(t *testing.T) {
+		got, err := c.ResolveURL("prod")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "http://prod:9200" {
+			t.Errorf("ResolveURL() = %q, want %q", got, "http://prod:9200")
+		}
+	})
+
+	t.Run("unknown cluster", func(t *testing.T) {
+		_, err := c.ResolveURL("unknown")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "not found") {
+			t.Errorf("error = %q, want containing 'not found'", err.Error())
+		}
+	})
+
+	t.Run("cluster with url_command", func(t *testing.T) {
+		got, err := c.ResolveURL("cmd")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "test-url" {
+			t.Errorf("ResolveURL() = %q, want %q", got, "test-url")
+		}
+	})
+
+	t.Run("cluster with no url or command", func(t *testing.T) {
+		_, err := c.ResolveURL("neither")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "has no url") {
+			t.Errorf("error = %q, want containing 'has no url'", err.Error())
+		}
+	})
 }
 
 func TestLoadClustersConfig_AWSProfile(t *testing.T) {
