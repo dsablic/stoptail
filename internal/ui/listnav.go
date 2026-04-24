@@ -25,10 +25,22 @@ func (n *ListNav) Reset() {
 	n.Scroll = 0
 }
 
+func (n *ListNav) Clamp(total int) {
+	if total <= 0 {
+		n.Selected = 0
+		n.Scroll = 0
+		return
+	}
+	if n.Selected >= total {
+		n.Selected = total - 1
+	}
+}
+
 func (n *ListNav) Up(total, visible int) {
 	if total <= 0 {
 		return
 	}
+	n.Clamp(total)
 	if n.cursor {
 		if n.Selected > 0 {
 			n.Selected--
@@ -47,6 +59,7 @@ func (n *ListNav) Down(total, visible int) {
 	if total <= 0 {
 		return
 	}
+	n.Clamp(total)
 	if n.cursor {
 		if n.Selected < total-1 {
 			n.Selected++

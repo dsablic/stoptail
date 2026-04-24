@@ -260,14 +260,8 @@ func (m NodesModel) nodesVisibleHeight() int {
 }
 
 func (m NodesModel) getFilteredItemCount() int {
-	switch m.activeView {
-	case ViewClusterSettings:
-		return len(m.getFilteredSettings())
-	case ViewTemplates:
-		return len(m.getFilteredTemplates())
-	default:
-		return m.getItemCount()
-	}
+	filtered, _ := m.getRowCounts()
+	return filtered
 }
 
 func (m NodesModel) Update(msg tea.Msg) (NodesModel, tea.Cmd) {
@@ -787,41 +781,6 @@ func (m NodesModel) visibleItems(total int) visibleRange {
 	}
 
 	return visibleRange{start: start, end: end}
-}
-
-func (m NodesModel) getItemCount() int {
-	switch m.activeView {
-	case ViewMemory, ViewDisk:
-		if m.state == nil {
-			return 0
-		}
-		return len(m.state.Nodes)
-	case ViewFielddata:
-		if m.state == nil {
-			return 0
-		}
-		return len(m.aggregateFielddataByIndexField())
-	case ViewClusterSettings:
-		if m.clusterSettings == nil {
-			return 0
-		}
-		return len(m.getClusterSettingsList())
-	case ViewThreadPools:
-		return len(m.threadPools)
-	case ViewHotThreads:
-		total, _ := m.countHotThreads()
-		return total
-	case ViewTemplates:
-		return len(m.templates)
-	case ViewDeprecations:
-		if m.deprecations == nil {
-			return 0
-		}
-		return len(m.getFilteredDeprecations())
-	case ViewShardHealth:
-		return len(m.getFilteredShardHealth())
-	}
-	return 0
 }
 
 func (m NodesModel) percentStyle(pctStr string) lipgloss.Style {

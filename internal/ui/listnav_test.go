@@ -211,6 +211,21 @@ func TestHandleWheelIntegration(t *testing.T) {
 	}
 }
 
+func TestCursorNavClampOnShrink(t *testing.T) {
+	n := NewCursorNav()
+	n.Selected = 5
+	n.Up(3, 5)
+	if n.Selected != 1 {
+		t.Errorf("should clamp then move up: Selected=%d", n.Selected)
+	}
+
+	n.Selected = 5
+	n.Down(3, 5)
+	if n.Selected != 2 {
+		t.Errorf("should clamp at end: Selected=%d", n.Selected)
+	}
+}
+
 func TestNavReset(t *testing.T) {
 	n := NewCursorNav()
 	n.Selected = 10

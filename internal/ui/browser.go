@@ -244,12 +244,11 @@ func (m BrowserModel) handleFilterInput(msg tea.KeyPressMsg) (BrowserModel, tea.
 }
 
 func (m *BrowserModel) activeNavParams() (*ListNav, int, int) {
-	visible := m.maxVisibleDocs()
 	switch m.activePane {
 	case BrowserPaneIndices:
-		return &m.indexNav, len(m.filteredIndices()), visible
+		return &m.indexNav, len(m.filteredIndices()), m.maxVisibleIndices()
 	case BrowserPaneDocs:
-		return &m.docNav, len(m.documents), visible
+		return &m.docNav, len(m.documents), m.maxVisibleDocs()
 	default:
 		return &m.detailNav, len(m.detailLines), m.detailHeight
 	}
