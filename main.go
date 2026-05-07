@@ -94,16 +94,19 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Print("\033[?1049h\033[H")
 	defer fmt.Print("\033[?1049l")
 
-	esURL, awsProfile, err := resolveESURL(args, false)
+	resolved, awsProfile, err := resolveESURL(args, false)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.ParseURL(esURL)
+	cfg, err := config.ParseURL(resolved.URL)
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
 	cfg.AWSProfile = awsProfile
+	cfg.TLSCert = resolved.TLSCert
+	cfg.TLSKey = resolved.TLSKey
+	cfg.TLSCA = resolved.TLSCA
 
 	client, err := es.NewClient(cfg)
 	if err != nil {
@@ -123,16 +126,19 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 func runRenderMode(args []string) error {
-	esURL, awsProfile, err := resolveESURL(args, true)
+	resolved, awsProfile, err := resolveESURL(args, true)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.ParseURL(esURL)
+	cfg, err := config.ParseURL(resolved.URL)
 	if err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
 	cfg.AWSProfile = awsProfile
+	cfg.TLSCert = resolved.TLSCert
+	cfg.TLSKey = resolved.TLSKey
+	cfg.TLSCA = resolved.TLSCA
 
 	client, err := es.NewClient(cfg)
 	if err != nil {
@@ -142,62 +148,62 @@ func runRenderMode(args []string) error {
 	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag, keysFlag)
 }
 
-func resolveESURL(args []string, skipUI bool) (string, string, error) {
+func resolveESURL(args []string, skipUI bool) (*config.ResolvedCluster, string, error) {
 	if err := config.EnsureConfigDir(); err != nil {
-		return "", "", fmt.Errorf("creating config dir: %w", err)
+		return nil, "", fmt.Errorf("creating config dir: %w", err)
 	}
 
 	clusters, err := config.LoadClustersConfig()
 	if err != nil {
-		return "", "", fmt.Errorf("loading clusters config: %w", err)
+		return nil, "", fmt.Errorf("loading clusters config: %w", err)
 	}
 
 	if len(args) > 0 {
 		arg := args[0]
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
-			return arg, "", nil
+			return &config.ResolvedCluster{URL: arg}, "", nil
 		}
 		if clusters != nil {
-			return resolveURLWithProgress(clusters, arg, skipUI)
+			return resolveClusterWithProgress(clusters, arg, skipUI)
 		}
-		return "", "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
+		return nil, "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
 
 	if envURL := os.Getenv("ES_URL"); envURL != "" {
-		return envURL, "", nil
+		return &config.ResolvedCluster{URL: envURL}, "", nil
 	}
 
 	if clusters != nil && len(clusters.Clusters) > 0 {
 		if skipUI {
-			return "", "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
+			return nil, "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
 		}
 		return selectCluster(clusters)
 	}
 
-	return "http://localhost:9200", "", nil
+	return &config.ResolvedCluster{URL: "http://localhost:9200"}, "", nil
 }
 
-func selectCluster(clusters *config.ClustersConfig) (string, string, error) {
+func selectCluster(clusters *config.ClustersConfig) (*config.ResolvedCluster, string, error) {
 	names := clusters.ClusterNames()
 	sort.Strings(names)
 
 	if len(names) == 1 {
-		return resolveURLWithProgress(clusters, names[0], false)
+		return resolveClusterWithProgress(clusters, names[0], false)
 	}
 
 	picker := newClusterPickerModal(names)
 	p := tea.NewProgram(picker)
 	result, err := p.Run()
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
 
 	m := result.(*clusterPickerModal)
 	if m.cancelled {
-		return "", "", fmt.Errorf("cancelled")
+		return nil, "", fmt.Errorf("cancelled")
 	}
 
-	return resolveURLWithProgress(clusters, m.selected, false)
+	return resolveClusterWithProgress(clusters, m.selected, false)
 }
 
 type clusterPickerModal struct {
@@ -286,36 +292,44 @@ type urlResolverModel struct {
 	clusters *config.ClustersConfig
 	name     string
 	spinner  spinner.Model
-	url      string
+	resolved *config.ResolvedCluster
 	err      error
 	done     bool
 	width    int
 	height   int
+	message  string
 }
 
 type urlResolvedMsg struct {
-	url string
-	err error
+	resolved *config.ResolvedCluster
+	err      error
 }
 
 func newURLResolver(clusters *config.ClustersConfig, name string) urlResolverModel {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(ui.SpinnerClr)
+
+	message := "Fetching cluster URL..."
+	if entry, ok := clusters.Clusters[name]; ok && entry.CredentialsCommand != "" {
+		message = "Fetching cluster credentials..."
+	}
+
 	return urlResolverModel{
 		clusters: clusters,
 		name:     name,
 		spinner:  s,
+		message:  message,
 	}
 }
 
 func (m urlResolverModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.resolveURL)
+	return tea.Batch(m.spinner.Tick, m.resolve)
 }
 
-func (m urlResolverModel) resolveURL() tea.Msg {
-	url, err := m.clusters.ResolveURL(m.name)
-	return urlResolvedMsg{url: url, err: err}
+func (m urlResolverModel) resolve() tea.Msg {
+	resolved, err := m.clusters.Resolve(m.name)
+	return urlResolvedMsg{resolved: resolved, err: err}
 }
 
 func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -324,7 +338,7 @@ func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 	case urlResolvedMsg:
-		m.url = msg.url
+		m.resolved = msg.resolved
 		m.err = msg.err
 		m.done = true
 		return m, tea.Quit
@@ -349,7 +363,7 @@ func (m urlResolverModel) View() tea.View {
 	}
 
 	msgStyle := lipgloss.NewStyle().Foreground(ui.ColorGray)
-	content := fmt.Sprintf("%s %s", m.spinner.View(), msgStyle.Render("Fetching cluster URL..."))
+	content := fmt.Sprintf("%s %s", m.spinner.View(), msgStyle.Render(m.message))
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -361,32 +375,32 @@ func (m urlResolverModel) View() tea.View {
 	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
 }
 
-func resolveURLWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (string, string, error) {
+func resolveClusterWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (*config.ResolvedCluster, string, error) {
 	entry, ok := clusters.Clusters[name]
 	if !ok {
-		return "", "", fmt.Errorf("cluster %q not found", name)
+		return nil, "", fmt.Errorf("cluster %q not found", name)
 	}
 
 	if entry.URL != "" {
-		return entry.URL, entry.AWSProfile, nil
+		return &config.ResolvedCluster{URL: entry.URL}, entry.AWSProfile, nil
 	}
 
 	if skipUI {
-		url, err := clusters.ResolveURL(name)
-		return url, entry.AWSProfile, err
+		resolved, err := clusters.Resolve(name)
+		return resolved, entry.AWSProfile, err
 	}
 
 	m := newURLResolver(clusters, name)
 	p := tea.NewProgram(m)
 	result, err := p.Run()
 	if err != nil {
-		return "", "", err
+		return nil, "", err
 	}
-	resolved := result.(urlResolverModel)
-	if resolved.err != nil {
-		return "", "", resolved.err
+	resolver := result.(urlResolverModel)
+	if resolver.err != nil {
+		return nil, "", resolver.err
 	}
-	return resolved.url, entry.AWSProfile, nil
+	return resolver.resolved, entry.AWSProfile, nil
 }
 
 func renderAndExit(client *es.Client, tab string, width, height int, body, view, keys string) error {

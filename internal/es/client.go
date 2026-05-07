@@ -3,6 +3,8 @@ package es
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,21 +24,47 @@ type Client struct {
 }
 
 func NewClient(cfg *config.Config) (*Client, error) {
+	if cfg.IsAWS() && cfg.IsMTLS() {
+		return nil, fmt.Errorf("cannot use both AWS and mTLS authentication")
+	}
+
 	esCfg := elasticsearch.Config{
 		Addresses: []string{cfg.Host},
 	}
 
-	var httpTransport http.RoundTripper = &http.Transport{
+	transport := &http.Transport{
 		ResponseHeaderTimeout: 30 * time.Second,
 	}
 
+	if cfg.IsMTLS() {
+		tlsCert, err := tls.X509KeyPair([]byte(cfg.TLSCert), []byte(cfg.TLSKey))
+		if err != nil {
+			return nil, fmt.Errorf("loading mTLS credentials: %w", err)
+		}
+		tlsConfig := &tls.Config{
+			Certificates: []tls.Certificate{tlsCert},
+			MinVersion:   tls.VersionTLS12,
+		}
+		if cfg.TLSCA != "" {
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM([]byte(cfg.TLSCA)) {
+				return nil, fmt.Errorf("failed to parse CA certificate")
+			}
+			tlsConfig.RootCAs = pool
+		}
+		transport.TLSClientConfig = tlsConfig
+		esCfg.Transport = transport
+	}
+
+	var httpTransport http.RoundTripper = transport
+
 	if cfg.IsAWS() {
-		transport, err := newAWSTransport(cfg)
+		awsTransport, err := newAWSTransport(cfg)
 		if err != nil {
 			return nil, err
 		}
-		esCfg.Transport = transport
-		httpTransport = transport
+		esCfg.Transport = awsTransport
+		httpTransport = awsTransport
 	} else if cfg.Username != "" {
 		esCfg.Username = cfg.Username
 		esCfg.Password = cfg.Password

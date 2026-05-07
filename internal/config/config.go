@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,10 +21,17 @@ type Config struct {
 	AWSRegion  string
 	AWSService string
 	AWSProfile string
+	TLSCert    string
+	TLSKey     string
+	TLSCA      string
 }
 
 func (c *Config) IsAWS() bool {
 	return c.AWSRegion != ""
+}
+
+func (c *Config) IsMTLS() bool {
+	return c.TLSCert != "" && c.TLSKey != ""
 }
 
 func parseAWSEndpoint(host string) (region, service string, ok bool) {
@@ -79,6 +87,9 @@ func (c *Config) MaskedURL() string {
 	if c.IsAWS() {
 		return fmt.Sprintf("%s (AWS %s)", strings.TrimPrefix(u.Host, "www."), c.AWSRegion)
 	}
+	if c.IsMTLS() {
+		return fmt.Sprintf("%s (mTLS)", strings.TrimPrefix(u.Host, "www."))
+	}
 	if c.Username != "" {
 		return fmt.Sprintf("%s:***@%s", c.Username, u.Host)
 	}
@@ -94,9 +105,17 @@ func (c *Config) DisplayHost() string {
 }
 
 type ClusterEntry struct {
-	URL        string `yaml:"url"`
-	URLCommand string `yaml:"url_command"`
-	AWSProfile string `yaml:"aws_profile"`
+	URL                string `yaml:"url"`
+	URLCommand         string `yaml:"url_command"`
+	CredentialsCommand string `yaml:"credentials_command"`
+	AWSProfile         string `yaml:"aws_profile"`
+}
+
+type ResolvedCluster struct {
+	URL     string
+	TLSCert string
+	TLSKey  string
+	TLSCA   string
 }
 
 type ClustersConfig struct {
@@ -123,6 +142,8 @@ func EnsureConfigDir() error {
 #     url: https://user:pass@es-prod:9200
 #   staging:
 #     url_command: "vault read -field=url secret/es-staging"
+#   mtls-cluster:
+#     credentials_command: "aws secretsmanager get-secret-value --secret-id my-project/es-credentials --query SecretString --output text"
 `
 		if err := os.WriteFile(configPath, []byte(stub), 0644); err != nil {
 			return err
@@ -175,29 +196,77 @@ func (c *ClustersConfig) ClusterNames() []string {
 	return names
 }
 
-func (c *ClustersConfig) ResolveURL(name string) (string, error) {
+func (c *ClustersConfig) Resolve(name string) (*ResolvedCluster, error) {
 	entry, ok := c.Clusters[name]
 	if !ok {
-		return "", fmt.Errorf("cluster %q not found", name)
+		return nil, fmt.Errorf("cluster %q not found", name)
 	}
 
 	if entry.URL != "" {
-		return entry.URL, nil
+		return &ResolvedCluster{URL: entry.URL}, nil
+	}
+
+	if entry.CredentialsCommand != "" {
+		return resolveCredentialsCommand(name, entry.CredentialsCommand)
 	}
 
 	if entry.URLCommand != "" {
-		var stderr bytes.Buffer
-		cmd := exec.Command("sh", "-c", entry.URLCommand)
-		cmd.Stderr = &stderr
-		out, err := cmd.Output()
+		url, err := runCommand(name, entry.URLCommand)
 		if err != nil {
-			if stderr.Len() > 0 {
-				return "", fmt.Errorf("running url_command for %q: %w\n%s", name, err, strings.TrimSpace(stderr.String()))
-			}
-			return "", fmt.Errorf("running url_command for %q: %w", name, err)
+			return nil, err
 		}
-		return strings.TrimSpace(string(out)), nil
+		return &ResolvedCluster{URL: url}, nil
 	}
 
-	return "", fmt.Errorf("cluster %q has no url or url_command", name)
+	return nil, fmt.Errorf("cluster %q has no url, url_command, or credentials_command", name)
+}
+
+type mtlsCredentials struct {
+	Cert     string `json:"cert"`
+	Key      string `json:"key"`
+	CA       string `json:"ca"`
+	Endpoint string `json:"endpoint"`
+}
+
+func resolveCredentialsCommand(name, command string) (*ResolvedCluster, error) {
+	output, err := runCommand(name, command)
+	if err != nil {
+		return nil, err
+	}
+
+	var creds mtlsCredentials
+	if err := json.Unmarshal([]byte(output), &creds); err != nil {
+		return nil, fmt.Errorf("parsing credentials_command output for %q: %w", name, err)
+	}
+
+	if creds.Endpoint == "" {
+		return nil, fmt.Errorf("credentials_command for %q: missing endpoint", name)
+	}
+	if creds.Cert == "" {
+		return nil, fmt.Errorf("credentials_command for %q: missing cert", name)
+	}
+	if creds.Key == "" {
+		return nil, fmt.Errorf("credentials_command for %q: missing key", name)
+	}
+
+	return &ResolvedCluster{
+		URL:     creds.Endpoint,
+		TLSCert: creds.Cert,
+		TLSKey:  creds.Key,
+		TLSCA:   creds.CA,
+	}, nil
+}
+
+func runCommand(name, command string) (string, error) {
+	var stderr bytes.Buffer
+	cmd := exec.Command("sh", "-c", command)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if stderr.Len() > 0 {
+			return "", fmt.Errorf("running command for %q: %w\n%s", name, err, strings.TrimSpace(stderr.String()))
+		}
+		return "", fmt.Errorf("running command for %q: %w", name, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }

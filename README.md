@@ -59,6 +59,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Optional: node count for distribution planning
 - **Index Filtering**: Filter by name patterns (wildcards supported) or aliases
 - **Multi-cluster Config**: Configure multiple clusters in `~/.stoptail/config.yaml`
+- **mTLS Support**: Connect via mutual TLS using `credentials_command` for client certificates
 - **Native Clipboard**: Copy/paste via OSC52 terminal protocol (works over SSH)
 - **Auto-refresh**: Data refreshes automatically when terminal regains focus
 - **Window Title**: Shows connected cluster URL in terminal title bar
@@ -163,6 +164,32 @@ clusters:
 4. SSO credentials (`aws sso login`)
 
 Use `aws_profile` to select a specific profile from `~/.aws/credentials` or `~/.aws/config`.
+
+### mTLS (Mutual TLS)
+
+For clusters that require client certificate authentication, use `credentials_command` to run a command that returns the mTLS credentials as JSON:
+
+```yaml
+clusters:
+  mtls-prod:
+    credentials_command: "aws secretsmanager get-secret-value --secret-id my-project/es-credentials --query SecretString --output text"
+```
+
+The command must output a JSON object with three fields:
+
+```json
+{
+  "cert": "<PEM-encoded client certificate>",
+  "key": "<PEM-encoded private key>",
+  "endpoint": "https://elastic-cluster.example.com:9443",
+  "ca": "<PEM-encoded CA certificate (optional)>"
+}
+```
+
+- `endpoint` is used as the Elasticsearch URL
+- `cert` and `key` configure the TLS client certificate for mutual authentication
+- `ca` (optional) is used to verify the server's certificate when it's signed by a private CA
+- `credentials_command` takes priority over `url_command` if both are set
 
 ### Data Storage
 

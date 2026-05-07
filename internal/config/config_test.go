@@ -227,6 +227,15 @@ func TestMaskedURL(t *testing.T) {
 			},
 			want: "abc123.us-west-2.aoss.amazonaws.com (AWS us-west-2)",
 		},
+		{
+			name: "mTLS",
+			cfg: &Config{
+				Host:    "https://elastic-prod.example.com:9443",
+				TLSCert: "cert-pem",
+				TLSKey:  "key-pem",
+			},
+			want: "elastic-prod.example.com:9443 (mTLS)",
+		},
 	}
 
 	for _, tt := range tests {
@@ -304,17 +313,17 @@ func TestResolveURL(t *testing.T) {
 	}}
 
 	t.Run("known cluster with url", func(t *testing.T) {
-		got, err := c.ResolveURL("prod")
+		got, err := c.Resolve("prod")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != "http://prod:9200" {
-			t.Errorf("ResolveURL() = %q, want %q", got, "http://prod:9200")
+		if got.URL != "http://prod:9200" {
+			t.Errorf("Resolve().URL = %q, want %q", got.URL, "http://prod:9200")
 		}
 	})
 
 	t.Run("unknown cluster", func(t *testing.T) {
-		_, err := c.ResolveURL("unknown")
+		_, err := c.Resolve("unknown")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -324,17 +333,17 @@ func TestResolveURL(t *testing.T) {
 	})
 
 	t.Run("cluster with url_command", func(t *testing.T) {
-		got, err := c.ResolveURL("cmd")
+		got, err := c.Resolve("cmd")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got != "test-url" {
-			t.Errorf("ResolveURL() = %q, want %q", got, "test-url")
+		if got.URL != "test-url" {
+			t.Errorf("Resolve().URL = %q, want %q", got.URL, "test-url")
 		}
 	})
 
 	t.Run("cluster with no url or command", func(t *testing.T) {
-		_, err := c.ResolveURL("neither")
+		_, err := c.Resolve("neither")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -362,5 +371,161 @@ func TestLoadClustersConfig_AWSProfile(t *testing.T) {
 	}
 	if cfg.Clusters["aws-default"].AWSProfile != "" {
 		t.Errorf("AWSProfile = %q, want empty", cfg.Clusters["aws-default"].AWSProfile)
+	}
+}
+
+func TestIsMTLS(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *Config
+		want bool
+	}{
+		{"with cert and key", &Config{TLSCert: "cert-pem", TLSKey: "key-pem"}, true},
+		{"cert only", &Config{TLSCert: "cert-pem"}, false},
+		{"key only", &Config{TLSKey: "key-pem"}, false},
+		{"neither", &Config{Host: "http://localhost:9200"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.IsMTLS(); got != tt.want {
+				t.Errorf("IsMTLS() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveCredentialsCommand(t *testing.T) {
+	credJSON := `{"cert":"test-cert-pem","key":"test-key-pem","endpoint":"https://elastic-prod.example.com:9443"}`
+
+	c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+		"mtls": {CredentialsCommand: "echo '" + credJSON + "'"},
+	}}
+
+	t.Run("valid credentials", func(t *testing.T) {
+		got, err := c.Resolve("mtls")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.URL != "https://elastic-prod.example.com:9443" {
+			t.Errorf("URL = %q, want %q", got.URL, "https://elastic-prod.example.com:9443")
+		}
+		if got.TLSCert != "test-cert-pem" {
+			t.Errorf("TLSCert = %q, want %q", got.TLSCert, "test-cert-pem")
+		}
+		if got.TLSKey != "test-key-pem" {
+			t.Errorf("TLSKey = %q, want %q", got.TLSKey, "test-key-pem")
+		}
+	})
+
+	t.Run("with optional ca", func(t *testing.T) {
+		caJSON := `{"cert":"test-cert","key":"test-key","endpoint":"https://x:9443","ca":"test-ca-pem"}`
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"withca": {CredentialsCommand: "echo '" + caJSON + "'"},
+		}}
+		got, err := c.Resolve("withca")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.TLSCA != "test-ca-pem" {
+			t.Errorf("TLSCA = %q, want %q", got.TLSCA, "test-ca-pem")
+		}
+	})
+
+	t.Run("without ca", func(t *testing.T) {
+		got, err := c.Resolve("mtls")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.TLSCA != "" {
+			t.Errorf("TLSCA = %q, want empty", got.TLSCA)
+		}
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"bad": {CredentialsCommand: "echo 'not-json'"},
+		}}
+		_, err := c.Resolve("bad")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "parsing credentials_command") {
+			t.Errorf("error = %q, want containing 'parsing credentials_command'", err.Error())
+		}
+	})
+
+	t.Run("missing endpoint", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"noep": {CredentialsCommand: `echo '{"cert":"c","key":"k"}'`},
+		}}
+		_, err := c.Resolve("noep")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing endpoint") {
+			t.Errorf("error = %q, want containing 'missing endpoint'", err.Error())
+		}
+	})
+
+	t.Run("missing cert", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"nocert": {CredentialsCommand: `echo '{"endpoint":"https://x:9200","key":"k"}'`},
+		}}
+		_, err := c.Resolve("nocert")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing cert") {
+			t.Errorf("error = %q, want containing 'missing cert'", err.Error())
+		}
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"nokey": {CredentialsCommand: `echo '{"endpoint":"https://x:9200","cert":"c"}'`},
+		}}
+		_, err := c.Resolve("nokey")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "missing key") {
+			t.Errorf("error = %q, want containing 'missing key'", err.Error())
+		}
+	})
+
+	t.Run("credentials_command priority over url_command", func(t *testing.T) {
+		c := &ClustersConfig{Clusters: map[string]ClusterEntry{
+			"both": {
+				URLCommand:         "echo http://fallback:9200",
+				CredentialsCommand: "echo '" + credJSON + "'",
+			},
+		}}
+		got, err := c.Resolve("both")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got.URL != "https://elastic-prod.example.com:9443" {
+			t.Errorf("URL = %q, want credentials_command endpoint", got.URL)
+		}
+	})
+}
+
+func TestLoadClustersConfig_CredentialsCommand(t *testing.T) {
+	yaml := `clusters:
+  mtls-prod:
+    credentials_command: "aws secretsmanager get-secret-value --secret-id my-project/es-credentials --query SecretString --output text"
+  basic:
+    url: http://localhost:9200
+`
+	var cfg ClustersConfig
+	if err := yaml2.Unmarshal([]byte(yaml), &cfg); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+
+	if cfg.Clusters["mtls-prod"].CredentialsCommand == "" {
+		t.Error("CredentialsCommand is empty")
+	}
+	if cfg.Clusters["basic"].CredentialsCommand != "" {
+		t.Errorf("CredentialsCommand = %q, want empty", cfg.Clusters["basic"].CredentialsCommand)
 	}
 }

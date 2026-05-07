@@ -702,6 +702,28 @@ clusters:
   aws-prod:
     url: https://search-mycluster.us-east-1.es.amazonaws.com
     aws_profile: production  # optional
+  # mTLS via credentials_command (returns JSON with cert, key, endpoint)
+  mtls-prod:
+    credentials_command: "aws secretsmanager get-secret-value --secret-id my-project/es-credentials --query SecretString --output text"
 ```
 
-Note: `url_command` executes shell commands - this is intentional for secrets management integration.
+Note: `url_command` and `credentials_command` execute shell commands - this is intentional for secrets management integration.
+
+### mTLS (Mutual TLS)
+
+The `credentials_command` option runs a shell command that must return a JSON object with three fields:
+
+```json
+{
+  "cert": "<PEM-encoded client certificate>",
+  "key": "<PEM-encoded private key>",
+  "endpoint": "https://elastic-cluster.example.com:9443",
+  "ca": "<PEM-encoded CA certificate (optional)>"
+}
+```
+
+- `endpoint` is used as the Elasticsearch URL
+- `cert` and `key` configure the TLS client certificate for mutual authentication
+- `ca` (optional) is used to verify the server's certificate when it's signed by a private CA
+- The command is run at startup (with a spinner UI) just like `url_command`
+- `credentials_command` takes priority over `url_command` if both are set

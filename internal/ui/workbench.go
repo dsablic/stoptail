@@ -327,6 +327,22 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		}
 		return m, nil
 
+	case tea.PasteMsg:
+		switch m.focus {
+		case FocusBody:
+			if msg.Content != "" {
+				m.editor.SaveState()
+				if m.editor.selection.Active {
+					m.editor.DeleteSelection()
+				}
+				m.editor.InsertString(msg.Content)
+			}
+		case FocusPath:
+			m.path, cmd = m.path.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
 	case tea.ClipboardMsg:
 		if m.focus == FocusBody {
 			text := msg.Content
