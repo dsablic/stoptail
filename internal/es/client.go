@@ -34,6 +34,8 @@ func NewClient(cfg *config.Config) (*Client, error) {
 
 	transport := &http.Transport{
 		ResponseHeaderTimeout: 30 * time.Second,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConnsPerHost:   10,
 	}
 
 	if cfg.IsMTLS() {
@@ -90,8 +92,10 @@ func (c *Client) Ping(ctx context.Context) error {
 	defer res.Body.Close()
 
 	if res.IsError() {
+		io.Copy(io.Discard, res.Body)
 		return fmt.Errorf("ES error: %s", res.Status())
 	}
+	io.Copy(io.Discard, res.Body)
 	return nil
 }
 
@@ -163,8 +167,8 @@ func readBody(res *esapi.Response, errContext string) ([]byte, error) {
 }
 
 func checkError(res *esapi.Response) error {
+	body, _ := io.ReadAll(res.Body)
 	if res.IsError() {
-		body, _ := io.ReadAll(res.Body)
 		return fmt.Errorf("ES error %s: %s", res.Status(), string(body))
 	}
 	return nil
