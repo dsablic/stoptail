@@ -16,8 +16,10 @@ import (
 )
 
 const (
-	nodeColWidth     = 18
-	minIndexColWidth = 20
+	nodeColWidth       = 18
+	minIndexColWidth   = 20
+	minLinesPerNode    = 2
+	overviewChromeRows = 10
 )
 
 type ModalInitMsg struct{}
@@ -741,13 +743,23 @@ func (m OverviewModel) indexColumnWidth(idx es.IndexInfo) int {
 	return colWidth
 }
 
-func (m OverviewModel) maxVisibleNodes() int {
-	maxLinesPerNode := 4
-	rows := (m.height - 10) / maxLinesPerNode
-	if rows < 1 {
-		rows = 1
+func (m OverviewModel) nodeRowLayout() (linesPerNode, visibleNodes int) {
+	avail := max(m.height-overviewChromeRows, minLinesPerNode)
+
+	total := 1
+	if m.cluster != nil && len(m.cluster.Nodes) > 0 {
+		total = len(m.cluster.Nodes)
 	}
-	return rows
+
+	visibleNodes = max(min(avail/minLinesPerNode, total), 1)
+	linesPerNode = max(avail/visibleNodes, minLinesPerNode)
+
+	return linesPerNode, visibleNodes
+}
+
+func (m OverviewModel) maxVisibleNodes() int {
+	_, visibleNodes := m.nodeRowLayout()
+	return visibleNodes
 }
 
 func (m OverviewModel) View() string {
@@ -1001,7 +1013,7 @@ func (m OverviewModel) renderGrid() string {
 	nodeStyle := lipgloss.NewStyle().Width(nodeColWidth)
 	selectedNodeStyle := lipgloss.NewStyle().Width(nodeColWidth).Background(ColorBlue).Foreground(ColorOnAccent)
 
-	maxLinesPerNode := 4
+	linesPerNode, _ := m.nodeRowLayout()
 
 	for rowIdx, node := range visibleNodes[:maxRows] {
 		actualNodeIdx := m.nodeNav.Scroll + rowIdx
@@ -1015,15 +1027,11 @@ func (m OverviewModel) renderGrid() string {
 			shards := m.cluster.GetShardsForIndexAndNode(idx.Name, node.Name)
 			isSelectedCell := isSelectedNode && m.scrollX+colIdx == m.selectedIndex
 			isClosed := idx.Status == "close"
-			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed)
+			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed, linesPerNode)
 			shardLines = append(shardLines, lines)
 			if len(lines) > maxLines {
 				maxLines = len(lines)
 			}
-		}
-
-		if maxLines > maxLinesPerNode {
-			maxLines = maxLinesPerNode
 		}
 
 		for lineIdx := 0; lineIdx < maxLines; lineIdx++ {
@@ -1090,7 +1098,7 @@ func (m OverviewModel) renderGrid() string {
 			shards := m.cluster.GetUnassignedShardsForIndex(idx.Name)
 			isSelectedCell := isSelectedUnassigned && m.scrollX+colIdx == m.selectedIndex
 			isClosed := idx.Status == "close"
-			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed)
+			lines := m.renderShardBoxesWithHighlight(shards, colWidth, isSelectedCell, isClosed, linesPerNode)
 			shardLines = append(shardLines, lines)
 			if len(lines) > maxLines {
 				maxLines = len(lines)
@@ -1182,7 +1190,7 @@ func (m OverviewModel) renderShardLegend() string {
 		redBadge + grayStyle.Render(" Unassigned")
 }
 
-func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool, closed bool) []string {
+func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, width int, highlight bool, closed bool, maxLines int) []string {
 	highlightBg := lipgloss.Color("#3a3a5a")
 
 	if len(shards) == 0 {
@@ -1193,8 +1201,22 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 	}
 
 	var lines []string
+	var lineCounts []int
 	var currentLine []string
 	currentWidth := 0
+	currentCount := 0
+
+	flush := func() {
+		lineStyle := lipgloss.NewStyle().Width(width)
+		if highlight {
+			lineStyle = lineStyle.Background(highlightBg)
+		}
+		lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
+		lineCounts = append(lineCounts, currentCount)
+		currentLine = nil
+		currentWidth = 0
+		currentCount = 0
+	}
 
 	for _, sh := range shards {
 		var bgColor, fgColor color.Color
@@ -1236,26 +1258,19 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 		shardWidth := lipgloss.Width(styledShard)
 
 		if currentWidth+shardWidth > width && len(currentLine) > 0 {
-			lineStyle := lipgloss.NewStyle().Width(width)
-			if highlight {
-				lineStyle = lineStyle.Background(highlightBg)
-			}
-			lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
-			currentLine = nil
-			currentWidth = 0
+			flush()
 		}
 
 		currentLine = append(currentLine, styledShard)
 		currentWidth += shardWidth
+		currentCount++
 	}
 
 	if len(currentLine) > 0 {
-		lineStyle := lipgloss.NewStyle().Width(width)
-		if highlight {
-			lineStyle = lineStyle.Background(highlightBg)
-		}
-		lines = append(lines, lineStyle.Render(strings.Join(currentLine, "")))
+		flush()
 	}
+
+	lines = capShardLines(lines, lineCounts, len(shards), maxLines, width, highlight, highlightBg)
 
 	if len(lines) == 0 {
 		if highlight {
@@ -1266,6 +1281,28 @@ func (m OverviewModel) renderShardBoxesWithHighlight(shards []es.ShardInfo, widt
 	}
 
 	return lines
+}
+
+func capShardLines(lines []string, lineCounts []int, totalShards, maxLines, width int, highlight bool, highlightBg color.Color) []string {
+	if maxLines < 1 || len(lines) <= maxLines {
+		return lines
+	}
+
+	keep := maxLines - 1
+	shown := 0
+	for i := range keep {
+		shown += lineCounts[i]
+	}
+	hidden := totalShards - shown
+
+	indicatorStyle := lipgloss.NewStyle().Width(width).Foreground(ColorGray).Bold(true)
+	if highlight {
+		indicatorStyle = indicatorStyle.Background(highlightBg)
+	}
+
+	capped := append([]string{}, lines[:keep]...)
+	capped = append(capped, indicatorStyle.Render(fmt.Sprintf("+%d", hidden)))
+	return capped
 }
 
 func (m OverviewModel) renderAllocationExplainModal() string {
