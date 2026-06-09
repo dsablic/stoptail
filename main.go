@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -94,26 +93,17 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Print("\033[?1049h\033[H")
 	defer fmt.Print("\033[?1049l")
 
-	resolved, awsProfile, err := resolveESURL(args, false)
+	client, cfg, resolveFn, message, err := prepareTUICluster(args)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.ParseURL(resolved.URL)
-	if err != nil {
-		return fmt.Errorf("config error: %w", err)
+	var model ui.Model
+	if resolveFn != nil {
+		model = ui.NewDeferred(resolveFn, message)
+	} else {
+		model = ui.New(client, cfg)
 	}
-	cfg.AWSProfile = awsProfile
-	cfg.TLSCert = resolved.TLSCert
-	cfg.TLSKey = resolved.TLSKey
-	cfg.TLSCA = resolved.TLSCA
-
-	client, err := es.NewClient(cfg)
-	if err != nil {
-		return fmt.Errorf("client error: %w", err)
-	}
-
-	model := ui.New(client, cfg)
 	if tabFlag != "" {
 		model.SetStartTab(tabFlag, viewFlag)
 	}
@@ -126,29 +116,20 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 func runRenderMode(args []string) error {
-	resolved, awsProfile, err := resolveESURL(args, true)
+	resolved, awsProfile, err := resolveESURL(args)
 	if err != nil {
 		return err
 	}
 
-	cfg, err := config.ParseURL(resolved.URL)
+	client, _, err := buildClient(resolved.URL, awsProfile, resolved)
 	if err != nil {
-		return fmt.Errorf("config error: %w", err)
-	}
-	cfg.AWSProfile = awsProfile
-	cfg.TLSCert = resolved.TLSCert
-	cfg.TLSKey = resolved.TLSKey
-	cfg.TLSCA = resolved.TLSCA
-
-	client, err := es.NewClient(cfg)
-	if err != nil {
-		return fmt.Errorf("client error: %w", err)
+		return err
 	}
 
 	return renderAndExit(client, renderFlag, widthFlag, heightFlag, bodyFlag, viewFlag, keysFlag)
 }
 
-func resolveESURL(args []string, skipUI bool) (*config.ResolvedCluster, string, error) {
+func resolveESURL(args []string) (*config.ResolvedCluster, string, error) {
 	if err := config.EnsureConfigDir(); err != nil {
 		return nil, "", fmt.Errorf("creating config dir: %w", err)
 	}
@@ -164,7 +145,12 @@ func resolveESURL(args []string, skipUI bool) (*config.ResolvedCluster, string, 
 			return &config.ResolvedCluster{URL: arg}, "", nil
 		}
 		if clusters != nil {
-			return resolveClusterWithProgress(clusters, arg, skipUI)
+			entry, ok := clusters.Clusters[arg]
+			if !ok {
+				return nil, "", fmt.Errorf("cluster %q not found", arg)
+			}
+			resolved, err := clusters.Resolve(arg)
+			return resolved, entry.AWSProfile, err
 		}
 		return nil, "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
 	}
@@ -174,36 +160,114 @@ func resolveESURL(args []string, skipUI bool) (*config.ResolvedCluster, string, 
 	}
 
 	if clusters != nil && len(clusters.Clusters) > 0 {
-		if skipUI {
-			return nil, "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
-		}
-		return selectCluster(clusters)
+		return nil, "", fmt.Errorf("cluster name required with --render when multiple clusters configured")
 	}
 
 	return &config.ResolvedCluster{URL: "http://localhost:9200"}, "", nil
 }
 
-func selectCluster(clusters *config.ClustersConfig) (*config.ResolvedCluster, string, error) {
+func prepareTUICluster(args []string) (*es.Client, *config.Config, func() (*es.Client, *config.Config, error), string, error) {
+	if err := config.EnsureConfigDir(); err != nil {
+		return nil, nil, nil, "", fmt.Errorf("creating config dir: %w", err)
+	}
+
+	clusters, err := config.LoadClustersConfig()
+	if err != nil {
+		return nil, nil, nil, "", fmt.Errorf("loading clusters config: %w", err)
+	}
+
+	directURL := ""
+	name := ""
+
+	switch {
+	case len(args) > 0:
+		arg := args[0]
+		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
+			directURL = arg
+		} else if clusters != nil {
+			name = arg
+		} else {
+			return nil, nil, nil, "", fmt.Errorf("cluster %q not found (no ~/.stoptail/config.yaml)", arg)
+		}
+	case os.Getenv("ES_URL") != "":
+		directURL = os.Getenv("ES_URL")
+	case clusters != nil && len(clusters.Clusters) > 0:
+		picked, err := pickClusterName(clusters)
+		if err != nil {
+			return nil, nil, nil, "", err
+		}
+		name = picked
+	default:
+		directURL = "http://localhost:9200"
+	}
+
+	if directURL != "" {
+		client, cfg, err := buildClient(directURL, "", &config.ResolvedCluster{})
+		return client, cfg, nil, "", err
+	}
+
+	entry, ok := clusters.Clusters[name]
+	if !ok {
+		return nil, nil, nil, "", fmt.Errorf("cluster %q not found", name)
+	}
+
+	if entry.URL != "" {
+		client, cfg, err := buildClient(entry.URL, entry.AWSProfile, &config.ResolvedCluster{})
+		return client, cfg, nil, "", err
+	}
+
+	message := "Fetching cluster URL..."
+	if entry.CredentialsCommand != "" {
+		message = "Fetching cluster credentials..."
+	}
+
+	resolveFn := func() (*es.Client, *config.Config, error) {
+		resolved, err := clusters.Resolve(name)
+		if err != nil {
+			return nil, nil, err
+		}
+		return buildClient(resolved.URL, entry.AWSProfile, resolved)
+	}
+
+	return nil, nil, resolveFn, message, nil
+}
+
+func buildClient(url, awsProfile string, resolved *config.ResolvedCluster) (*es.Client, *config.Config, error) {
+	cfg, err := config.ParseURL(url)
+	if err != nil {
+		return nil, nil, fmt.Errorf("config error: %w", err)
+	}
+	cfg.AWSProfile = awsProfile
+	cfg.TLSCert = resolved.TLSCert
+	cfg.TLSKey = resolved.TLSKey
+	cfg.TLSCA = resolved.TLSCA
+
+	client, err := es.NewClient(cfg)
+	if err != nil {
+		return nil, nil, fmt.Errorf("client error: %w", err)
+	}
+	return client, cfg, nil
+}
+
+func pickClusterName(clusters *config.ClustersConfig) (string, error) {
 	names := clusters.ClusterNames()
 	sort.Strings(names)
 
 	if len(names) == 1 {
-		return resolveClusterWithProgress(clusters, names[0], false)
+		return names[0], nil
 	}
 
 	picker := newClusterPickerModal(names)
-	p := tea.NewProgram(picker)
-	result, err := p.Run()
+	result, err := tea.NewProgram(picker).Run()
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	m := result.(*clusterPickerModal)
 	if m.cancelled {
-		return nil, "", fmt.Errorf("cancelled")
+		return "", fmt.Errorf("cancelled")
 	}
-
-	return resolveClusterWithProgress(clusters, m.selected, false)
+	return m.selected, nil
 }
 
 type clusterPickerModal struct {
@@ -286,121 +350,6 @@ func (m *clusterPickerModal) View() tea.View {
 
 	box := boxStyle.Render(m.form.View())
 	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
-}
-
-type urlResolverModel struct {
-	clusters *config.ClustersConfig
-	name     string
-	spinner  spinner.Model
-	resolved *config.ResolvedCluster
-	err      error
-	done     bool
-	width    int
-	height   int
-	message  string
-}
-
-type urlResolvedMsg struct {
-	resolved *config.ResolvedCluster
-	err      error
-}
-
-func newURLResolver(clusters *config.ClustersConfig, name string) urlResolverModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(ui.SpinnerClr)
-
-	message := "Fetching cluster URL..."
-	if entry, ok := clusters.Clusters[name]; ok && entry.CredentialsCommand != "" {
-		message = "Fetching cluster credentials..."
-	}
-
-	return urlResolverModel{
-		clusters: clusters,
-		name:     name,
-		spinner:  s,
-		message:  message,
-	}
-}
-
-func (m urlResolverModel) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, m.resolve)
-}
-
-func (m urlResolverModel) resolve() tea.Msg {
-	resolved, err := m.clusters.Resolve(m.name)
-	return urlResolvedMsg{resolved: resolved, err: err}
-}
-
-func (m urlResolverModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-	case urlResolvedMsg:
-		m.resolved = msg.resolved
-		m.err = msg.err
-		m.done = true
-		return m, tea.Quit
-	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
-	case tea.KeyPressMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
-	}
-	return m, nil
-}
-
-func (m urlResolverModel) View() tea.View {
-	if m.done {
-		return tea.NewView("")
-	}
-	if m.width == 0 || m.height == 0 {
-		return tea.NewView("")
-	}
-
-	msgStyle := lipgloss.NewStyle().Foreground(ui.ColorGray)
-	content := fmt.Sprintf("%s %s", m.spinner.View(), msgStyle.Render(m.message))
-
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(ui.ColorBlue).
-		Padding(1, 2).
-		Width(50)
-
-	box := boxStyle.Render(content)
-	return tea.NewView(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box))
-}
-
-func resolveClusterWithProgress(clusters *config.ClustersConfig, name string, skipUI bool) (*config.ResolvedCluster, string, error) {
-	entry, ok := clusters.Clusters[name]
-	if !ok {
-		return nil, "", fmt.Errorf("cluster %q not found", name)
-	}
-
-	if entry.URL != "" {
-		return &config.ResolvedCluster{URL: entry.URL}, entry.AWSProfile, nil
-	}
-
-	if skipUI {
-		resolved, err := clusters.Resolve(name)
-		return resolved, entry.AWSProfile, err
-	}
-
-	m := newURLResolver(clusters, name)
-	p := tea.NewProgram(m)
-	result, err := p.Run()
-	if err != nil {
-		return nil, "", err
-	}
-	resolver := result.(urlResolverModel)
-	if resolver.err != nil {
-		return nil, "", resolver.err
-	}
-	return resolver.resolved, entry.AWSProfile, nil
 }
 
 func renderAndExit(client *es.Client, tab string, width, height int, body, view, keys string) error {
@@ -540,4 +489,3 @@ func parseKeys(keys string) []tea.KeyPressMsg {
 	}
 	return msgs
 }
-

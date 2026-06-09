@@ -21,20 +21,20 @@ const (
 )
 
 type Model struct {
-	client       *es.Client
-	cfg          *config.Config
-	cluster      *es.ClusterState
-	overview     OverviewModel
-	workbench    WorkbenchModel
-	browser      BrowserModel
-	mappings     MappingsModel
-	nodes        NodesModel
-	tasks        TasksModel
-	shardCalc    ShardCalcModel
-	spinner      spinner.Model
-	activeTab    int
-	width        int
-	height       int
+	client        *es.Client
+	cfg           *config.Config
+	cluster       *es.ClusterState
+	overview      OverviewModel
+	workbench     WorkbenchModel
+	browser       BrowserModel
+	mappings      MappingsModel
+	nodes         NodesModel
+	tasks         TasksModel
+	shardCalc     ShardCalcModel
+	spinner       spinner.Model
+	activeTab     int
+	width         int
+	height        int
 	connected     bool
 	loading       bool
 	err           error
@@ -42,8 +42,16 @@ type Model struct {
 	showShardCalc bool
 	startTab      int
 	startView     string
+
+	resolve        func() (*es.Client, *config.Config, error)
+	resolveMessage string
 }
 
+type clusterResolvedMsg struct {
+	client *es.Client
+	cfg    *config.Config
+	err    error
+}
 type connectedMsg struct{ state *es.ClusterState }
 type nodesStateMsg struct{ state *es.NodesState }
 type clusterSettingsMsg struct{ settings *es.ClusterSettings }
@@ -109,6 +117,13 @@ func New(client *es.Client, cfg *config.Config) Model {
 	}
 }
 
+func NewDeferred(resolve func() (*es.Client, *config.Config, error), message string) Model {
+	m := New(nil, nil)
+	m.resolve = resolve
+	m.resolveMessage = message
+	return m
+}
+
 func (m Model) hasActiveInput() bool {
 	if m.showShardCalc {
 		return true
@@ -136,7 +151,17 @@ func (m *Model) switchTab(tab int) tea.Cmd {
 }
 
 func (m Model) Init() tea.Cmd {
+	if m.resolve != nil {
+		return tea.Batch(m.spinner.Tick, m.resolveCmd())
+	}
 	return tea.Batch(m.spinner.Tick, m.connect())
+}
+
+func (m Model) resolveCmd() tea.Cmd {
+	return func() tea.Msg {
+		client, cfg, err := m.resolve()
+		return clusterResolvedMsg{client: client, cfg: cfg, err: err}
+	}
 }
 
 func (m Model) connect() tea.Cmd {
@@ -298,6 +323,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case spinner.TickMsg:
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
+	case clusterResolvedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.client = msg.client
+		m.cfg = msg.cfg
+		m.overview.SetClient(msg.client)
+		m.workbench.SetClient(msg.client)
+		m.browser.SetClient(msg.client)
+		return m, tea.Batch(m.spinner.Tick, m.connect())
 	case connectedMsg:
 		m.connected = true
 		m.loading = false
@@ -439,8 +475,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.fetchTasksTab()
 				}
-		case "tab":
-			switch m.activeTab {
+			case "tab":
+				switch m.activeTab {
 				case TabOverview:
 					m.loading = true
 					return m, tea.Batch(m.switchTab(TabCluster), m.fetchClusterTab())
@@ -464,8 +500,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case TabTasks:
 					return m, m.switchTab(TabOverview)
 				}
-		case "shift+tab":
-			switch m.activeTab {
+			case "shift+tab":
+				switch m.activeTab {
 				case TabCluster:
 					return m, m.switchTab(TabOverview)
 				case TabWorkbench:
@@ -591,6 +627,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m Model) renderResolving() string {
+	var content string
+	borderColor := ColorBlue
+	if m.err != nil {
+		borderColor = ColorRed
+		content = lipgloss.NewStyle().Foreground(ColorRed).Render(fmt.Sprintf("Error:\n%v\n\nPress q to quit", m.err))
+	} else {
+		content = m.spinner.View() + " " + lipgloss.NewStyle().Foreground(ColorGray).Render(m.resolveMessage)
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(1, 2).
+		Width(50).
+		Render(content)
+
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
 func (m Model) makeView(content string) tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -607,6 +663,10 @@ func (m Model) makeView(content string) tea.View {
 func (m Model) View() tea.View {
 	if m.width == 0 || m.height == 0 {
 		return m.makeView("")
+	}
+
+	if m.cfg == nil {
+		return m.makeView(m.renderResolving())
 	}
 
 	if m.showHelp {
