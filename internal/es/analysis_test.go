@@ -4,6 +4,37 @@ import (
 	"testing"
 )
 
+func TestGetShardsForIndexAndNodePrioritizesActiveStates(t *testing.T) {
+	state := &ClusterState{
+		Shards: []ShardInfo{
+			{Index: "idx", Shard: "0", State: "STARTED", Node: "node1", Primary: true},
+			{Index: "idx", Shard: "1", State: "STARTED", Node: "node1", Primary: true},
+			{Index: "idx", Shard: "2", State: "RELOCATING", Node: "node1 -> node2", Primary: true},
+			{Index: "idx", Shard: "3", State: "INITIALIZING", Node: "node1", Primary: false},
+			{Index: "idx", Shard: "4", State: "STARTED", Node: "node1", Primary: true},
+		},
+	}
+
+	shards := state.GetShardsForIndexAndNode("idx", "node1")
+
+	var order []string
+	for _, sh := range shards {
+		order = append(order, sh.Shard)
+	}
+
+	// INITIALIZING before RELOCATING before STARTED; shard-number order within a group.
+	want := []string{"3", "2", "0", "1", "4"}
+	if len(order) != len(want) {
+		t.Fatalf("got %d shards, want %d: %v", len(order), len(want), order)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Errorf("shard order = %v, want %v", order, want)
+			break
+		}
+	}
+}
+
 func TestParseSize(t *testing.T) {
 	tests := []struct {
 		input string

@@ -17,6 +17,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Purple: Relocating shards
   - Yellow: Initializing shards
   - Red: Unassigned shards
+  - Relocating, initializing, and unassigned shards are shown first in each node cell so they stay visible when a node holds more shards than fit
   - Master node marked with bold name and `*` indicator
   - Select any cell to view shard info (with allocation explain for problem shards)
   - Index management: create, delete, open, close indices

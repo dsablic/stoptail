@@ -168,6 +168,34 @@ func sortShardsByShardPrimary(shards []ShardInfo) {
 	})
 }
 
+func shardStatePriority(state string) int {
+	switch state {
+	case "UNASSIGNED":
+		return 0
+	case "INITIALIZING":
+		return 1
+	case "RELOCATING":
+		return 2
+	case "STARTED":
+		return 3
+	default:
+		return 4
+	}
+}
+
+func sortShardsByStatePriority(shards []ShardInfo) {
+	sort.Slice(shards, func(i, j int) bool {
+		pi, pj := shardStatePriority(shards[i].State), shardStatePriority(shards[j].State)
+		if pi != pj {
+			return pi < pj
+		}
+		if shards[i].Shard != shards[j].Shard {
+			return shards[i].Shard < shards[j].Shard
+		}
+		return shards[i].Primary && !shards[j].Primary
+	})
+}
+
 func DecodeESVersion(versionID string) string {
 	var v int
 	if _, err := fmt.Sscanf(versionID, "%d", &v); err != nil {
@@ -198,7 +226,7 @@ func (s *ClusterState) GetShardsForIndexAndNode(index, node string) []ShardInfo 
 			shards = append(shards, sh)
 		}
 	}
-	sortShardsByShardPrimary(shards)
+	sortShardsByStatePriority(shards)
 	return shards
 }
 
