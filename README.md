@@ -54,7 +54,7 @@ A terminal UI for Elasticsearch, inspired by elasticsearch-head. Built with Go a
   - Reindex, update-by-query, delete-by-query tracking
   - Force merge and snapshot operations
   - Pending cluster tasks (create index, update mapping, etc.)
-  - Cancel with confirmation
+  - Cancel with confirmation (in-progress snapshots are aborted by deleting the partial snapshot)
 - **Shard Calculator**: Plan optimal shard topology (press `S`)
   - Input total size and docs to get recommended shard count
   - Optional: node count for distribution planning

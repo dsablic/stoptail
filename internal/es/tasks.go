@@ -27,10 +27,14 @@ func (c *Client) FetchTasks(ctx context.Context) ([]TaskInfo, error) {
 	return parseTasksResponse(body)
 }
 
-func (c *Client) CancelTask(ctx context.Context, taskID string) error {
+func (c *Client) CancelTask(ctx context.Context, task TaskInfo) error {
+	if task.IsSnapshot() {
+		return c.abortSnapshot(ctx, task.SnapshotRepository, task.SnapshotName)
+	}
+
 	res, err := c.es.Tasks.Cancel(
 		c.es.Tasks.Cancel.WithContext(ctx),
-		c.es.Tasks.Cancel.WithTaskID(taskID),
+		c.es.Tasks.Cancel.WithTaskID(task.ID),
 	)
 	if err != nil {
 		return fmt.Errorf("cancelling task: %w", err)
@@ -38,6 +42,82 @@ func (c *Client) CancelTask(ctx context.Context, taskID string) error {
 	defer res.Body.Close()
 
 	return checkError(res)
+}
+
+func (c *Client) abortSnapshot(ctx context.Context, repository, snapshot string) error {
+	state, err := c.snapshotState(ctx, repository, snapshot)
+	if err != nil {
+		return err
+	}
+	if state != snapshotInProgress {
+		return fmt.Errorf("snapshot %s:%s is no longer in progress (state %s), not deleting it", repository, snapshot, state)
+	}
+
+	res, err := c.es.Snapshot.Delete(
+		repository,
+		[]string{snapshot},
+		c.es.Snapshot.Delete.WithContext(ctx),
+	)
+	if err != nil {
+		return fmt.Errorf("aborting snapshot %s:%s: %w", repository, snapshot, err)
+	}
+	defer res.Body.Close()
+
+	return checkError(res)
+}
+
+func (c *Client) snapshotState(ctx context.Context, repository, snapshot string) (string, error) {
+	res, err := c.es.Snapshot.Get(
+		repository,
+		[]string{snapshot},
+		c.es.Snapshot.Get.WithContext(ctx),
+	)
+	if err != nil {
+		return "", fmt.Errorf("fetching snapshot %s:%s: %w", repository, snapshot, err)
+	}
+	defer res.Body.Close()
+
+	body, err := readBody(res, "snapshot")
+	if err != nil {
+		return "", err
+	}
+	return parseSnapshotState(body)
+}
+
+func parseSnapshotState(data []byte) (string, error) {
+	var response struct {
+		Snapshots []struct {
+			State string `json:"state"`
+		} `json:"snapshots"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return "", fmt.Errorf("parsing snapshot response: %w", err)
+	}
+	if len(response.Snapshots) != 1 {
+		return "", fmt.Errorf("expected 1 snapshot, got %d", len(response.Snapshots))
+	}
+	return response.Snapshots[0].State, nil
+}
+
+const (
+	snapshotCreateAction = "cluster:admin/snapshot/create"
+	snapshotInProgress   = "IN_PROGRESS"
+)
+
+func parseSnapshotDescription(description string) (repository, snapshot string, ok bool) {
+	inner, found := strings.CutPrefix(description, "snapshot [")
+	if !found {
+		return "", "", false
+	}
+	inner, found = strings.CutSuffix(inner, "]")
+	if !found {
+		return "", "", false
+	}
+	repository, snapshot, found = strings.Cut(inner, ":")
+	if !found || repository == "" || snapshot == "" {
+		return "", "", false
+	}
+	return repository, snapshot, true
 }
 
 func parseTasksResponse(data []byte) ([]TaskInfo, error) {
@@ -85,7 +165,7 @@ func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 			}
 
 			runningMs := task.RunningTimeNanos / 1_000_000
-			tasks = append(tasks, TaskInfo{
+			info := TaskInfo{
 				ID:            taskID,
 				Action:        task.Action,
 				Node:          nodeData.Name,
@@ -93,7 +173,15 @@ func parseTasksResponse(data []byte) ([]TaskInfo, error) {
 				RunningTime:   formatDuration(runningMs),
 				RunningTimeMs: runningMs,
 				Cancellable:   task.Cancellable,
-			})
+			}
+			if task.Action == snapshotCreateAction {
+				if repo, snap, ok := parseSnapshotDescription(task.Description); ok {
+					info.SnapshotRepository = repo
+					info.SnapshotName = snap
+					info.Cancellable = true
+				}
+			}
+			tasks = append(tasks, info)
 		}
 	}
 

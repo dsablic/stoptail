@@ -88,6 +88,13 @@ type TaskInfo struct {
 	RunningTimeMs int64
 	Description   string
 	Cancellable   bool
+
+	SnapshotRepository string
+	SnapshotName       string
+}
+
+func (t TaskInfo) IsSnapshot() bool {
+	return t.SnapshotName != ""
 }
 
 type AllocationExplain struct {

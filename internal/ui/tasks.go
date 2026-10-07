@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -86,10 +87,13 @@ func (m TasksModel) Update(msg tea.Msg) (TasksModel, tea.Cmd) {
 		if m.confirming != "" {
 			switch msg.String() {
 			case "y", "Y":
-				taskID := m.confirming
+				task, ok := m.confirmingTask()
 				m.confirming = ""
+				if !ok {
+					return m, nil
+				}
 				return m, func() tea.Msg {
-					return taskCancelRequestMsg{taskID: taskID}
+					return taskCancelRequestMsg{task: task}
 				}
 			case "n", "N", "esc":
 				m.confirming = ""
@@ -144,7 +148,27 @@ func (m *TasksModel) updateTaskSearch() {
 }
 
 type taskCancelRequestMsg struct {
-	taskID string
+	task es.TaskInfo
+}
+
+func (m TasksModel) confirmingTask() (es.TaskInfo, bool) {
+	for _, task := range m.tasks {
+		if task.ID == m.confirming {
+			return task, true
+		}
+	}
+	return es.TaskInfo{}, false
+}
+
+func (m TasksModel) confirmPrompt() string {
+	if task, ok := m.confirmingTask(); ok && task.IsSnapshot() {
+		return fmt.Sprintf(
+			"Abort snapshot %s:%s? This deletes the partial snapshot. Press 'y' to confirm, 'n' or Esc to abort",
+			task.SnapshotRepository,
+			task.SnapshotName,
+		)
+	}
+	return "Cancel this task? Press 'y' to confirm, 'n' or Esc to abort"
 }
 
 func (m TasksModel) View() string {
@@ -225,7 +249,7 @@ func (m TasksModel) View() string {
 	content := t.Render()
 
 	if m.confirming != "" {
-		content += "\n\n" + lipgloss.NewStyle().Foreground(ColorYellow).Render("Cancel this task? Press 'y' to confirm, 'n' or Esc to abort")
+		content += "\n\n" + lipgloss.NewStyle().Foreground(ColorYellow).Render(m.confirmPrompt())
 	}
 
 	sections = append(sections, content)
@@ -237,7 +261,6 @@ func (m TasksModel) View() string {
 
 	return result
 }
-
 
 func (m TasksModel) truncateAction(action string) string {
 	parts := strings.Split(action, "/")
@@ -319,4 +342,3 @@ func (m TasksModel) renderPendingTasks() string {
 
 	return title + "\n" + t.Render()
 }
-

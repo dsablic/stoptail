@@ -437,6 +437,16 @@ func TestParseTasksResponse(t *testing.T) {
 						"running_time_in_nanos": 60000000000,
 						"cancellable": false
 					},
+					"node-id-1:12349": {
+						"node": "node-id-1",
+						"id": 12349,
+						"type": "transport",
+						"action": "cluster:admin/snapshot/create",
+						"description": "snapshot [backups:nightly-2024.01.01]",
+						"start_time_in_millis": 1700000003000,
+						"running_time_in_nanos": 30000000000,
+						"cancellable": false
+					},
 					"node-id-1:12348": {
 						"node": "node-id-1",
 						"id": 12348,
@@ -458,13 +468,26 @@ func TestParseTasksResponse(t *testing.T) {
 		t.Fatalf("parse error: %v", err)
 	}
 
-	if len(tasks) != 2 {
-		t.Fatalf("got %d tasks, want 2 (reindex + forcemerge parent, excluding child)", len(tasks))
+	if len(tasks) != 3 {
+		t.Fatalf("got %d tasks, want 3 (reindex + forcemerge parent + snapshot, excluding child)", len(tasks))
 	}
 
 	taskIDs := make(map[string]bool)
+	byID := make(map[string]TaskInfo)
 	for _, task := range tasks {
 		taskIDs[task.ID] = true
+		byID[task.ID] = task
+	}
+
+	snapshot := byID["node-id-1:12349"]
+	if !snapshot.Cancellable || !snapshot.IsSnapshot() {
+		t.Errorf("snapshot task should be cancellable via snapshot delete, got %+v", snapshot)
+	}
+	if snapshot.SnapshotRepository != "backups" || snapshot.SnapshotName != "nightly-2024.01.01" {
+		t.Errorf("snapshot = %q:%q, want backups:nightly-2024.01.01", snapshot.SnapshotRepository, snapshot.SnapshotName)
+	}
+	if byID["node-id-1:12347"].IsSnapshot() {
+		t.Error("forcemerge task should not be a snapshot")
 	}
 
 	if !taskIDs["node-id-1:12345"] {
@@ -475,6 +498,57 @@ func TestParseTasksResponse(t *testing.T) {
 	}
 	if taskIDs["node-id-1:12348"] {
 		t.Error("expected forcemerge child task (with parent_task_id) to be excluded")
+	}
+}
+
+func TestParseSnapshotDescription(t *testing.T) {
+	tests := []struct {
+		description string
+		wantRepo    string
+		wantSnap    string
+		wantOK      bool
+	}{
+		{"snapshot [repo:snap]", "repo", "snap", true},
+		{"snapshot [my-repo:nightly-2024.01.01]", "my-repo", "nightly-2024.01.01", true},
+		{"snapshot [repo]", "", "", false},
+		{"snapshot [:snap]", "", "", false},
+		{"snapshot [repo:]", "", "", false},
+		{"restore snapshot [repo:snap]", "", "", false},
+		{"", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.description, func(t *testing.T) {
+			repo, snap, ok := parseSnapshotDescription(tt.description)
+			if repo != tt.wantRepo || snap != tt.wantSnap || ok != tt.wantOK {
+				t.Errorf("got (%q, %q, %v), want (%q, %q, %v)", repo, snap, ok, tt.wantRepo, tt.wantSnap, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestParseSnapshotState(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    string
+		wantErr bool
+	}{
+		{"in progress", `{"snapshots":[{"snapshot":"s1","state":"IN_PROGRESS"}],"total":1}`, "IN_PROGRESS", false},
+		{"completed", `{"snapshots":[{"snapshot":"s1","state":"SUCCESS"}],"total":1}`, "SUCCESS", false},
+		{"missing", `{"snapshots":[],"total":0}`, "", true},
+		{"invalid json", `{`, "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseSnapshotState([]byte(tt.body))
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("state = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

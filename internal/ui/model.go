@@ -308,10 +308,10 @@ func (m Model) fetchSettings(indexName string) tea.Cmd {
 	}
 }
 
-func (m Model) cancelTask(taskID string) tea.Cmd {
+func (m Model) cancelTask(task es.TaskInfo) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
-		err := m.client.CancelTask(ctx, taskID)
+		err := m.client.CancelTask(ctx, task)
 		return taskCancelledMsg{err}
 	}
 }
@@ -414,7 +414,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.fetchTasksTab()
 		}
 	case taskCancelRequestMsg:
-		return m, m.cancelTask(msg.taskID)
+		return m, m.cancelTask(msg.task)
 	case tea.FocusMsg:
 		if m.connected && !m.loading {
 			m.loading = true
