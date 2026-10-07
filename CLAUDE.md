@@ -6,7 +6,7 @@ stoptail is an Elasticsearch TUI (Terminal User Interface) built with Go. It pro
 
 ## Tech Stack
 
-- **Language:** Go 1.22+
+- **Language:** Go 1.26+
 - **TUI Framework:** Bubble Tea v2 (charm.land/bubbletea/v2) with Lipgloss v2 for styling
 - **ES Client:** elastic/go-elasticsearch/v8
 - **Config:** YAML via gopkg.in/yaml.v3
