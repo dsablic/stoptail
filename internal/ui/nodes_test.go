@@ -6,14 +6,14 @@ import (
 
 func TestParseHotThread(t *testing.T) {
 	tests := []struct {
-		name       string
-		node       string
-		line       string
-		wantNil    bool
-		wantTotal  string
-		wantCPU    string
-		wantOther  string
-		wantType   string
+		name      string
+		node      string
+		line      string
+		wantNil   bool
+		wantTotal string
+		wantCPU   string
+		wantOther string
+		wantType  string
 	}{
 		{
 			name:      "basic thread",

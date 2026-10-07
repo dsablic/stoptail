@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"testing"
 	tea "charm.land/bubbletea/v2"
+	"testing"
 )
 
 func TestHelpToggle(t *testing.T) {

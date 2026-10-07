@@ -26,22 +26,22 @@ const (
 )
 
 type MappingsModel struct {
-	indices    []es.IndexInfo
-	indexNav   ListNav
-	contentNav ListNav
-	width      int
-	height     int
-	activePane MappingsPane
-	filterActive  bool
-	filterText    string
-	treeView      bool
-	search        SearchBar
-	viewMode      MappingsViewMode
+	indices      []es.IndexInfo
+	indexNav     ListNav
+	contentNav   ListNav
+	width        int
+	height       int
+	activePane   MappingsPane
+	filterActive bool
+	filterText   string
+	treeView     bool
+	search       SearchBar
+	viewMode     MappingsViewMode
 
-	mappings  *es.IndexMappings
-	analyzers []es.AnalyzerInfo
-	loadingIndex  string
-	clipboard     Clipboard
+	mappings     *es.IndexMappings
+	analyzers    []es.AnalyzerInfo
+	loadingIndex string
+	clipboard    Clipboard
 
 	settings        *es.IndexSettings
 	settingsLoading bool
@@ -314,7 +314,7 @@ func (m MappingsModel) renderIndexList(width int) string {
 		b.WriteString("\n")
 	} else if m.filterText != "" {
 		filterStyle := lipgloss.NewStyle().Foreground(ColorGray)
-		b.WriteString(filterStyle.Render("/"+m.filterText))
+		b.WriteString(filterStyle.Render("/" + m.filterText))
 		b.WriteString("\n")
 	}
 
@@ -729,4 +729,3 @@ func (m MappingsModel) typeColor(fieldType string) color.Color {
 		return ColorWhite
 	}
 }
-

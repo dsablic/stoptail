@@ -41,26 +41,26 @@ type RecoveryMsg struct {
 }
 
 type OverviewModel struct {
-	cluster            *es.ClusterState
-	client             *es.Client
-	filter             textinput.Model
-	filterActive       bool
-	aliasFilters       map[string]bool
-	shardStateFilter   string
-	showSystem         bool
-	scrollX            int
-	selectedIndex      int
-	nodeNav            ListNav
-	width              int
-	height             int
-	modal              *Modal
-	spinner            spinner.Model
-	operationMsg       string
-	allocationExplain  *es.AllocationExplain
-	allocationLoading  bool
-	shardPicker        *ShardPicker
-	shardInfo          *es.ShardInfo
-	recoveryInfo       *es.RecoveryInfo
+	cluster           *es.ClusterState
+	client            *es.Client
+	filter            textinput.Model
+	filterActive      bool
+	aliasFilters      map[string]bool
+	shardStateFilter  string
+	showSystem        bool
+	scrollX           int
+	selectedIndex     int
+	nodeNav           ListNav
+	width             int
+	height            int
+	modal             *Modal
+	spinner           spinner.Model
+	operationMsg      string
+	allocationExplain *es.AllocationExplain
+	allocationLoading bool
+	shardPicker       *ShardPicker
+	shardInfo         *es.ShardInfo
+	recoveryInfo      *es.RecoveryInfo
 }
 
 func NewOverview() OverviewModel {
@@ -1330,4 +1330,3 @@ func (m OverviewModel) renderAllocationExplainModal() string {
 
 	return RenderDetailModal(content, 60, m.width, m.height)
 }
-

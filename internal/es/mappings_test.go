@@ -76,10 +76,10 @@ func TestParseMappingPropertiesComprehensive(t *testing.T) {
 				"autocomplete": {"type": "text", "analyzer": "edge_ngram"}
 			}
 		}`),
-		"price": json.RawMessage(`{"type": "float", "doc_values": false}`),
-		"in_stock": json.RawMessage(`{"type": "boolean", "index": false}`),
-		"description": json.RawMessage(`{"type": "text", "norms": false}`),
-		"metadata": json.RawMessage(`{"type": "keyword", "store": true}`),
+		"price":         json.RawMessage(`{"type": "float", "doc_values": false}`),
+		"in_stock":      json.RawMessage(`{"type": "boolean", "index": false}`),
+		"description":   json.RawMessage(`{"type": "text", "norms": false}`),
+		"metadata":      json.RawMessage(`{"type": "keyword", "store": true}`),
 		"default_value": json.RawMessage(`{"type": "keyword", "null_value": "N/A"}`),
 		"address": json.RawMessage(`{
 			"properties": {

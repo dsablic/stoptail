@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/alecthomas/chroma/v2/quick"
-	"github.com/charmbracelet/x/ansi"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/labtiva/stoptail/internal/es"
 	"github.com/labtiva/stoptail/internal/storage"
 )
@@ -45,36 +45,36 @@ var bracketPairs = map[string]string{
 }
 
 type WorkbenchModel struct {
-	client         *es.Client
-	methodDropdown Dropdown
-	path           textinput.Model
-	editor             Editor
-	dragging           bool
-	responseText       string
-	responseRawText    string
-	responseNav        ListNav
-	responseLines      []string
-	statusCode         int
-	duration           string
-	focus              WorkbenchFocus
-	width              int
-	height             int
-	executing          bool
-	err                error
-	history            *storage.History
-	historyIdx         int
-	spinner            spinner.Model
-	search             SearchBar
-	completion         CompletionState
-	fieldCache         map[string][]CompletionItem
-	lastIndex          string
-	clipboard          Clipboard
-	bookmarkUI         BookmarkUI
-	bookmarks          *storage.Bookmarks
-	queryMode          QueryMode
-	dslContent         string
-	dslPath            string
-	esqlContent        string
+	client          *es.Client
+	methodDropdown  Dropdown
+	path            textinput.Model
+	editor          Editor
+	dragging        bool
+	responseText    string
+	responseRawText string
+	responseNav     ListNav
+	responseLines   []string
+	statusCode      int
+	duration        string
+	focus           WorkbenchFocus
+	width           int
+	height          int
+	executing       bool
+	err             error
+	history         *storage.History
+	historyIdx      int
+	spinner         spinner.Model
+	search          SearchBar
+	completion      CompletionState
+	fieldCache      map[string][]CompletionItem
+	lastIndex       string
+	clipboard       Clipboard
+	bookmarkUI      BookmarkUI
+	bookmarks       *storage.Bookmarks
+	queryMode       QueryMode
+	dslContent      string
+	dslPath         string
+	esqlContent     string
 }
 
 type executeResultMsg struct {
@@ -712,7 +712,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 					case SearchActionPrev:
 						m.scrollToSearchMatch()
 					case SearchActionClose:
-		
+
 					}
 				}
 			}

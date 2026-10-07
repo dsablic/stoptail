@@ -247,11 +247,11 @@ func (c *Client) FetchAllocationExplain(ctx context.Context, index string, shard
 
 func parseAllocationExplain(data []byte) (*AllocationExplain, error) {
 	var response struct {
-		Index                string `json:"index"`
-		Shard                int    `json:"shard"`
-		Primary              bool   `json:"primary"`
-		CurrentState         string `json:"current_state"`
-		UnassignedInfo       *struct {
+		Index          string `json:"index"`
+		Shard          int    `json:"shard"`
+		Primary        bool   `json:"primary"`
+		CurrentState   string `json:"current_state"`
+		UnassignedInfo *struct {
 			Reason string `json:"reason"`
 			At     string `json:"at"`
 		} `json:"unassigned_info"`

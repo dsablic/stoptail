@@ -417,10 +417,10 @@ func (c *Client) FetchIndexTemplates(ctx context.Context) ([]IndexTemplate, erro
 		IndexTemplates []struct {
 			Name     string `json:"name"`
 			Template struct {
-				IndexPatterns []string `json:"index_patterns"`
-				ComposedOf    []string `json:"composed_of"`
-				Priority      int      `json:"priority"`
-				Version       int      `json:"version"`
+				IndexPatterns []string  `json:"index_patterns"`
+				ComposedOf    []string  `json:"composed_of"`
+				Priority      int       `json:"priority"`
+				Version       int       `json:"version"`
 				DataStream    *struct{} `json:"data_stream"`
 				Template      struct {
 					Settings struct {

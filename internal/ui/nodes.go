@@ -29,22 +29,22 @@ const (
 )
 
 type NodesModel struct {
-	state            *es.NodesState
-	clusterSettings  *es.ClusterSettings
-	threadPools      []es.ThreadPoolInfo
-	hotThreads       string
-	templates        []es.IndexTemplate
-	deprecations     *es.DeprecationInfo
-	shardHealth      []es.ShardHealth
-	activeView     NodesView
-	nav            ListNav
-	settingDetail  *clusterSetting
-	templateDetail *es.IndexTemplate
-	width            int
-	height           int
-	loading          bool
-	filter           textinput.Model
-	filterActive     bool
+	state           *es.NodesState
+	clusterSettings *es.ClusterSettings
+	threadPools     []es.ThreadPoolInfo
+	hotThreads      string
+	templates       []es.IndexTemplate
+	deprecations    *es.DeprecationInfo
+	shardHealth     []es.ShardHealth
+	activeView      NodesView
+	nav             ListNav
+	settingDetail   *clusterSetting
+	templateDetail  *es.IndexTemplate
+	width           int
+	height          int
+	loading         bool
+	filter          textinput.Model
+	filterActive    bool
 }
 
 func NewNodes() NodesModel {
@@ -154,7 +154,6 @@ func (m NodesModel) countHotThreads() (total, filtered int) {
 	}
 	return total, filtered
 }
-
 
 func (m *NodesModel) SetState(state *es.NodesState) {
 	m.state = state
@@ -731,7 +730,6 @@ func (m NodesModel) parsePercent(pctStr string) float64 {
 	return pct
 }
 
-
 type clusterSetting struct {
 	Key    string
 	Value  string
@@ -1297,6 +1295,3 @@ func (m NodesModel) renderShardHealth() string {
 
 	return t.Render()
 }
-
-
-

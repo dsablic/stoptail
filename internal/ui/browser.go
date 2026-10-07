@@ -42,8 +42,8 @@ type BrowserModel struct {
 	detailLines       []string
 	detailNav         ListNav
 	detailHeight      int
-	activePane    BrowserPane
-	clipboard     Clipboard
+	activePane        BrowserPane
+	clipboard         Clipboard
 
 	width  int
 	height int
@@ -515,4 +515,3 @@ func sanitizeLine(s string) string {
 	}
 	return b.String()
 }
-
