@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestOffsetToLineCol(t *testing.T) {
@@ -115,26 +116,26 @@ func TestAutoCompleteAfterQuote(t *testing.T) {
 
 	// Simulate initial content with cursor after opening brace
 	w.editor.SetContent("{")
-	
+
 	// Check shouldAutoComplete at various positions
 	// For this we need to simulate that a quote was just typed after {
 	w.editor.SetContent(`{"`)
-	
+
 	// At this point, if shouldAutoComplete() is called, it should return true
 	// because the character before the quote (at col-1) is {
-	
+
 	// Test the parsing logic directly
 	ctx := ParseJSONContext(`{"`)
 	if len(ctx.Path) != 0 {
 		t.Errorf("expected empty path, got %v", ctx.Path)
 	}
-	
+
 	// Check that GetKeywordsForContext returns items for empty path
 	keywords := GetKeywordsForContext(ctx.Path)
 	if len(keywords) == 0 {
 		t.Error("expected keywords for root context")
 	}
-	
+
 	// Check that "query" is in the keywords
 	found := false
 	for _, kw := range keywords {
@@ -146,7 +147,7 @@ func TestAutoCompleteAfterQuote(t *testing.T) {
 	if !found {
 		t.Error("expected 'query' in keywords")
 	}
-	
+
 	// Check "track_total_hits" is also there
 	found = false
 	for _, kw := range keywords {
@@ -163,31 +164,31 @@ func TestAutoCompleteAfterQuote(t *testing.T) {
 func TestTriggerCompletionSetsState(t *testing.T) {
 	w := NewWorkbench()
 	w.SetSize(80, 30)
-	
+
 	// Set content with cursor positioned after opening brace and quote
 	w.editor.SetContent(`{"`)
-	
+
 	// Manually trigger completion (simulating what happens after typing ")
 	w.triggerCompletion()
-	
+
 	if !w.completion.Active {
 		t.Error("completion should be active after triggerCompletion")
 	}
-	
+
 	if len(w.completion.Items) == 0 {
 		t.Error("completion should have items")
 	}
-	
+
 	if len(w.completion.Filtered) == 0 {
 		t.Error("completion should have filtered items")
 	}
-	
+
 	// Verify dropdown renders
 	dropdown := w.renderCompletionDropdown()
 	if dropdown == "" {
 		t.Error("dropdown should not be empty")
 	}
-	
+
 	// Verify View includes completion
 	view := w.View()
 	if !strings.Contains(view, "query") {
@@ -198,7 +199,7 @@ func TestTriggerCompletionSetsState(t *testing.T) {
 func TestShouldAutoCompleteWithContent(t *testing.T) {
 	w := NewWorkbench()
 	w.SetSize(80, 30)
-	
+
 	tests := []struct {
 		name    string
 		content string
@@ -207,10 +208,10 @@ func TestShouldAutoCompleteWithContent(t *testing.T) {
 		{"after opening brace", `{"`, true},
 		{"after brace with newline", "{\n\"", true},
 		{"after comma", `{"a": 1, "`, true},
-		{"inside value", `{"a": "`, false},  // after : means value position
-		{"empty", `"`, false},  // no brace before
+		{"inside value", `{"a": "`, false}, // after : means value position
+		{"empty", `"`, false},              // no brace before
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			w.editor.SetContent(tt.content)
@@ -456,5 +457,124 @@ func TestExtractIndexFromPath(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("extractIndexFromPathStr(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestWorkbenchMouseDragSelectsBody(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(120, 30)
+	w.editor.SetContent("{\n  \"query\": {}\n}")
+	w.focus = FocusResponse
+
+	at := func(x, y int) tea.Mouse {
+		return tea.Mouse{X: editorOffsetX + x, Y: editorOffsetY + y, Button: tea.MouseLeft}
+	}
+	w, _ = w.Update(tea.MouseClickMsg(at(2, 1)))
+	if w.focus != FocusBody {
+		t.Fatalf("click in body should focus it, focus = %v", w.focus)
+	}
+	w, _ = w.Update(tea.MouseMotionMsg(at(9, 1)))
+	w, _ = w.Update(tea.MouseReleaseMsg(at(9, 1)))
+
+	if got := w.editor.GetSelectedText(); got != `"query"` {
+		t.Errorf("drag selected %q, want %q", got, `"query"`)
+	}
+
+	w, _ = w.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if !w.editor.HasSelection() {
+		t.Error("ctrl+c copy should keep the selection")
+	}
+}
+
+func TestWorkbenchMouseClickOutsideBodyDoesNotSelect(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(120, 30)
+	w.editor.SetContent("hello")
+	w, _ = w.Update(tea.MouseClickMsg(tea.Mouse{X: 100, Y: editorOffsetY, Button: tea.MouseLeft}))
+	w, _ = w.Update(tea.MouseMotionMsg(tea.Mouse{X: 110, Y: editorOffsetY, Button: tea.MouseLeft}))
+	if w.editor.HasSelection() {
+		t.Errorf("click in response pane selected %q in body", w.editor.GetSelectedText())
+	}
+}
+
+func TestEditorOffsetMatchesRenderedLayout(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(120, 30)
+	w.editor.SetContent("MARKER")
+	lines := strings.Split(ansi.Strip(w.View()), "\n")
+	if len(lines) <= editorOffsetY {
+		t.Fatalf("view has %d lines", len(lines))
+	}
+	row := lines[editorOffsetY]
+	idx := strings.Index(row, "MARKER")
+	if idx < 0 {
+		t.Fatalf("editor text not on row %d:\n%s", editorOffsetY, row)
+	}
+	if col := ansi.StringWidth(row[:idx]); col != editorOffsetX {
+		t.Errorf("editor text rendered at col %d, want %d:\n%s", col, editorOffsetX, row)
+	}
+}
+
+func dragBody(w WorkbenchModel, releaseX, releaseY int) WorkbenchModel {
+	press := tea.Mouse{X: editorOffsetX + 5, Y: editorOffsetY, Button: tea.MouseLeft}
+	release := tea.Mouse{X: releaseX, Y: releaseY, Button: tea.MouseLeft}
+	w, _ = w.Update(tea.MouseClickMsg(press))
+	w, _ = w.Update(tea.MouseMotionMsg(release))
+	w, _ = w.Update(tea.MouseReleaseMsg(release))
+	return w
+}
+
+func TestWorkbenchDragReleaseOutsideBodyOnlyEndsSelection(t *testing.T) {
+	tests := []struct {
+		name string
+		x, y int
+	}{
+		{"response pane", 100, editorOffsetY},
+		{"history next button", 118, 1},
+		{"path input", 30, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := NewWorkbench()
+			w.SetSize(120, 30)
+			w.editor.SetContent("hello world")
+			w = dragBody(w, tt.x, tt.y)
+			if w.focus != FocusBody {
+				t.Errorf("focus = %v, want body", w.focus)
+			}
+			if w.Dragging() {
+				t.Error("drag should end on release")
+			}
+			if w.editor.Content() != "hello world" {
+				t.Errorf("body changed to %q", w.editor.Content())
+			}
+			if !w.editor.HasSelection() {
+				t.Error("selection should survive release outside the body")
+			}
+		})
+	}
+}
+
+func TestWorkbenchMotionWithoutDragDoesNotSelect(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(120, 30)
+	w.editor.SetContent("hello world")
+	w.focus = FocusBody
+	w.editor.Focus()
+	w, _ = w.Update(tea.MouseMotionMsg(tea.Mouse{X: editorOffsetX + 5, Y: editorOffsetY, Button: tea.MouseLeft}))
+	if w.editor.HasSelection() {
+		t.Errorf("motion without a drag selected %q", w.editor.GetSelectedText())
+	}
+}
+
+func TestWorkbenchClickIgnoredWhileBookmarkModalOpen(t *testing.T) {
+	w := NewWorkbench()
+	w.SetSize(120, 30)
+	w.editor.SetContent("hello world")
+	w.focus = FocusResponse
+	w.bookmarkUI.OpenLoad()
+	w, _ = w.Update(tea.MouseClickMsg(tea.Mouse{X: editorOffsetX, Y: editorOffsetY, Button: tea.MouseLeft}))
+	if w.Dragging() || w.focus == FocusBody {
+		t.Error("click behind the bookmark modal should not start a body drag")
 	}
 }

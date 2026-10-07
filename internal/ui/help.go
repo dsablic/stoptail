@@ -56,6 +56,8 @@ var helpWorkbench = `## Workbench
 | Ctrl+Shift+Z | Redo |
 | Shift+Arrow | Select text |
 | Shift+Home/End | Select to start/end |
+| Ctrl+Shift+←→ | Select by word |
+| Mouse drag | Select text |
 | Up/Down | Navigate |
 | Esc | Cancel |
 `

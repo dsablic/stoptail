@@ -49,6 +49,7 @@ type WorkbenchModel struct {
 	methodDropdown Dropdown
 	path           textinput.Model
 	editor             Editor
+	dragging           bool
 	responseText       string
 	responseRawText    string
 	responseNav        ListNav
@@ -222,6 +223,7 @@ func (m *WorkbenchModel) Focus() {
 }
 
 func (m *WorkbenchModel) Blur() {
+	m.endDrag()
 	m.path.Blur()
 	m.editor.Blur()
 	m.focus = FocusNone
@@ -332,9 +334,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 		case FocusBody:
 			if msg.Content != "" {
 				m.editor.SaveState()
-				if m.editor.selection.Active {
-					m.editor.DeleteSelection()
-				}
+				m.editor.DeleteSelection()
 				m.editor.InsertString(msg.Content)
 			}
 		case FocusPath:
@@ -348,9 +348,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 			text := msg.Content
 			if text != "" {
 				m.editor.SaveState()
-				if m.editor.selection.Active {
-					m.editor.DeleteSelection()
-				}
+				m.editor.DeleteSelection()
 				m.editor.InsertString(text)
 			}
 		}
@@ -440,7 +438,7 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				return m, nil
 			}
 		case "ctrl+c":
-			if m.focus == FocusBody && m.editor.selection.Active {
+			if m.focus == FocusBody && m.editor.HasSelection() {
 				text := m.editor.GetSelectedText()
 				if text != "" {
 					return m, m.clipboard.Copy(text)
@@ -585,7 +583,26 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 				}
 			}
 		}
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft && m.canStartDrag() && m.inEditor(msg.X, msg.Y) {
+			m.path.Blur()
+			m.editor.Focus()
+			m.focus = FocusBody
+			m.completion.Close()
+			m.editor.BeginMouseSelection(msg.X-editorOffsetX, msg.Y-editorOffsetY)
+			m.dragging = true
+			return m, nil
+		}
+	case tea.MouseMotionMsg:
+		if m.dragging {
+			m.editor.ExtendMouseSelection(msg.X-editorOffsetX, msg.Y-editorOffsetY)
+			return m, nil
+		}
 	case tea.MouseReleaseMsg:
+		if m.dragging {
+			m.endDrag()
+			return m, nil
+		}
 		paneInnerWidth := m.paneInnerWidth()
 		topRowHeight := 3
 		bodyPaneTop := topRowHeight + 2
@@ -721,6 +738,29 @@ func (m WorkbenchModel) Update(msg tea.Msg) (WorkbenchModel, tea.Cmd) {
 	}
 
 	return m, tea.Batch(cmds...)
+}
+
+const (
+	editorOffsetX = 1
+	editorOffsetY = 6
+)
+
+func (m WorkbenchModel) canStartDrag() bool {
+	return !m.methodDropdown.Open() && !m.bookmarkUI.Active() && !m.search.Active()
+}
+
+func (m WorkbenchModel) Dragging() bool {
+	return m.dragging
+}
+
+func (m *WorkbenchModel) endDrag() {
+	m.editor.EndMouseSelection()
+	m.dragging = false
+}
+
+func (m WorkbenchModel) inEditor(x, y int) bool {
+	ex, ey := x-editorOffsetX, y-editorOffsetY
+	return ex >= 0 && ex < m.paneInnerWidth() && ey >= 0 && ey < m.editor.height
 }
 
 func (m *WorkbenchModel) cycleFocus() {

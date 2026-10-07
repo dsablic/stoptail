@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/labtiva/stoptail/internal/config"
 	"github.com/labtiva/stoptail/internal/es"
 )
@@ -67,5 +68,26 @@ func TestClusterResolvedMsgErrorIsSurfaced(t *testing.T) {
 	}
 	if !strings.Contains(got.renderResolving(), "boom") {
 		t.Error("resolution error should be shown in the resolving view")
+	}
+}
+
+func TestWorkbenchDragReleasedOnTabBarKeepsTab(t *testing.T) {
+	m := Model{connected: true, activeTab: TabWorkbench, workbench: NewWorkbench(), width: 120, height: 34}
+	m.workbench.SetSize(120, 30)
+	m.workbench.SetBody("hello world")
+
+	const headerHeight = 2
+	press := tea.Mouse{X: editorOffsetX, Y: editorOffsetY + headerHeight, Button: tea.MouseLeft}
+	tabBar := tea.Mouse{X: 2, Y: 1, Button: tea.MouseLeft}
+	for _, msg := range []tea.Msg{tea.MouseClickMsg(press), tea.MouseMotionMsg(tabBar), tea.MouseReleaseMsg(tabBar)} {
+		next, _ := m.Update(msg)
+		m = next.(Model)
+	}
+
+	if m.activeTab != TabWorkbench {
+		t.Errorf("activeTab = %v, want workbench", m.activeTab)
+	}
+	if m.workbench.Dragging() {
+		t.Error("drag should end when released on the tab bar")
 	}
 }

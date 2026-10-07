@@ -99,11 +99,12 @@ go run cmd/editor-test/main.go -test
 ```
 
 This tests:
-- Selection highlighting (Shift+arrow)
-- SelectAll and DeleteSelection
+- Selection highlighting (Shift+arrow, Shift+Home/End, word selection)
+- SelectAll, DeleteSelection, and typing over a selection
 - GetSelectedText functionality
+- Mouse drag selection
 
-The editor uses Bubble Tea's native textarea for cursor rendering. Mouse text selection uses terminal-native selection (Alt+drag on Linux/Windows, Option+drag on macOS).
+The editor delegates selection to the bubbles textarea's native selection (`HasSelection`, `SelectAll`, `DeleteSelection`, `GetSelectedText`, `Begin/Extend/EndMouseSelection`). The textarea has no line-boundary selection, so Shift+Home/End step the native character selection to the line edge. Its `CopySelection` binding is disabled because the workbench copies via OSC52 on Ctrl+C. Mouse drag selection in the workbench maps screen coordinates through `editorOffsetX`/`editorOffsetY` in `workbench.go`; `TestEditorOffsetMatchesRenderedLayout` fails if the body pane layout changes without updating them. While a drag is in progress (`WorkbenchModel.Dragging()`), motion and the release belong to the editor: the release is not treated as a click on whatever is under the pointer, and `model.go` skips tab-bar clicks (`workbenchDragging()`). Terminal-native selection (Alt+drag on Linux/Windows, Option+drag on macOS) still works for copying text outside the editor.
 
 For interactive testing:
 

@@ -124,6 +124,10 @@ func NewDeferred(resolve func() (*es.Client, *config.Config, error), message str
 	return m
 }
 
+func (m Model) workbenchDragging() bool {
+	return m.activeTab == TabWorkbench && m.workbench.Dragging()
+}
+
 func (m Model) hasActiveInput() bool {
 	if m.showShardCalc {
 		return true
@@ -530,7 +534,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keys that work even with active input
 		switch msg.String() {
 		case "ctrl+c":
-			if m.activeTab == TabWorkbench && m.workbench.focus == FocusBody && m.workbench.editor.selection.Active {
+			if m.activeTab == TabWorkbench && m.workbench.focus == FocusBody && m.workbench.editor.HasSelection() {
 				break
 			}
 			return m, tea.Quit
@@ -551,7 +555,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodes.SetSize(msg.Width, msg.Height-4)
 		m.tasks.SetSize(msg.Width, msg.Height-4)
 	case tea.MouseReleaseMsg:
-		if msg.Button == tea.MouseLeft {
+		if msg.Button == tea.MouseLeft && !m.workbenchDragging() {
 			if msg.Y == 1 {
 				overviewWidth := lipgloss.Width(InactiveTabStyle.Render("Overview"))
 				clusterWidth := lipgloss.Width(InactiveTabStyle.Render("Cluster"))

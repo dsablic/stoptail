@@ -257,6 +257,7 @@ stoptail stores data in `~/.stoptail/`:
 | `Ctrl+Shift+Z` | Redo |
 | `Shift+Arrow` | Select text |
 | `Shift+Home/End` | Select to line start/end |
+| `Ctrl+Shift+Left/Right` | Select by word |
 | `Up/Down` | Navigate completions (when open) |
 | `Esc` | Dismiss completions / deactivate editor / close search |
 | Mouse drag | Select text in editor |

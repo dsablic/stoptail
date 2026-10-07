@@ -28,13 +28,6 @@ type validateMsg struct {
 
 type validateTickMsg struct{}
 
-type Selection struct {
-	StartLine, StartCol   int
-	EndLine, EndCol       int
-	AnchorLine, AnchorCol int
-	Active                bool
-}
-
 type Editor struct {
 	textarea        textarea.Model
 	width           int
@@ -43,14 +36,13 @@ type Editor struct {
 	index           string
 	validationState ValidationState
 	validationError string
-	selection       Selection
 	undoStack       []editorState
 	redoStack       []editorState
 }
 
 type editorState struct {
-	content    string
-	cursorPos  int
+	content   string
+	cursorPos int
 }
 
 func NewEditor() Editor {
@@ -58,6 +50,13 @@ func NewEditor() Editor {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 50000
 	ta.Prompt = ""
+	ta.KeyMap.LineStart.SetKeys("home")
+	ta.KeyMap.SelectAll.SetKeys("ctrl+a")
+	ta.KeyMap.CopySelection.SetEnabled(false)
+	styles := ta.Styles()
+	styles.Focused.Selection = lipgloss.NewStyle().Reverse(true)
+	styles.Blurred.Selection = styles.Focused.Selection
+	ta.SetStyles(styles)
 	return Editor{
 		textarea: ta,
 	}
@@ -199,120 +198,12 @@ func (e *Editor) SetSize(width, height int) {
 	e.textarea.SetHeight(height)
 }
 
-func (e Editor) renderWithSelection(content string) string {
-	if !e.selection.Active {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	selStyle := lipgloss.NewStyle().Reverse(true)
-
-	startLine, startCol := e.selection.StartLine, e.selection.StartCol
-	endLine, endCol := e.selection.EndLine, e.selection.EndCol
-
-	if startLine > endLine || (startLine == endLine && startCol > endCol) {
-		startLine, endLine = endLine, startLine
-		startCol, endCol = endCol, startCol
-	}
-
-	var result []string
-	for i, line := range lines {
-		if i < startLine || i > endLine {
-			result = append(result, line)
-			continue
-		}
-
-		runes := []rune(line)
-		selStart := 0
-		selEnd := len(runes)
-
-		if i == startLine {
-			selStart = startCol
-		}
-		if i == endLine {
-			selEnd = endCol
-		}
-
-		if selStart > len(runes) {
-			selStart = len(runes)
-		}
-		if selEnd > len(runes) {
-			selEnd = len(runes)
-		}
-
-		var lineResult string
-		if selStart > 0 {
-			lineResult += string(runes[:selStart])
-		}
-		if selEnd > selStart {
-			lineResult += selStyle.Render(string(runes[selStart:selEnd]))
-		}
-		if selEnd < len(runes) {
-			lineResult += string(runes[selEnd:])
-		}
-
-		result = append(result, lineResult)
-	}
-
-	return strings.Join(result, "\n")
-}
-
-
 func (e Editor) View() string {
-	if e.selection.Active {
-		return e.renderWithSelection(e.textarea.Value())
-	}
 	return e.textarea.View()
 }
 
 func (e Editor) GetSelectedText() string {
-	if !e.selection.Active {
-		return ""
-	}
-
-	content := e.textarea.Value()
-	lines := strings.Split(content, "\n")
-
-	startLine, startCol := e.selection.StartLine, e.selection.StartCol
-	endLine, endCol := e.selection.EndLine, e.selection.EndCol
-
-	if startLine > endLine || (startLine == endLine && startCol > endCol) {
-		startLine, endLine = endLine, startLine
-		startCol, endCol = endCol, startCol
-	}
-
-	if startLine == endLine {
-		if startLine >= len(lines) {
-			return ""
-		}
-		runes := []rune(lines[startLine])
-		if startCol > len(runes) {
-			startCol = len(runes)
-		}
-		if endCol > len(runes) {
-			endCol = len(runes)
-		}
-		return string(runes[startCol:endCol])
-	}
-
-	var result []string
-	for i := startLine; i <= endLine && i < len(lines); i++ {
-		runes := []rune(lines[i])
-		if i == startLine {
-			if startCol < len(runes) {
-				result = append(result, string(runes[startCol:]))
-			}
-		} else if i == endLine {
-			if endCol > len(runes) {
-				endCol = len(runes)
-			}
-			result = append(result, string(runes[:endCol]))
-		} else {
-			result = append(result, lines[i])
-		}
-	}
-
-	return strings.Join(result, "\n")
+	return e.textarea.SelectedText()
 }
 
 func (e *Editor) Focus() {
@@ -325,92 +216,30 @@ func (e *Editor) Blur() {
 
 func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
-		key := keyMsg.String()
-		switch key {
-		case "shift+left", "shift+right", "shift+up", "shift+down", "shift+home", "shift+end":
-			return e.handleShiftArrow(keyMsg)
-		case "left", "right", "up", "down", "home", "end",
-			"alt+left", "alt+right", "alt+b", "alt+f":
-			e.selection.Active = false
-		case "backspace", "delete":
-			if e.selection.Active {
-				e.SaveState()
-				e.DeleteSelection()
-				return nil
-			}
-			e.SaveState()
-		case "enter":
-			if e.selection.Active {
-				e.SaveState()
-				e.DeleteSelection()
-			} else {
-				e.SaveState()
-			}
-		default:
-			if len(key) == 1 {
-				if e.selection.Active {
-					e.SaveState()
-					e.DeleteSelection()
-				} else {
-					e.SaveState()
-				}
-			}
+		if key := keyMsg.String(); key == "shift+home" || key == "shift+end" {
+			e.selectToLineEdge(key == "shift+end")
+			return nil
 		}
 	}
 
+	before := e.currentState()
 	var cmd tea.Cmd
 	e.textarea, cmd = e.textarea.Update(msg)
+	if e.textarea.Value() != before.content {
+		e.pushState(before)
+	}
 	return cmd
 }
 
-func (e *Editor) handleShiftArrow(msg tea.KeyPressMsg) tea.Cmd {
-	curLine := e.textarea.Line()
-	curCol := e.logicalCol()
-
-	if !e.selection.Active {
-		e.selection.AnchorLine = curLine
-		e.selection.AnchorCol = curCol
-		e.selection.Active = true
+func (e *Editor) selectToLineEdge(toEnd bool) {
+	code, steps := tea.KeyLeft, e.textarea.Column()
+	if toEnd {
+		line := strings.Split(e.textarea.Value(), "\n")[e.textarea.Line()]
+		code, steps = tea.KeyRight, len([]rune(line))-e.textarea.Column()
 	}
-
-	var cmd tea.Cmd
-	switch msg.String() {
-	case "shift+left":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
-	case "shift+right":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyRight})
-	case "shift+up":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyUp})
-	case "shift+down":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	case "shift+home":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyHome})
-	case "shift+end":
-		e.textarea, cmd = e.textarea.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
-	}
-
-	newLine := e.textarea.Line()
-	newCol := e.logicalCol()
-
-	e.updateSelectionFromAnchor(newLine, newCol)
-
-	return cmd
-}
-
-func (e *Editor) updateSelectionFromAnchor(curLine, curCol int) {
-	anchorLine := e.selection.AnchorLine
-	anchorCol := e.selection.AnchorCol
-
-	if curLine < anchorLine || (curLine == anchorLine && curCol < anchorCol) {
-		e.selection.StartLine = curLine
-		e.selection.StartCol = curCol
-		e.selection.EndLine = anchorLine
-		e.selection.EndCol = anchorCol
-	} else {
-		e.selection.StartLine = anchorLine
-		e.selection.StartCol = anchorCol
-		e.selection.EndLine = curLine
-		e.selection.EndCol = curCol
+	step := tea.KeyPressMsg{Code: code, Mod: tea.ModShift}
+	for range steps {
+		e.textarea, _ = e.textarea.Update(step)
 	}
 }
 
@@ -435,96 +264,50 @@ func (e *Editor) SetCursor(pos int) {
 	e.textarea.SetCursorColumn(pos)
 }
 
-
 func (e Editor) CursorOffset() int {
 	return e.getCursorOffset()
 }
 
-func (e Editor) GetSelection() Selection {
-	return e.selection
+func (e Editor) HasSelection() bool {
+	return e.textarea.HasSelection()
 }
 
 func (e *Editor) ClearSelection() {
-	e.selection.Active = false
-}
-
-func (e *Editor) SetSelection(startLine, startCol, endLine, endCol int) {
-	e.selection.StartLine = startLine
-	e.selection.StartCol = startCol
-	e.selection.EndLine = endLine
-	e.selection.EndCol = endCol
-	e.selection.Active = true
+	e.textarea.ClearSelection()
 }
 
 func (e *Editor) SelectAll() {
-	content := e.textarea.Value()
-	if content == "" {
-		return
-	}
-	lines := strings.Split(content, "\n")
-	lastLine := len(lines) - 1
-	lastCol := len([]rune(lines[lastLine]))
-	e.SetSelection(0, 0, lastLine, lastCol)
+	e.textarea.SelectAll()
 }
 
 func (e *Editor) DeleteSelection() {
-	if !e.selection.Active {
-		return
-	}
-	content := e.textarea.Value()
-	lines := strings.Split(content, "\n")
-
-	startLine, startCol := e.selection.StartLine, e.selection.StartCol
-	endLine, endCol := e.selection.EndLine, e.selection.EndCol
-
-	if startLine > endLine || (startLine == endLine && startCol > endCol) {
-		startLine, endLine = endLine, startLine
-		startCol, endCol = endCol, startCol
-	}
-
-	var result strings.Builder
-	for i, line := range lines {
-		lineRunes := []rune(line)
-		if i < startLine {
-			result.WriteString(line)
-			result.WriteString("\n")
-		} else if i == startLine && i == endLine {
-			result.WriteString(string(lineRunes[:startCol]))
-			result.WriteString(string(lineRunes[endCol:]))
-			if i < len(lines)-1 {
-				result.WriteString("\n")
-			}
-		} else if i == startLine {
-			result.WriteString(string(lineRunes[:startCol]))
-		} else if i == endLine {
-			result.WriteString(string(lineRunes[endCol:]))
-			if i < len(lines)-1 {
-				result.WriteString("\n")
-			}
-		} else if i > endLine {
-			result.WriteString(line)
-			if i < len(lines)-1 {
-				result.WriteString("\n")
-			}
-		}
-	}
-
-	e.textarea.SetValue(result.String())
-	offset := 0
-	newLines := strings.Split(result.String(), "\n")
-	for i := 0; i < startLine && i < len(newLines); i++ {
-		offset += len(newLines[i]) + 1
-	}
-	offset += startCol
-	e.textarea.SetCursorColumn(offset)
-	e.selection.Active = false
+	e.textarea.DeleteSelection()
 }
 
-func (e *Editor) SaveState() {
-	state := editorState{
+func (e *Editor) BeginMouseSelection(x, y int) {
+	e.textarea.BeginSelection(x, y)
+}
+
+func (e *Editor) ExtendMouseSelection(x, y int) {
+	e.textarea.ExtendSelection(x, y)
+}
+
+func (e *Editor) EndMouseSelection() {
+	e.textarea.EndSelection()
+}
+
+func (e Editor) currentState() editorState {
+	return editorState{
 		content:   e.textarea.Value(),
 		cursorPos: e.getCursorOffset(),
 	}
+}
+
+func (e *Editor) SaveState() {
+	e.pushState(e.currentState())
+}
+
+func (e *Editor) pushState(state editorState) {
 	if len(e.undoStack) > 0 && e.undoStack[len(e.undoStack)-1].content == state.content {
 		return
 	}
@@ -539,10 +322,7 @@ func (e *Editor) Undo() bool {
 	if len(e.undoStack) == 0 {
 		return false
 	}
-	current := editorState{
-		content:   e.textarea.Value(),
-		cursorPos: e.getCursorOffset(),
-	}
+	current := e.currentState()
 	e.redoStack = append(e.redoStack, current)
 
 	state := e.undoStack[len(e.undoStack)-1]
@@ -556,10 +336,7 @@ func (e *Editor) Redo() bool {
 	if len(e.redoStack) == 0 {
 		return false
 	}
-	current := editorState{
-		content:   e.textarea.Value(),
-		cursorPos: e.getCursorOffset(),
-	}
+	current := e.currentState()
 	e.undoStack = append(e.undoStack, current)
 
 	state := e.redoStack[len(e.redoStack)-1]
