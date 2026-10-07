@@ -55,7 +55,12 @@ Examples:
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "auto", "Color theme: auto, dark, light")
 	rootCmd.Flags().StringVar(&renderFlag, "render", "", "Render a tab and exit (overview, workbench, browser, mappings, cluster, tasks)")
 	rootCmd.Flags().StringVar(&tabFlag, "tab", "", "Start on a specific tab (overview, cluster, workbench, browser, mappings, tasks)")
-	rootCmd.Flags().StringVar(&keysFlag, "keys", "", "Simulate keypresses for --render (comma-separated: up,down,right,enter,pgdown,...)")
+	rootCmd.Flags().StringVar(
+		&keysFlag,
+		"keys",
+		"",
+		"Simulate keypresses for --render (comma-separated: up,down,enter,shift+down,ctrl+a,...)",
+	)
 	rootCmd.Flags().IntVar(&widthFlag, "width", 120, "Terminal width for --render")
 	rootCmd.Flags().IntVar(&heightFlag, "height", 40, "Terminal height for --render")
 	rootCmd.Flags().StringVar(&bodyFlag, "body", "", "JSON body for --render workbench")
@@ -473,18 +478,32 @@ func parseKeys(keys string) []tea.KeyPressMsg {
 		"backspace": tea.KeyBackspace,
 	}
 
+	modifiers := map[string]tea.KeyMod{
+		"ctrl": tea.ModCtrl, "shift": tea.ModShift, "alt": tea.ModAlt,
+	}
+
 	var msgs []tea.KeyPressMsg
 	for _, k := range strings.Split(keys, ",") {
 		k = strings.TrimSpace(k)
 		if k == "" {
 			continue
 		}
+		var mod tea.KeyMod
+		for {
+			name, rest, ok := strings.Cut(k, "+")
+			m, isMod := modifiers[name]
+			if !ok || !isMod || rest == "" {
+				break
+			}
+			mod |= m
+			k = rest
+		}
 		if code, ok := specialKeys[k]; ok {
-			msgs = append(msgs, tea.KeyPressMsg{Code: code})
-		} else if rest, ok := strings.CutPrefix(k, "ctrl+"); ok && len(rest) == 1 {
-			msgs = append(msgs, tea.KeyPressMsg{Code: rune(rest[0]), Mod: tea.ModCtrl})
-		} else if len(k) == 1 {
+			msgs = append(msgs, tea.KeyPressMsg{Code: code, Mod: mod})
+		} else if len(k) == 1 && mod == 0 {
 			msgs = append(msgs, tea.KeyPressMsg{Code: rune(k[0]), Text: k})
+		} else if len(k) == 1 {
+			msgs = append(msgs, tea.KeyPressMsg{Code: rune(k[0]), Mod: mod})
 		}
 	}
 	return msgs

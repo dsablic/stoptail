@@ -561,7 +561,9 @@ For testing interactions without the full TUI, use `--keys` to simulate keypress
 # Test cluster settings detail modal
 ./stoptail --render cluster --view settings --keys "down,down,enter" --width 120 --height 40 [cluster]
 
-# Supported keys: up, down, left, right, enter, tab, esc, space, pgup, pgdown, home, end, backspace, ctrl+X, single chars (a-z, 0-9, /, etc.)
+# Supported keys: up, down, left, right, enter, tab, esc, space, pgup, pgdown, home, end, backspace, single chars (a-z, 0-9, /, etc.)
+# Any key can take ctrl+/shift+/alt+ prefixes (e.g. shift+down, ctrl+shift+right)
+# Workbench starts unfocused: use "enter,tab" to focus the body editor before editing keys
 ```
 
 For full interactive testing, use `--tab` to start the TUI on a specific tab:
